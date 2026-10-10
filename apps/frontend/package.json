@@ -1,0 +1,22 @@
+{
+  "name": "@virtual-workspace/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@virtual-workspace/shared": "*",
+    "@colyseus/sdk": "~0.18.5",
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "@virtual-workspace/backend": "*",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.4"
+  }
+}

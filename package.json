@@ -1,0 +1,24 @@
+{
+  "name": "virtual-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "npm run build -w @virtual-workspace/shared && concurrently -k -n shared,server,client \"npm run dev -w @virtual-workspace/shared\" \"npm run dev -w @virtual-workspace/backend\" \"npm run dev -w @virtual-workspace/frontend\"",
+    "build": "npm run build -w @virtual-workspace/shared && npm run build -w @virtual-workspace/backend && npm run build -w @virtual-workspace/frontend",
+    "start": "npm start -w @virtual-workspace/backend",
+    "typecheck": "npm run build -w @virtual-workspace/shared && npm run typecheck --workspaces --if-present",
+    "test": "npm run build -w @virtual-workspace/shared && npm test -w @virtual-workspace/backend",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
