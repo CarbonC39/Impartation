@@ -153,7 +153,7 @@ element<HTMLFormElement>('avatar-form').addEventListener('submit', async event =
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: world.width, height: world.height,
       backgroundColor: themeBackgrounds[currentTheme],
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      scale: { mode: Phaser.Scale.RESIZE },
       scene: new SpaceScene(room, world, id => {
         const current = world.zones.find(item => item.id === id);
         const text = current ? `当前区域：${current.kind} / ${current.resourceId}（功能待接入）` : '当前区域：无';

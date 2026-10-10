@@ -209,3 +209,41 @@ button[data-key="START"]::before { border-radius:0; }
 .chat-icon { box-shadow:2px 2px 0 var(--border); }
 .map-screen .compose input,.map-screen .compose button { border-radius:0; }
 @media (max-width:540px) { main { border-radius:0; }.flow-card { padding:34px 17px 22px; } }
+
+/* Full-viewport map with an unobtrusive, transparent chat overlay. */
+.map-screen { padding:0; background:transparent; }
+.map-screen.active { display:block; }
+#map-layout { position:absolute; inset:0; display:block; width:100%; height:100%; }
+.map-stage { position:absolute; inset:0; width:100%; height:100%; padding:0; border:0; background:transparent; box-shadow:none; }
+#game { position:absolute; inset:0; width:100%; height:100%; min-height:0; border:0; background-color:transparent; background-image:none; }
+#game canvas { width:100% !important; height:100% !important; max-width:none; max-height:none; }
+.map-topbar { position:absolute; z-index:5; top:14px; left:16px; right:16px; min-height:0; margin:0; padding:0; border:0; background:transparent; box-shadow:none; pointer-events:none; }
+.map-topbar > * { pointer-events:auto; }
+.map-topbar > div { flex-direction:row; align-items:center; }
+.map-topbar strong,.map-topbar #status,.map-help { color:#fff; text-shadow:0 1px 3px #14202dcc,1px 1px 0 #14202d; }
+.map-topbar #status { margin:0; }
+.map-back { min-height:38px; border-color:#25384c; color:#fff9e7; }
+.map-help kbd { color:#fff; border-color:#fff; background:#172b3980; box-shadow:none; }
+.map-screen .chat-card { position:absolute; z-index:5; right:18px; bottom:18px; width:min(320px,34vw); height:min(42vh,340px); min-height:0; padding:0; border:0; background:transparent; box-shadow:none; pointer-events:none; }
+.map-screen .chat-card > * { pointer-events:auto; }
+.map-screen .chat-heading { gap:8px; padding:0; border:0; color:#fff; text-shadow:0 1px 3px #14202dcc,1px 1px 0 #14202d; }
+.map-screen .chat-heading h2 { color:inherit; }
+.map-screen .chat-icon { width:22px; height:22px; padding:2px; color:#fff; background:transparent; }
+.map-screen #messages { display:flex; flex-direction:column; justify-content:flex-end; flex:1; width:100%; min-height:0; height:auto; margin:8px 0; padding:0; overflow:auto; border:0; background:transparent; box-shadow:none; }
+.map-screen #messages:empty::before { align-self:flex-start; padding:0; color:#fff; text-shadow:0 1px 3px #14202dcc,1px 1px 0 #14202d; }
+.map-screen #messages li,.map-screen #messages li:nth-child(even) { flex:none; margin:0; padding:2px 0; border:0; background:transparent; color:#fff; text-shadow:0 1px 3px #14202dcc,1px 1px 0 #14202d; }
+.map-screen #chat-form { color:#fff; text-shadow:0 1px 3px #14202dcc,1px 1px 0 #14202d; }
+.map-screen #chat-form > label { display:none; }
+.map-screen .compose { gap:8px; margin-top:4px; }
+.map-screen .compose input { min-height:34px; padding:5px 0; border:0; border-bottom:1px solid #ffffffa6; background:transparent; color:#fff; box-shadow:none; }
+.map-screen .compose input::placeholder { color:#ffffffcc; }
+.map-screen .compose button { min-height:34px; padding:4px 8px; border:0; background:transparent; color:#fff; text-shadow:0 1px 3px #14202dcc; box-shadow:none; }
+.map-screen .touch-controls { z-index:5; }
+@media (max-width:700px) {
+  .map-topbar { top:10px; left:10px; right:10px; min-height:0; margin:0; padding:0; }
+  .map-topbar > div { flex-direction:column; align-items:flex-start; }
+  .map-screen .chat-card { top:auto; right:12px; bottom:12px; width:min(230px,58vw); height:min(36vh,260px); max-height:none; padding:0; background:transparent; }
+  .map-screen .chat-heading { padding:0; }
+  .map-screen #messages { flex:1; min-height:0; margin:6px 0; padding:0; }
+  .map-screen .touch-controls { left:12px; bottom:13px; }
+}
