@@ -18,10 +18,29 @@ const send = element<HTMLButtonElement>('send');
 const messageInput = element<HTMLInputElement>('message');
 const messages = element<HTMLOListElement>('messages');
 const zone = element('zone');
+const themePicker = element<HTMLSelectElement>('theme');
+const themes = ['meadow', 'ocean', 'sunset', 'lavender'] as const;
+type Theme = typeof themes[number];
+const themeBackgrounds: Record<Theme, string> = {
+  meadow: '#2b423e', ocean: '#29464b', sunset: '#503b35', lavender: '#3f3849',
+};
+function applyTheme(theme: Theme) {
+  document.documentElement.dataset.theme = theme;
+  themePicker.value = theme;
+  localStorage.setItem('virtual-workspace-theme', theme);
+  if (game) game.canvas.style.backgroundColor = themeBackgrounds[theme];
+}
+const savedTheme = localStorage.getItem('virtual-workspace-theme');
+const initialTheme = themes.find(theme => theme === savedTheme) ?? 'meadow';
 const client = new Client<typeof server>(import.meta.env.VITE_SERVER_URL || window.location.origin);
 let room: Room<SpaceRoom> | undefined;
 let game: Phaser.Game | undefined;
 let connected = false;
+applyTheme(initialTheme);
+themePicker.addEventListener('change', () => {
+  const selected = themes.find(theme => theme === themePicker.value);
+  if (selected) applyTheme(selected);
+});
 
 function setConnected(value: boolean) {
   connected = value;
@@ -63,7 +82,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     room.onError((_code, message) => { status.textContent = `房间错误：${message}`; });
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: world.width, height: world.height,
-      backgroundColor: '#2b423e',
+      backgroundColor: themeBackgrounds[initialTheme],
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: new SpaceScene(room, world, id => {
         const current = world.zones.find(item => item.id === id);
