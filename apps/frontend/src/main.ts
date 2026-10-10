@@ -86,10 +86,43 @@ element<HTMLFormElement>('create-world-form').addEventListener('submit', event =
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
   button.addEventListener('click', () => showScreen(button.dataset.back ?? 'world-screen'));
 });
-const avatarIcons: Record<string, string> = { mint: '🌱', amber: '🐤', violet: '🐱' };
-document.querySelectorAll<HTMLInputElement>('input[name="avatar"]').forEach(input => {
-  input.addEventListener('change', () => { element('avatar-preview').textContent = avatarIcons[input.value] ?? '🌱'; });
+const avatarChoices = [...document.querySelectorAll<HTMLInputElement>('input[name="avatar"]')];
+function updateAvatarPreview() {
+  const selected = avatarChoices.find(input => input.checked);
+  const sprite = selected?.closest('.avatar-choice')?.querySelector('.avatar-face svg');
+  if (sprite) element('avatar-preview').replaceChildren(sprite.cloneNode(true));
+}
+function stepAvatar(direction: number) {
+  const current = Math.max(0, avatarChoices.findIndex(input => input.checked));
+  const next = (current + direction + avatarChoices.length) % avatarChoices.length;
+  avatarChoices[next]?.click();
+  updateAvatarPreview();
+}
+avatarChoices.forEach(input => {
+  input.addEventListener('change', updateAvatarPreview);
 });
+document.querySelectorAll<HTMLButtonElement>('[data-avatar-step]').forEach(button => {
+  button.addEventListener('click', () => stepAvatar(Number(button.dataset.avatarStep)));
+});
+const virtualDirections = new Set<string>();
+document.querySelectorAll<HTMLButtonElement>('[data-move]').forEach(button => {
+  const direction = button.dataset.move;
+  button.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    if (direction) virtualDirections.add(direction);
+    button.setPointerCapture(event.pointerId);
+  });
+  const release = () => { if (direction) virtualDirections.delete(direction); };
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
+});
+function readVirtualInput() {
+  return {
+    x: Number(virtualDirections.has('right')) - Number(virtualDirections.has('left')),
+    y: Number(virtualDirections.has('down')) - Number(virtualDirections.has('up')),
+  };
+}
 element<HTMLFormElement>('avatar-form').addEventListener('submit', async event => {
   event.preventDefault();
   showScreen('map-screen');
@@ -125,7 +158,7 @@ element<HTMLFormElement>('avatar-form').addEventListener('submit', async event =
         const current = world.zones.find(item => item.id === id);
         const text = current ? `当前区域：${current.kind} / ${current.resourceId}（功能待接入）` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
-      }),
+      }, readVirtualInput),
     });
     setConnected(true);
     status.textContent = '已连接';

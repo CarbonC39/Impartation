@@ -13,7 +13,12 @@ export class SpaceScene extends Phaser.Scene {
   private inputElapsed = 0;
   private lastInput = '';
 
-  constructor(private room: Room<SpaceRoom>, private world: WorldMap, private zoneChanged: (id: string) => void) {
+  constructor(
+    private room: Room<SpaceRoom>,
+    private world: WorldMap,
+    private zoneChanged: (id: string) => void,
+    private virtualInput: () => MovementInput = () => ({ x: 0, y: 0 }),
+  ) {
     super('space');
   }
   preload() {
@@ -73,11 +78,12 @@ export class SpaceScene extends Phaser.Scene {
     // Never queue movement during automatic reconnection.
     if (!ownPlayer?.connected || !this.room.connection.isOpen) { this.lastInput = ''; return; }
     const typing = document.activeElement instanceof HTMLElement &&
-      ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(document.activeElement.tagName);
-    const active = !typing && document.hasFocus() && !document.hidden;
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+    const virtualInput = document.hidden ? { x: 0, y: 0 } : this.virtualInput();
+    const active = !document.hidden && ((document.hasFocus() && !typing) || virtualInput.x !== 0 || virtualInput.y !== 0);
     const input: MovementInput = active ? {
-      x: Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown),
-      y: Number(this.keys.S.isDown || this.keys.DOWN.isDown) - Number(this.keys.W.isDown || this.keys.UP.isDown),
+      x: Phaser.Math.Clamp(Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown) + virtualInput.x, -1, 1),
+      y: Phaser.Math.Clamp(Number(this.keys.S.isDown || this.keys.DOWN.isDown) - Number(this.keys.W.isDown || this.keys.UP.isDown) + virtualInput.y, -1, 1),
     } : { x: 0, y: 0 };
     this.inputElapsed += delta;
     const serialized = JSON.stringify(input);
