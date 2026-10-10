@@ -8,13 +8,13 @@
   </head>
   <body>
     <main>
-      <header class="masthead"><h1 class="brand"><span aria-hidden="true">✿</span> Virtual Workspace</h1></header>
+      <header class="masthead"><h1 class="brand"><span aria-hidden="true">▦</span> Virtual Workspace</h1></header>
       <section class="entry-card" aria-label="访客设置">
         <div class="section-heading"><h2>访客设置</h2></div>
         <form id="join-form">
           <label>昵称 <input id="name" maxlength="24" value="访客" placeholder="输入昵称" required /></label>
-          <label>外观 <select id="avatar"><option value="mint">🌱 薄荷绿</option><option value="amber">🍯 蜂蜜黄</option><option value="violet">🪻 丁香紫</option></select></label>
-          <button id="join" type="submit">进入空间 <span aria-hidden="true">↗</span></button>
+          <label>外观 <select id="avatar"><option value="mint">薄荷绿</option><option value="amber">蜂蜜黄</option><option value="violet">丁香紫</option></select></label>
+          <button id="join" type="submit">进入空间 <span aria-hidden="true">▶</span></button>
           <button id="leave" class="secondary" type="button" disabled>离开</button>
         </form>
         <p id="status" role="status" aria-live="polite">尚未连接</p>
@@ -22,12 +22,12 @@
       <div class="workspace">
         <section class="room-card" aria-labelledby="room-title">
           <div class="room-heading"><div><h2 id="room-title">空间地图</h2></div><span class="tag">公共大厅</span></div>
-          <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><span aria-hidden="true">☁</span><p>点击「进入空间」加载地图</p></div></div>
+          <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><span aria-hidden="true">▧</span><p>点击「进入空间」加载地图</p></div></div>
           <div class="room-footer"><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键移动</p><p id="zone" role="status">当前区域：无</p></div>
           <p class="hint">点击地图开始移动，输入文字时暂停移动。手机暂不支持触控移动。</p>
         </section>
         <section class="chat-card" aria-label="房间聊天">
-          <div class="chat-heading"><span class="chat-icon" aria-hidden="true">♡</span><div><h2>房间聊天</h2><p>消息对房间内所有人可见</p></div></div>
+          <div class="chat-heading"><span class="chat-icon" aria-hidden="true">▤</span><div><h2>房间聊天</h2><p>消息对房间内所有人可见</p></div></div>
           <ol id="messages" role="log" aria-live="polite" aria-label="聊天消息"></ol>
           <form id="chat-form"><label for="message">消息</label><div class="compose"><input id="message" maxlength="500" autocomplete="off" placeholder="输入消息…" required disabled /><button id="send" type="submit" disabled>发送</button></div></form>
           <p class="chat-note">聊天不保存历史记录。</p>
