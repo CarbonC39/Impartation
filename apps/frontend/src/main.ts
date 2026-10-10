@@ -12,8 +12,6 @@ function element<T extends HTMLElement>(id: string): T {
   return node as T;
 }
 const status = element('status');
-const join = element<HTMLButtonElement>('join');
-const leave = element<HTMLButtonElement>('leave');
 const send = element<HTMLButtonElement>('send');
 const messageInput = element<HTMLInputElement>('message');
 const messages = element<HTMLOListElement>('messages');
@@ -22,9 +20,10 @@ const themePicker = element<HTMLSelectElement>('theme');
 const themes = ['meadow', 'ocean', 'sunset', 'lavender'] as const;
 type Theme = typeof themes[number];
 const themeBackgrounds: Record<Theme, string> = {
-  meadow: '#2b423e', ocean: '#29464b', sunset: '#503b35', lavender: '#3f3849',
+  meadow: '#bdebd0', ocean: '#b7e8ff', sunset: '#ffd2b5', lavender: '#e4caff',
 };
 function applyTheme(theme: Theme) {
+  currentTheme = theme;
   document.documentElement.dataset.theme = theme;
   themePicker.value = theme;
   localStorage.setItem('virtual-workspace-theme', theme);
@@ -32,16 +31,27 @@ function applyTheme(theme: Theme) {
 }
 const savedTheme = localStorage.getItem('virtual-workspace-theme');
 const initialTheme = themes.find(theme => theme === savedTheme) ?? 'meadow';
+let currentTheme: Theme = initialTheme;
 const client = new Client<typeof server>(import.meta.env.VITE_SERVER_URL || window.location.origin);
 let room: Room<SpaceRoom> | undefined;
 let game: Phaser.Game | undefined;
 let connected = false;
+let selectedWorld = '阳光大厅';
+let leavingIntentionally = false;
 applyTheme(initialTheme);
 themePicker.addEventListener('change', () => {
   const selected = themes.find(theme => theme === themePicker.value);
   if (selected) applyTheme(selected);
 });
 
+function showScreen(id: string) {
+  document.querySelectorAll<HTMLElement>('.flow-screen').forEach(screen => {
+    const active = screen.id === id;
+    screen.classList.toggle('active', active);
+    screen.hidden = !active;
+  });
+  document.body.classList.toggle('map-open', id === 'map-screen');
+}
 function setConnected(value: boolean) {
   connected = value;
   send.disabled = !value;
@@ -52,17 +62,41 @@ function cleanup() {
   game = undefined;
   room = undefined;
   setConnected(false);
-  join.disabled = false;
-  leave.disabled = true;
   zone.textContent = '当前区域：无';
 }
-element<HTMLFormElement>('join-form').addEventListener('submit', async event => {
+element<HTMLFormElement>('login-form').addEventListener('submit', event => {
   event.preventDefault();
-  join.disabled = true;
-  status.textContent = '连接中…';
+  showScreen('world-screen');
+});
+element<HTMLDivElement>('world-list').addEventListener('click', event => {
+  const tile = (event.target as HTMLElement).closest<HTMLButtonElement>('.world-tile[data-world]');
+  if (!tile) return;
+  selectedWorld = tile.dataset.world === 'cloud-garden' ? '云朵花园' : '阳光大厅';
+  element('chosen-world-label').textContent = selectedWorld;
+  element('map-world-name').textContent = selectedWorld;
+  showScreen('avatar-screen');
+});
+element<HTMLFormElement>('create-world-form').addEventListener('submit', event => {
+  event.preventDefault();
+  selectedWorld = element<HTMLInputElement>('world-name').value.trim() || '我的小世界';
+  element('chosen-world-label').textContent = `${selectedWorld} · 新建`;
+  element('map-world-name').textContent = selectedWorld;
+  showScreen('avatar-screen');
+});
+document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
+  button.addEventListener('click', () => showScreen(button.dataset.back ?? 'world-screen'));
+});
+const avatarIcons: Record<string, string> = { mint: '🌱', amber: '🐤', violet: '🐱' };
+document.querySelectorAll<HTMLInputElement>('input[name="avatar"]').forEach(input => {
+  input.addEventListener('change', () => { element('avatar-preview').textContent = avatarIcons[input.value] ?? '🌱'; });
+});
+element<HTMLFormElement>('avatar-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  showScreen('map-screen');
+  status.textContent = '正在连接世界…';
   try {
     const options = joinSchema.parse({ name: element<HTMLInputElement>('name').value,
-      avatar: element<HTMLSelectElement>('avatar').value });
+      avatar: new FormData(event.currentTarget as HTMLFormElement).get('avatar') });
     const response = await fetch('/maps/lobby.tmj');
     if (!response.ok) throw new Error('地图加载失败');
     const world = parseWorldMap(await response.json());
@@ -78,11 +112,14 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     });
     room.onDrop(() => { setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
     room.onReconnect(() => { setConnected(true); status.textContent = '连接已恢复'; });
-    room.onLeave(() => { cleanup(); status.textContent = '已离开，可以重新进入'; });
+    room.onLeave(() => {
+      cleanup();
+      if (!leavingIntentionally) status.textContent = '连接已结束，请重新进入世界';
+    });
     room.onError((_code, message) => { status.textContent = `房间错误：${message}`; });
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: world.width, height: world.height,
-      backgroundColor: themeBackgrounds[initialTheme],
+      backgroundColor: themeBackgrounds[currentTheme],
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: new SpaceScene(room, world, id => {
         const current = world.zones.find(item => item.id === id);
@@ -91,16 +128,20 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
       }),
     });
     setConnected(true);
-    leave.disabled = false;
-    status.textContent = `已进入空间 · ${room.sessionId}`;
-    join.blur();
+    status.textContent = `已进入演示大厅 · ${room.sessionId.slice(0, 6)}`;
   } catch (error) {
     await room?.leave();
     cleanup();
     status.textContent = `连接失败：${error instanceof Error ? error.message : String(error)}`;
   }
 });
-leave.addEventListener('click', () => { leave.disabled = true; void room?.leave(); });
+element<HTMLButtonElement>('map-back').addEventListener('click', async () => {
+  leavingIntentionally = true;
+  await room?.leave();
+  cleanup();
+  showScreen('world-screen');
+  leavingIntentionally = false;
+});
 element<HTMLFormElement>('chat-form').addEventListener('submit', event => {
   event.preventDefault();
   if (!connected || !room) return;

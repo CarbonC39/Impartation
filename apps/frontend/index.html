@@ -7,37 +7,71 @@
     <title>Virtual Workspace</title>
   </head>
   <body>
-    <main>
-      <header class="masthead"><h1 class="brand"><span aria-hidden="true">▦</span> Virtual Workspace</h1>
-        <label class="theme-picker" for="theme">界面配色<select id="theme" aria-label="选择界面配色">
-          <option value="meadow">苔原绿</option><option value="ocean">海湾蓝</option><option value="sunset">日落橘</option><option value="lavender">薰衣草</option>
+    <div id="app-shell">
+      <header class="masthead" id="masthead">
+        <a class="brand" href="#" aria-label="Virtual Workspace 首页"><span aria-hidden="true">✿</span> Virtual Workspace</a>
+        <label class="theme-picker" for="theme">换个颜色<select id="theme" aria-label="选择界面配色">
+          <option value="meadow">🍓 草莓薄荷</option><option value="ocean">🐳 汽水海蓝</option><option value="sunset">🍊 蜜桃橘子</option><option value="lavender">🍇 葡萄奶昔</option>
         </select></label>
       </header>
-      <section class="entry-card" aria-label="访客设置">
-        <div class="section-heading"><h2>访客设置</h2></div>
-        <form id="join-form">
-          <label>昵称 <input id="name" maxlength="24" value="访客" placeholder="输入昵称" required /></label>
-          <label>外观 <select id="avatar"><option value="mint">薄荷绿</option><option value="amber">蜂蜜黄</option><option value="violet">丁香紫</option></select></label>
-          <button id="join" type="submit">进入空间 <span aria-hidden="true">▶</span></button>
-          <button id="leave" class="secondary" type="button" disabled>离开</button>
-        </form>
-        <p id="status" role="status" aria-live="polite">尚未连接</p>
-      </section>
-      <div class="workspace">
-        <section class="room-card" aria-labelledby="room-title">
-          <div class="room-heading"><div><h2 id="room-title">空间地图</h2></div><span class="tag">公共大厅</span></div>
-          <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><span aria-hidden="true">▧</span><p>点击「进入空间」加载地图</p></div></div>
-          <div class="room-footer"><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键移动</p><p id="zone" role="status">当前区域：无</p></div>
-          <p class="hint">点击地图开始移动，输入文字时暂停移动。手机暂不支持触控移动。</p>
+
+      <main>
+        <section class="flow-screen active" id="login-screen" aria-labelledby="login-title">
+          <div class="welcome-illustration" aria-hidden="true"><span>☁️</span><span>🌷</span><span>☁️</span></div>
+          <div class="flow-card login-card">
+            <span class="eyebrow">A LITTLE PLACE FOR FRIENDS</span>
+            <h1 id="login-title">欢迎回到小世界 <span aria-hidden="true">✨</span></h1>
+            <p class="lead">和朋友一起，找个舒服的角落待一会儿。</p>
+            <form id="login-form" class="stack-form">
+              <label>账号<input id="account" type="email" autocomplete="username" placeholder="邮箱地址" required /></label>
+              <label>密码<input id="password" type="password" autocomplete="current-password" placeholder="输入密码" required /></label>
+              <button type="submit" class="primary wide">登录并继续 <span aria-hidden="true">→</span></button>
+            </form>
+            <p class="prototype-note">流程体验原型 · 登录信息仅用于本地演示，不会发送或保存</p>
+          </div>
         </section>
-        <section class="chat-card" aria-label="房间聊天">
-          <div class="chat-heading"><span class="chat-icon" aria-hidden="true">▤</span><div><h2>房间聊天</h2><p>消息对房间内所有人可见</p></div></div>
-          <ol id="messages" role="log" aria-live="polite" aria-label="聊天消息"></ol>
-          <form id="chat-form"><label for="message">消息</label><div class="compose"><input id="message" maxlength="500" autocomplete="off" placeholder="输入消息…" required disabled /><button id="send" type="submit" disabled>发送</button></div></form>
-          <p class="chat-note">聊天不保存历史记录。</p>
+
+        <section class="flow-screen" id="world-screen" aria-labelledby="world-title" hidden>
+          <div class="flow-card wide-card">
+            <div class="step-label"><span>第 1 步 / 3</span><span class="demo-tag">演示世界</span></div>
+            <h1 id="world-title">今天想去哪儿？ <span aria-hidden="true">🧭</span></h1>
+            <p class="lead">挑一个熟悉的小天地，或开一间新的。</p>
+            <div class="world-grid" id="world-list">
+              <button class="world-tile" type="button" data-world="sunny-lobby"><span class="world-art">🌼</span><span class="world-title">阳光大厅</span><span class="world-meta">公共空间 · 现在开放</span><span class="world-join">进去看看　→</span></button>
+              <button class="world-tile" type="button" data-world="cloud-garden"><span class="world-art blue">☁️</span><span class="world-title">云朵花园</span><span class="world-meta">朋友的世界 · 3 人在玩</span><span class="world-join">加入世界　→</span></button>
+              <div class="world-tile create-tile"><span class="world-art peach">🪄</span><span class="world-title">创造新世界</span><form id="create-world-form"><label class="visually-hidden" for="world-name">新世界名称</label><input id="world-name" maxlength="32" placeholder="给世界起个名字" required /><button class="secondary" type="submit">创建并继续　＋</button></form></div>
+            </div>
+            <p class="prototype-note">世界卡片为演示数据，当前地图服务仍连接公共大厅。</p>
+            <button class="text-button" type="button" data-back="login-screen">← 返回登录</button>
+          </div>
         </section>
-      </div>
-    </main>
+
+        <section class="flow-screen" id="avatar-screen" aria-labelledby="avatar-title" hidden>
+          <div class="flow-card wide-card avatar-card">
+            <div class="step-label"><span>第 2 步 / 3</span><span class="demo-tag" id="chosen-world-label">阳光大厅</span></div>
+            <h1 id="avatar-title">捏一个喜欢的自己 <span aria-hidden="true">🧸</span></h1>
+            <p class="lead">选个小伙伴，再取一个可爱的名字。</p>
+            <form id="avatar-form" class="avatar-form">
+              <div class="avatar-preview" id="avatar-preview" aria-hidden="true">🌱</div>
+              <label class="name-field">你的名字<input id="name" maxlength="24" value="小访客" placeholder="输入昵称" required /></label>
+              <fieldset class="avatar-options"><legend>选择人物</legend>
+                <label class="avatar-choice"><input type="radio" name="avatar" value="mint" checked /><span class="avatar-face mint-face">🌱</span><span>薄荷芽</span></label>
+                <label class="avatar-choice"><input type="radio" name="avatar" value="amber" /><span class="avatar-face amber-face">🐤</span><span>小黄鸭</span></label>
+                <label class="avatar-choice"><input type="radio" name="avatar" value="violet" /><span class="avatar-face violet-face">🐱</span><span>紫耳猫</span></label>
+              </fieldset>
+              <div class="avatar-actions"><button class="secondary" type="button" data-back="world-screen">← 返回选世界</button><button class="primary" type="submit">就这样，出发！　→</button></div>
+            </form>
+          </div>
+        </section>
+
+        <section class="flow-screen map-screen" id="map-screen" aria-label="全屏世界地图" hidden>
+          <div class="map-topbar"><button id="map-back" class="map-back" type="button">✿ <span>退出世界</span></button><div><strong id="map-world-name">阳光大厅</strong><span id="status" role="status" aria-live="polite">准备进入…</span></div><span class="map-help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动</span></div>
+          <div id="map-layout"><div class="map-stage"><div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><span aria-hidden="true">🗺️</span><p>正在打开小世界…</p></div></div><p id="zone" role="status">当前区域：无</p></div>
+            <aside class="chat-card" aria-label="房间聊天"><div class="chat-heading"><span class="chat-icon" aria-hidden="true">💬</span><div><h2>悄悄话信箱</h2><p>和这个世界的人打个招呼</p></div></div><ol id="messages" role="log" aria-live="polite" aria-label="聊天消息"></ol><form id="chat-form"><label for="message">消息</label><div class="compose"><input id="message" maxlength="500" autocomplete="off" placeholder="说点什么…" required disabled /><button id="send" type="submit" disabled>发送</button></div></form><p class="chat-note">聊天不保存历史记录。</p></aside>
+          </div>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
