@@ -4,30 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
-    <title>Virtual Workspace · 开发验证</title>
+    <title>薄荷小屋 · Virtual Workspace</title>
   </head>
   <body>
     <main>
-      <h1>Virtual Workspace</h1>
-      <p>开发验证：访客联机、Tiled 地图与文字聊天。账号功能稍后接入。</p>
-      <form id="join-form">
-        <label>昵称 <input id="name" maxlength="24" value="访客" required /></label>
-        <label>外观 <select id="avatar"><option value="mint">薄荷</option><option value="amber">琥珀</option><option value="violet">紫罗兰</option></select></label>
-        <button id="join" type="submit">进入空间</button>
-        <button id="leave" type="button" disabled>离开</button>
-      </form>
-      <p id="status" role="status" aria-live="polite">尚未连接</p>
-      <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"></div>
-      <p>WASD / 方向键移动；输入文字时暂停移动。彩色区域是未来功能的触发点。</p>
-      <p id="zone" role="status">当前区域：无</p>
-      <section aria-label="房间聊天">
-        <h2>房间聊天</h2>
-        <ol id="messages" role="log" aria-live="polite"></ol>
-        <form id="chat-form">
-          <label>消息 <input id="message" maxlength="500" autocomplete="off" required disabled /></label>
-          <button id="send" type="submit" disabled>发送</button>
-        </form>
+      <header class="masthead"><a class="brand" href="/">✿ <span>薄荷小屋<small>VIRTUAL WORKSPACE</small></span></a><span class="badge">一起，把日子过慢一点</span></header>
+      <section class="welcome" aria-labelledby="welcome-title">
+        <div><p class="eyebrow">YOUR LITTLE HAPPY PLACE</p><h1 id="welcome-title">留一个位置，<br />给今天的好心情<span class="sparkle"> ✧</span></h1><p class="intro">和朋友碰个面，聊聊天。小小的空间，也能装下很多陪伴。</p></div>
+        <div class="mascot" aria-hidden="true"><span class="petal one"></span><span class="petal two"></span><div class="mint-friend"><i></i><i></i><b>ᴗ</b></div><span class="mascot-caption">很高兴见到你 ♡</span></div>
       </section>
+      <section class="entry-card" aria-label="访客设置">
+        <div class="section-heading"><span class="number">01</span><div><h2>先认识一下吧</h2><p>取个喜欢的名字，挑一颗今天的颜色。</p></div></div>
+        <form id="join-form">
+          <label>你的昵称 <input id="name" maxlength="24" value="访客" placeholder="大家怎么称呼你？" required /></label>
+          <label>今天的颜色 <select id="avatar"><option value="mint">🌱 薄荷绿</option><option value="amber">🍯 蜂蜜黄</option><option value="violet">🪻 丁香紫</option></select></label>
+          <button id="join" type="submit">进入空间 <span aria-hidden="true">↗</span></button>
+          <button id="leave" class="secondary" type="button" disabled>离开</button>
+        </form>
+        <p id="status" role="status" aria-live="polite">尚未连接 · 小屋等你来</p>
+      </section>
+      <div class="workspace">
+        <section class="room-card" aria-labelledby="room-title">
+          <div class="room-heading"><div><p class="eyebrow">MAKE YOURSELF AT HOME</p><h2 id="room-title">我们的共享客厅</h2></div><span class="tag">公共大厅</span></div>
+          <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><span aria-hidden="true">☁</span><h3>你的专属小角落，准备好了</h3><p>点击「进入空间」，和朋友在这里相遇。</p></div></div>
+          <div class="room-footer"><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键散步</p><p id="zone" role="status">当前区域：无</p></div>
+          <p class="hint">点击地图开始移动，打字时会停下脚步。手机暂不支持触控移动。</p>
+        </section>
+        <section class="chat-card" aria-label="房间聊天">
+          <div class="chat-heading"><span class="chat-icon" aria-hidden="true">♡</span><div><h2>小屋悄悄话</h2><p>同房间的朋友都能看到哦</p></div></div>
+          <ol id="messages" role="log" aria-live="polite" aria-label="聊天消息"></ol>
+          <form id="chat-form"><label for="message">说点什么吧</label><div class="compose"><input id="message" maxlength="500" autocomplete="off" placeholder="从一句「你好」开始…" required disabled /><button id="send" type="submit" disabled>发送</button></div></form>
+          <p class="chat-note">此刻的聊天，仅留在此刻。不保存历史记录。</p>
+        </section>
+      </div>
+      <footer class="page-footer"><span>✿ 给平凡的一天，加一点薄荷。</span><span>影音 · 白板 · 留言板 · 番茄钟，正在计划中</span></footer>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
