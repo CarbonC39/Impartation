@@ -128,7 +128,7 @@ element<HTMLFormElement>('avatar-form').addEventListener('submit', async event =
       }),
     });
     setConnected(true);
-    status.textContent = `已进入演示大厅 · ${room.sessionId.slice(0, 6)}`;
+    status.textContent = '已连接';
   } catch (error) {
     await room?.leave();
     cleanup();
