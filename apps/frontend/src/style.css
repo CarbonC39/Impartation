@@ -156,3 +156,56 @@ button[data-key="START"]::before { width:auto; min-width:46px; padding:0 5px; bo
   .touch-key svg { width:20px; height:20px; }
   .touch-up { grid-column:2; grid-row:1; }.touch-left { grid-column:1; grid-row:2; }.touch-center { grid-column:2; grid-row:2; border:3px solid var(--border); border-radius:50%; background:var(--panel-low); box-shadow:inset 0 2px 0 #ffffff85,0 4px 0 var(--border); }.touch-right { grid-column:3; grid-row:2; }.touch-down { grid-column:2; grid-row:3; }
 }
+
+/* Angular vector-arcade skin: square panels, beveled corners and flat inked controls. */
+:root {
+  --page:#b8ecff; --panel:#fff8d7; --panel-hi:#fffef4; --panel-low:#f5c96d;
+  --card:#fffdf4; --card-alt:#dcf5cb; --ink:#25384c; --border:#25384c;
+  --accent:#ff526e; --accent-deep:#c6294d; --accent-light:#ff899a; --accent-ink:#fff9e7;
+  --field:#fff1b8; --field-ink:#25384c; --field-edge:#25384c; --field-inset:#ffe083;
+  --muted:#526a7a; --subtle:#dff6c8; --subtle-edge:#50794d; --grid:#25384c14; --shadow:#29496450;
+  font-family: "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+:root[data-theme="ocean"] { --page:#a8e2ff; --panel:#e8fbff; --panel-hi:#fff; --panel-low:#76d3df; --card:#f7feff; --card-alt:#c9f4ef; --ink:#183d58; --border:#183d58; --accent:#ff654f; --accent-deep:#bf382c; --accent-light:#ff9c79; --accent-ink:#fff; --field:#e8fbff; --field-ink:#183d58; --field-edge:#183d58; --field-inset:#b6edf4; --muted:#547c8a; --subtle:#c9f4ef; --subtle-edge:#3d7e78; --grid:#183d5814; --shadow:#1c678850; }
+:root[data-theme="sunset"] { --page:#ffc5a1; --panel:#fff0c7; --panel-hi:#fff8e5; --panel-low:#ff9b64; --card:#fff8e8; --card-alt:#ffe0af; --ink:#513528; --border:#513528; --accent:#fa4b45; --accent-deep:#a92f31; --accent-light:#ff8970; --accent-ink:#fff8e8; --field:#ffedbd; --field-ink:#513528; --field-edge:#513528; --field-inset:#ffd27e; --muted:#856047; --subtle:#ffe0af; --subtle-edge:#9c5c36; --grid:#51352814; --shadow:#873f3850; }
+:root[data-theme="lavender"] { --page:#d5c5ff; --panel:#fff0f5; --panel-hi:#fffaff; --panel-low:#c290f0; --card:#fffaff; --card-alt:#ead8ff; --ink:#382c58; --border:#382c58; --accent:#ff4e91; --accent-deep:#b72969; --accent-light:#ff8eb7; --accent-ink:#fffaff; --field:#f7eaff; --field-ink:#382c58; --field-edge:#382c58; --field-inset:#dfc5ff; --muted:#75618b; --subtle:#ead8ff; --subtle-edge:#7452a0; --grid:#382c5814; --shadow:#67459850; }
+body { background-image: linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px); background-size:16px 16px; }
+main { border-radius:0; box-shadow:inset 0 0 0 5px var(--panel-hi), 8px 8px 0 var(--shadow); }
+.masthead { border-bottom:3px solid var(--border); }
+.masthead::after { content:'● ● ●'; width:auto; height:auto; background:none; transform:none; color:var(--accent); font-size:13px; letter-spacing:5px; }
+.entry-card,.room-card,.chat-card,.flow-card,.world-tile,.avatar-preview,.avatar-choice,.map-topbar,.map-stage,.touch-controls { border-radius:0; }
+.entry-card,.room-card,.chat-card { box-shadow:4px 4px 0 var(--border); }
+.flow-card { border:4px solid var(--border); padding:clamp(24px,5vw,46px); background-color:var(--card); background-image:linear-gradient(135deg,transparent 0 14px,var(--card) 14px); box-shadow:8px 8px 0 var(--border); }
+.flow-card::before { content:''; top:12px; right:12px; width:30px; height:8px; border:0; border-radius:0; background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 9px); box-shadow:none; }
+.wide-card { width:min(100%, 900px); }
+.login-card h1,.flow-card h1 { text-transform:uppercase; letter-spacing:.02em; }
+.step-label { font-family:monospace; text-transform:uppercase; color:var(--accent-deep); }
+button,input,select { border-radius:0; }
+button { border-width:3px; box-shadow:inset 0 0 0 2px #ffffff55, 0 5px 0 var(--border); }
+button:hover:not(:disabled) { transform:translate(-1px,-2px); }
+button:active:not(:disabled) { transform:translateY(3px); box-shadow:inset 0 0 0 2px #ffffff35,0 1px 0 var(--border); }
+input,select { box-shadow:inset 3px 3px 0 var(--field-inset); }
+.stack-form input,.name-field input,#create-world-form input { border-radius:0; }
+.world-grid { gap:14px; }
+.world-tile { position:relative; border:3px solid var(--border); background:var(--card); box-shadow:5px 5px 0 var(--border); }
+.world-tile:hover { transform:translate(-2px,-3px); }
+.world-tile:active { transform:translateY(3px); box-shadow:2px 2px 0 var(--border); }
+.world-art { border:2px solid var(--border); border-radius:0; box-shadow:inset 0 0 0 3px #ffffff55; }
+.world-icon,.avatar-sprite,.empty-map-icon,.pixel-svg { shape-rendering:geometricPrecision; image-rendering:auto; }
+.world-join { border-top:2px solid var(--border); text-transform:uppercase; font-family:monospace; }
+.world-join::after { border-radius:0; box-shadow:2px 2px 0 var(--border); clip-path:polygon(0 0,76% 0,100% 24%,100% 100%,0 100%); }
+.avatar-preview { border:3px solid var(--border); box-shadow:5px 5px 0 var(--border); }
+.avatar-choice { border:2px solid var(--border); box-shadow:3px 3px 0 var(--border); }
+.avatar-face { border-radius:0; box-shadow:2px 2px 0 var(--border); }
+.avatar-choice input:checked + .avatar-face { border-color:var(--accent-deep); box-shadow:0 0 0 2px var(--accent),3px 3px 0 var(--border); }
+.map-topbar,.map-stage { border:3px solid var(--border); box-shadow:4px 4px 0 var(--border); }
+.map-screen .chat-card { border:3px solid var(--border); box-shadow:4px 4px 0 var(--border); }
+#game { border:3px solid var(--border); border-radius:0; box-shadow:none; }
+.touch-controls { border:3px solid var(--border); padding:7px; box-shadow:4px 4px 0 var(--border); clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%); }
+.touch-key,.touch-center { border:2px solid var(--border); border-radius:0 !important; box-shadow:inset 0 0 0 2px #ffffff55,2px 2px 0 var(--border); }
+button[data-key]::before { border-radius:0; box-shadow:inset 0 -2px 0 var(--panel-low),2px 2px 0 var(--border); }
+button[data-key="START"]::before { border-radius:0; }
+.tag,.chat-icon,kbd { border-radius:0; }
+.chat-icon { box-shadow:2px 2px 0 var(--border); }
+.map-screen .compose input,.map-screen .compose button { border-radius:0; }
+@media (max-width:540px) { main { border-radius:0; }.flow-card { padding:34px 17px 22px; } }
