@@ -48,6 +48,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     if (!response.ok) throw new Error('地图加载失败');
     const world = parseWorldMap(await response.json());
     room = await client.joinOrCreate(ROOM_NAME, options);
+    room.reconnection.minUptime = 0;
     messages.replaceChildren();
     room.onMessage('chat', message => {
       const li = document.createElement('li');

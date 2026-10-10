@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Room, validate, type Client } from '@colyseus/core';
+import { Room, validate, CloseCode, type Client } from '@colyseus/core';
 import { SpaceState, Player, joinSchema, inputSchema, chatSchema, stepMovement, contains,
   TICK_MS, type JoinOptions, type MovementInput, type ChatMessage } from '@virtual-workspace/shared';
 import { world } from '../world.js';
@@ -9,6 +9,7 @@ type SpaceClient = Client<{ messages: { chat: ChatMessage } }>;
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> {
   state = new SpaceState();
   maxClients = 32;
+  reconnectionSeconds = 20;
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
   private lastChat = new Map<string, number>();
 
@@ -47,11 +48,15 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     player.zoneId = world.zones.find(zone => contains(zone, player.x, player.y))?.id ?? '';
     this.state.players.set(client.sessionId, player);
   }
-  onDrop(client: SpaceClient) {
+  onDrop(client: SpaceClient, code: number) {
     const player = this.state.players.get(client.sessionId);
     if (player) player.connected = false;
     this.movementInputs.delete(client.sessionId);
-    this.allowReconnection(client, 20).catch(() => {});
+    // Match SDK retryable close codes. Validation failures must release their seats.
+    if ([CloseCode.NO_STATUS_RECEIVED, CloseCode.ABNORMAL_CLOSURE,
+      CloseCode.GOING_AWAY, CloseCode.MAY_TRY_RECONNECT].some(retryCode => retryCode === code)) {
+      this.allowReconnection(client, this.reconnectionSeconds).catch(() => {});
+    }
   }
   onReconnect(client: SpaceClient) {
     const player = this.state.players.get(client.sessionId);

@@ -45,18 +45,29 @@ const tiledSchema = z.object({
   orientation: z.literal('orthogonal'), infinite: z.literal(false),
   width: z.number().int().positive(), height: z.number().int().positive(),
   tilewidth: z.number().int().positive(), tileheight: z.number().int().positive(),
+  tilesets: z.array(z.object({
+    name: z.string().min(1), image: z.string().min(1), source: z.never().optional(),
+    firstgid: z.number().int().positive(), tilecount: z.number().int().positive(),
+    columns: z.number().int().positive(),
+    tilewidth: z.number().int().positive(), tileheight: z.number().int().positive(),
+  })).length(1),
   layers: z.array(z.object({
     name: z.string(), type: z.enum(['tilelayer', 'objectgroup']),
     offsetx: z.literal(0).default(0), offsety: z.literal(0).default(0),
     x: z.literal(0).default(0), y: z.literal(0).default(0),
     objects: z.array(rectangle).optional(),
-  })),
+  }).passthrough()),
+});
+const groundSchema = z.object({
+  type: z.literal('tilelayer'), width: z.number().int().positive(), height: z.number().int().positive(),
+  data: z.array(z.number().int().min(0).max(0xffffffff)),
 });
 export type Rect = { x: number; y: number; width: number; height: number };
 export const zoneKindSchema = z.enum(['media', 'whiteboard', 'board', 'pomodoro']);
 export type Zone = Rect & { id: string; kind: z.infer<typeof zoneKindSchema>; resourceId: string };
 export type WorldMap = {
   width: number; height: number; spawn: { x: number; y: number };
+  tileset: { name: string; image: string };
   collisions: Rect[]; zones: Zone[];
 };
 
@@ -65,6 +76,15 @@ export function parseWorldMap(raw: unknown): WorldMap {
   const map = tiledSchema.parse(raw);
   const layers = new Map(map.layers.map(layer => [layer.name, layer]));
   if (layers.size !== map.layers.length) throw new Error('Tiled layer names must be unique');
+  const ground = groundSchema.parse(layers.get('ground'));
+  const tileset = map.tilesets[0];
+  if (ground.width !== map.width || ground.height !== map.height || ground.data.length !== map.width * map.height) {
+    throw new Error('Ground dimensions must match the map');
+  }
+  if (ground.data.some(gid => {
+    const tile = gid & 0x0fffffff;
+    return tile !== 0 && (tile < tileset.firstgid || tile >= tileset.firstgid + tileset.tilecount);
+  })) throw new Error('Ground contains a tile outside its tileset');
   for (const name of ['spawns', 'collisions', 'interactions']) {
     if (layers.get(name)?.type !== 'objectgroup') throw new Error(`Missing Tiled object layer: ${name}`);
   }
@@ -81,7 +101,7 @@ export function parseWorldMap(raw: unknown): WorldMap {
     return { id, kind, resourceId, x: obj.x, y: obj.y, width: obj.width, height: obj.height };
   });
   const world = { width: map.width * map.tilewidth, height: map.height * map.tileheight,
-    spawn: { x: spawn.x, y: spawn.y }, collisions, zones };
+    spawn: { x: spawn.x, y: spawn.y }, tileset: { name: tileset.name, image: tileset.image }, collisions, zones };
   for (const obj of [...collisions, ...zones]) {
     if (obj.width <= 0 || obj.height <= 0 || obj.x < 0 || obj.y < 0 ||
       obj.x + obj.width > world.width || obj.y + obj.height > world.height) {

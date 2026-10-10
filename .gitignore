@@ -9,3 +9,5 @@ data/
 .DS_Store
 .colyseus-cloud.json
 .devmode.json
+test-results/
+playwright-report/

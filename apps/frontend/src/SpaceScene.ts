@@ -18,11 +18,12 @@ export class SpaceScene extends Phaser.Scene {
   }
   preload() {
     this.load.tilemapTiledJSON('lobby', '/maps/lobby.tmj');
-    this.load.image('tiles', '/maps/tiles.png');
+    this.load.image('tiles', new URL(this.world.tileset.image,
+      new URL('/maps/lobby.tmj', window.location.origin)).href);
   }
   create() {
     const map = this.make.tilemap({ key: 'lobby' });
-    const tiles = map.addTilesetImage('basic', 'tiles');
+    const tiles = map.addTilesetImage(this.world.tileset.name, 'tiles');
     if (!tiles || !map.createLayer('ground', tiles)) throw new Error('Unable to render Tiled ground layer');
     for (const zone of this.world.zones) {
       this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
@@ -30,6 +31,10 @@ export class SpaceScene extends Phaser.Scene {
       this.add.text(zone.x + 8, zone.y + 8, zone.kind, { fontSize: '14px', color: '#eeefd9' });
     }
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT', false) as Record<string, Phaser.Input.Keyboard.Key>;
+    const canvas = this.game.canvas;
+    canvas.tabIndex = 0;
+    const focusCanvas = () => canvas.focus();
+    canvas.addEventListener('pointerdown', focusCanvas);
     const stop = () => {
       if (this.room.connection.isOpen) this.room.send('input', { x: 0, y: 0 });
     };
@@ -37,6 +42,7 @@ export class SpaceScene extends Phaser.Scene {
     const visibility = () => { if (document.hidden) stop(); };
     document.addEventListener('visibilitychange', visibility);
     this.events.once('shutdown', () => {
+      canvas.removeEventListener('pointerdown', focusCanvas);
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', visibility);
     });

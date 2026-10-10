@@ -1,13 +1,21 @@
-import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, loadEnv } from 'vite';
 
-export default defineConfig({
-  publicDir: '../../assets',
-  server: {
-    port: 5173, strictPort: true,
-    proxy: {
-      '/health': 'http://127.0.0.1:2567',
-      '/matchmake': 'http://127.0.0.1:2567',
-      '^/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$': { target: 'ws://127.0.0.1:2567', ws: true },
+const envDir = fileURLToPath(new URL('../../', import.meta.url));
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, envDir, '');
+  const backend = `http://127.0.0.1:${env.PORT || 2567}`;
+  return {
+    envDir,
+    publicDir: '../../assets',
+    server: {
+      port: 5173, strictPort: true,
+      proxy: {
+        '/health': backend,
+        '/matchmake': backend,
+        '^/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+(?:\\?|$)': { target: backend, ws: true },
+      },
     },
-  },
+  };
 });

@@ -1,7 +1,7 @@
 # 项目协作与实现约定
 
 - 先阅读相关源码、workspace 脚本和对应文档，再编辑。仓库采用 TypeScript strict；保持 strict 类型检查通过，不以 `any` 绕开类型问题。
-- Colyseus 使用 0.18 系列。写 Room 或 Schema 前读取安装的版本及 `/home/cc/.codex/skills/colyseus/SKILL.md`（或项目中的 Colyseus skill）；API 不确定时查官方文档。不要沿用过时的 `colyseus.js`、`client.id`、`Room<MyState>` 或旧断线回调写法。
+- Colyseus 使用 0.18 系列。写 Room 或 Schema 前检查 package-lock 与实际安装版本，并读取当前环境安装的官方 Colyseus skill。没有 skill 时用 `npx skills add colyseus/skill` 安装，或查阅 https://docs.colyseus.io 。不要沿用过时的 `colyseus.js`、`client.id`、`Room<MyState>` 或旧断线回调写法。
 - 服务端拥有权威状态。客户端只提交经过校验的输入并订阅状态；不能信任客户端提供的 session id，也不能只靠客户端执行权限或碰撞规则。
 - 不要手搓登录认证、密码存储、CRDT 或协作同步协议。按需求评估现成、维护中的库及其许可、体积和运维成本。
 - 范围决策：登录和正式账号由用户明确要求“以后做”，当前不要实现账号登录。占位访客昵称和头像不等于账号系统。
