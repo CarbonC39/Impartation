@@ -13,7 +13,9 @@
 
 - `spawns`：至少要有一个名为 `default` 的 Tiled point object，作为加入房间的位置。
 - `collisions`：每个矩形对象都是服务器端障碍。矩形必须为正尺寸并完全位于地图范围内；玩家视觉为半径 10px 的圆，当前碰撞使用其 20×20px 轴对齐包围盒，因此墙角处略保守。瓦片图案本身不产生碰撞，需要在此层画出障碍矩形。
-- `interactions`：矩形区域的类型从 Tiled `class` 或旧式 `type` 读取，当前允许 `media`、`whiteboard`、`board`、`pomodoro`。每个对象需有唯一非空 `name`，以及非空字符串自定义属性 `resourceId`。客户端目前只显示区域和资源 id 提示，不会打开对应功能。
+- `interactions`：矩形区域的类型从 Tiled `class` 或旧式 `type` 读取，允许 `media`、`whiteboard`、`board`、`pomodoro`。每个对象需有唯一非空 `name`，以及非空字符串自定义属性 `resourceId`。留言板和番茄钟已接入；影音、白板目前仍是预留提示。
+
+玩家必须实际位于对应类型和资源的区域内，且连接状态有效，服务端才接受留言板或番茄钟操作。区域外的客户端提示不构成权限。每个 `board` 资源通过 SQLite 保存最多 100 条、每条最多 500 字的留言；同一单实例数据库上的容量分房共享内容。`pomodoro` 资源在各个房间中各自维护一个共享计时器，不跨房间共享。
 
 推荐在 Tiled 中使用自定义属性 `resourceId`（string），并保留以上对象层名和类型字面值。例如：
 

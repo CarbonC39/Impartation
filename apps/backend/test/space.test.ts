@@ -24,6 +24,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
   beforeEach(async () => {
     await Promise.all(connections.splice(0).filter(room => room.connection.isOpen).map(room => room.leave()));
     await harness.cleanup();
+    db.prepare('DELETE FROM board_notes').run();
   });
   after(async () => {
     await Promise.all(connections.splice(0).filter(room => room.connection.isOpen).map(room => room.leave()));
@@ -135,6 +136,130 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const response = await fetch('http://127.0.0.1:2568/health');
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { status: 'ok' });
+  });
+
+  function place(room: Room<SpaceRoom>, x: number, y: number) {
+    const player = harness.getRoomById<SpaceRoom>(room.roomId).state.players.get(room.sessionId)!;
+    player.x = x; player.y = y;
+    return player;
+  }
+
+  test('boards reject remote and unknown resources, strip forged identity, and rate-limit posts', async () => {
+    const alice = await join('Alice');
+    assert.equal((await alice.request('boardPost', { resourceId: 'message-wall', text: 'remote' })).ok, false);
+    const player = place(alice, 500, 350);
+    player.zoneId = 'forged-zone'; // Position, not a caller-provided zone, authorizes the action.
+    assert.equal((await alice.request('boardPost', { resourceId: 'unknown', text: 'wrong resource' })).ok, false);
+    const payload = { resourceId: 'message-wall', text: ' <b>saved</b> ', name: 'Forged', authorSessionId: 'other' };
+    assert.equal((await alice.request('boardPost', payload)).ok, true);
+    assert.equal((await alice.request('boardPost', { resourceId: 'message-wall', text: 'too fast' })).ok, false);
+    await until(() => alice.state.notes.size === 1);
+    const note = [...alice.state.notes.values()][0];
+    assert.equal(note.name, 'Alice');
+    assert.equal(note.authorSessionId, alice.sessionId);
+    assert.equal(note.text, '<b>saved</b>');
+    assert.deepEqual(db.prepare('SELECT count(*) AS count FROM profiles').get(), { count: 0 });
+  });
+
+  test('board ownership survives reconnect but cannot be forged by another guest with the same nickname', async () => {
+    const alice = await join('SameName');
+    const bob = await join('SameName');
+    place(alice, 500, 350); place(bob, 500, 350);
+    await alice.request('boardPost', { resourceId: 'message-wall', text: 'owner-only' });
+    await until(() => bob.state.notes.size === 1);
+    const id = [...bob.state.notes.keys()][0];
+    const forged = { resourceId: 'message-wall', id, authorSessionId: alice.sessionId };
+    assert.equal((await bob.request('boardDelete', forged)).ok, false);
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    authoritative.clients.find(client => client.sessionId === alice.sessionId)!.leave(1001);
+    await reconnected;
+    await delay(550);
+    assert.equal((await alice.request('boardDelete', { resourceId: 'message-wall', id })).ok, true);
+    await until(() => bob.state.notes.size === 0);
+  });
+
+  test('persistent boards synchronize across capacity-split rooms and survive room disposal', async () => {
+    const alice = await join('Alice');
+    const first = harness.getRoomById<SpaceRoom>(alice.roomId);
+    first.maxClients = 1;
+    const bob = await join('Bob');
+    assert.notEqual(alice.roomId, bob.roomId);
+    place(alice, 500, 350); place(bob, 500, 350);
+    await alice.request('boardPost', { resourceId: 'message-wall', text: 'shared board' });
+    await until(() => bob.state.notes.size === 1);
+    const id = [...bob.state.notes.keys()][0];
+    await delay(550);
+    await alice.request('boardDelete', { resourceId: 'message-wall', id });
+    await until(() => bob.state.notes.size === 0);
+    await bob.request('boardPost', { resourceId: 'message-wall', text: 'retained' });
+    await alice.leave(); await bob.leave();
+    await harness.cleanup();
+    const carol = await join('Carol');
+    assert.equal([...carol.state.notes.values()][0]?.text, 'retained');
+  });
+
+  test('pomodoro validates location and transitions, uses server durations and restores late-join state', async () => {
+    const alice = await join('Alice');
+    assert.equal((await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'start', mode: 'focus' })).ok, false);
+    place(alice, 100, 350);
+    const forged = { resourceId: 'focus-corner', action: 'start' as const, mode: 'break' as const, endsAt: 1, remainingMs: 1 };
+    assert.equal((await alice.request('pomodoro', forged)).ok, true);
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const timer = authoritative.state.pomodoros.get('focus-corner')!;
+    assert.equal(timer.remainingMs, 300_000);
+    assert.ok(timer.endsAt > Date.now() + 299_000);
+    const bob = await join('Bob');
+    assert.equal(bob.state.pomodoros.get('focus-corner')?.endsAt, timer.endsAt);
+    place(bob, 100, 350);
+    assert.equal((await bob.request('pomodoro', { resourceId: 'focus-corner', action: 'start', mode: 'focus' })).ok, false);
+    await delay(550);
+    assert.equal((await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'pause' })).ok, true);
+    const remaining = timer.remainingMs;
+    assert.equal(timer.endsAt, 0);
+    await delay(550);
+    assert.equal(timer.remainingMs, remaining);
+    assert.equal((await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'resume' })).ok, true);
+    assert.ok(Math.abs(timer.endsAt - Date.now() - remaining) < 100);
+    await delay(550);
+    assert.equal((await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'reset', mode: 'focus' })).ok, true);
+    assert.equal(timer.status, 'idle');
+    assert.equal(timer.remainingMs, 1_500_000);
+    assert.equal(timer.endsAt, 0);
+  });
+
+  test('pomodoro completes on the server clock, recovers after reconnect, and is isolated per room', async () => {
+    const alice = await join('Alice');
+    place(alice, 100, 350);
+    await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'start', mode: 'focus' });
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const timer = authoritative.state.pomodoros.get('focus-corner')!;
+    authoritative.maxClients = 1;
+    const bob = await join('Bob');
+    assert.equal(bob.state.pomodoros.get('focus-corner')?.status, 'idle');
+    const endsAt = timer.endsAt;
+    const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    authoritative.clients.find(client => client.sessionId === alice.sessionId)!.leave(1001);
+    await reconnected;
+    await until(() => alice.state.pomodoros.get('focus-corner')?.endsAt === endsAt);
+    timer.endsAt = Date.now() - 1;
+    await until(() => timer.status === 'finished');
+    await until(() => alice.state.pomodoros.get('focus-corner')?.remainingMs === 0);
+    assert.equal(timer.endsAt, 0);
+    assert.equal(bob.state.pomodoros.get('focus-corner')?.status, 'idle');
+  });
+
+  test('malformed feature requests reject without mutations or disconnecting the guest', async () => {
+    const alice = await join('Alice');
+    place(alice, 500, 350);
+    await assert.rejects(alice.request('boardPost', { resourceId: 'message-wall', text: ' ' }));
+    await assert.rejects(alice.request('boardDelete', { resourceId: 'message-wall', id: 'invalid' }));
+    place(alice, 100, 350);
+    const invalid = { resourceId: 'focus-corner', action: 'start' as const, mode: 'invalid' as 'focus' };
+    await assert.rejects(alice.request('pomodoro', invalid));
+    assert.equal(alice.connection.isOpen, true);
+    assert.equal(alice.state.notes.size, 0);
+    assert.equal(alice.state.pomodoros.get('focus-corner')?.status, 'idle');
   });
   test('a full room rejects joinById and matchmaking creates a separate room', async () => {
     const alice = await join('Alice');

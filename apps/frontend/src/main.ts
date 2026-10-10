@@ -4,6 +4,7 @@ import { ROOM_NAME, joinSchema, chatSchema, parseWorldMap } from '@virtual-works
 import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
 import type { server } from '@virtual-workspace/backend/app.config';
 import { SpaceScene } from './SpaceScene';
+import { FeaturePanels } from './features';
 import './style.css';
 
 function element<T extends HTMLElement>(id: string): T {
@@ -22,13 +23,17 @@ const client = new Client<typeof server>(import.meta.env.VITE_SERVER_URL || wind
 let room: Room<SpaceRoom> | undefined;
 let game: Phaser.Game | undefined;
 let connected = false;
+let features: FeaturePanels | undefined;
 
 function setConnected(value: boolean) {
   connected = value;
   send.disabled = !value;
   messageInput.disabled = !value;
+  features?.setConnected(value);
 }
 function cleanup() {
+  features?.dispose();
+  features = undefined;
   game?.destroy(true);
   game = undefined;
   room = undefined;
@@ -49,6 +54,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     const world = parseWorldMap(await response.json());
     room = await client.joinOrCreate(ROOM_NAME, options);
     room.reconnection.minUptime = 0;
+    features = new FeaturePanels(room);
     messages.replaceChildren();
     room.onMessage('chat', message => {
       const li = document.createElement('li');
@@ -67,8 +73,10 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: new SpaceScene(room, world, id => {
         const current = world.zones.find(item => item.id === id);
-        const text = current ? `当前区域：${current.kind} / ${current.resourceId}（功能待接入）` : '当前区域：无';
+        const names = { board: '留言板', pomodoro: '番茄钟', media: '影音（待接入）', whiteboard: '白板（待接入）' };
+        const text = current ? `当前区域：${names[current.kind]}` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
+        features?.setZone(current);
       }),
     });
     setConnected(true);
