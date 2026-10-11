@@ -34,7 +34,7 @@ export type FeatureResult = { ok: boolean; message: string };
 export const BOARD_LIMIT = 100;
 export const POMODORO_DURATIONS = { focus: 25 * 60_000, break: 5 * 60_000 } as const;
 export const BoardNote = schema({
-  resourceId: t.string(), authorSessionId: t.string(), name: t.string(), text: t.string(), createdAt: t.number(),
+  resourceId: t.string(), authorSessionId: t.string(), authorUserId: t.string(), name: t.string(), text: t.string(), createdAt: t.number(),
 }, 'BoardNote');
 export type BoardNote = SchemaType<typeof BoardNote>;
 export const Pomodoro = schema({
@@ -45,6 +45,7 @@ export type Pomodoro = SchemaType<typeof Pomodoro>;
 
 export const Player = schema({
   name: t.string(), avatar: t.string(), x: t.number(), y: t.number(),
+  userId: t.string(), role: t.string().default('member'),
   connected: t.boolean().default(true), zoneId: t.string().default(''),
 }, 'Player');
 export type Player = SchemaType<typeof Player>;

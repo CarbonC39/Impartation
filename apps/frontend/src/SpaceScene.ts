@@ -63,6 +63,8 @@ export class SpaceScene extends Phaser.Scene {
       sprite.circle.x = Phaser.Math.Linear(sprite.circle.x, player.x, blend);
       sprite.circle.y = Phaser.Math.Linear(sprite.circle.y, player.y, blend);
       sprite.circle.setAlpha(player.connected ? 1 : 0.35);
+      sprite.circle.setFillStyle(colors[player.avatar] ?? colors.mint);
+      if (sprite.label.text !== player.name) sprite.label.setText(player.name);
       sprite.label.setPosition(sprite.circle.x, sprite.circle.y - 22);
     }
     for (const [id, sprite] of this.sprites) {

@@ -16,13 +16,24 @@
         <button id="join" type="submit">进入空间</button>
         <button id="leave" type="button" disabled>离开</button>
       </form>
+      <details>
+        <summary>跨设备身份</summary>
+        <p id="identity-status">尚未创建身份</p>
+        <p>首次进入时保存访客身份。可用一次性绑定码让桌面、手机和网页共用此身份。</p>
+        <form id="identity-form">
+          <label>绑定码 <input id="identity-code" maxlength="32" autocomplete="off" required /></label>
+          <button id="identity-export" type="button" disabled>生成绑定码</button>
+          <button id="identity-import" type="submit">绑定此身份</button>
+        </form>
+        <p id="identity-feedback" role="status"></p>
+      </details>
       <p id="status" role="status" aria-live="polite">尚未连接</p>
       <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"></div>
       <p>WASD / 方向键移动；输入文字时暂停移动。走进右下方留言板或左下方番茄钟区域即可使用。</p>
       <p id="zone" role="status">当前区域：无</p>
       <section id="board-panel" class="feature-panel" aria-labelledby="board-heading" hidden>
         <h2 id="board-heading">留言板 <small id="board-count">0 / 100 条</small></h2>
-        <p>留言会保存。当前访客会话可以删除自己的留言；离开后重新进入将成为新访客。</p>
+        <p>留言会保存。同一身份可以删除自己的留言，管理员可删除所有留言。</p>
         <ol id="board-notes" aria-label="已发布留言"></ol>
         <form id="board-form">
           <label for="board-text">写一条留言</label>

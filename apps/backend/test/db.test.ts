@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,7 +15,7 @@ test('SQLite migration is idempotent and data survives reopen', () => {
   const path = join(directory, 'world.sqlite');
   let database = openDatabase(path);
   try {
-    assert.equal(database.pragma('user_version', { simple: true }), 2);
+    assert.equal(database.pragma('user_version', { simple: true }), 3);
     assert.equal(database.pragma('journal_mode', { simple: true }), 'wal');
     assert.equal(database.pragma('foreign_keys', { simple: true }), 1);
     database.prepare('INSERT INTO profiles (user_id, avatar_id, updated_at) VALUES (?, ?, ?)').run('test-profile', 'violet', 123);
@@ -22,13 +23,13 @@ test('SQLite migration is idempotent and data survives reopen', () => {
     database.close();
     database = openDatabase(path);
     assert.deepEqual(database.prepare('SELECT * FROM profiles').get(), {
-      user_id: 'test-profile', avatar_id: 'violet', updated_at: 123,
+      user_id: 'test-profile', avatar_id: 'violet', updated_at: 123, name: '', role: 'member',
     });
-    assert.equal(database.pragma('user_version', { simple: true }), 2);
+    assert.equal(database.pragma('user_version', { simple: true }), 3);
     const notes = new BoardStore(database).list('message-wall');
     assert.equal(notes.length, 1);
     assert.equal(notes[0].text, '<b>saved</b>');
-    assert.equal(notes[0].authorSessionId, 'guest-session');
+    assert.equal(notes[0].authorUserId, 'guest-session');
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
@@ -39,7 +40,7 @@ test('a database from a newer application is rejected', () => {
   const directory = mkdtempSync(join(tmpdir(), 'virtual-space-new-db-'));
   const path = join(directory, 'world.sqlite');
   const database = openDatabase(path);
-  database.pragma('user_version = 3');
+  database.pragma('user_version = 4');
   database.close();
   try { assert.throws(() => openDatabase(path), /newer/); }
   finally { rmSync(directory, { recursive: true, force: true }); }
@@ -50,21 +51,44 @@ test('version 1 databases migrate without losing existing profiles', () => {
   const directory = mkdtempSync(join(tmpdir(), 'virtual-space-v1-db-'));
   const path = join(directory, 'world.sqlite');
   try {
-    const old = openDatabase(path);
-    old.exec('DROP TABLE board_notes');
+    const old = new Database(path);
+    old.exec("CREATE TABLE profiles (user_id TEXT PRIMARY KEY, avatar_id TEXT NOT NULL DEFAULT 'mint', updated_at INTEGER NOT NULL)");
     old.pragma('user_version = 1');
     old.prepare('INSERT INTO profiles VALUES (?, ?, ?)').run('existing', 'mint', 123);
     old.close();
     const upgraded = openDatabase(path);
     try {
-      assert.equal(upgraded.pragma('user_version', { simple: true }), 2);
+      assert.equal(upgraded.pragma('user_version', { simple: true }), 3);
       assert.deepEqual(upgraded.prepare('SELECT user_id FROM profiles').get(), { user_id: 'existing' });
       assert.equal(new BoardStore(upgraded).post('wall', 'guest', 'Guest', 'works'), true);
     } finally { upgraded.close(); }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('boards enforce capacity, resource separation, session ownership and unsubscribe', () => {
+test('version 2 migration preserves legacy notes without assigning them to a new identity', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'virtual-space-v2-db-'));
+  const path = join(directory, 'world.sqlite');
+  try {
+    const old = new Database(path);
+    old.exec(`CREATE TABLE profiles (user_id TEXT PRIMARY KEY, avatar_id TEXT NOT NULL DEFAULT 'mint', updated_at INTEGER NOT NULL);
+      CREATE TABLE board_notes (id TEXT PRIMARY KEY, resource_id TEXT NOT NULL, author_session_id TEXT NOT NULL,
+        name TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL);
+      INSERT INTO board_notes VALUES ('legacy', 'wall', 'old-session', 'Legacy', 'preserved', 123);
+      PRAGMA user_version = 2;`);
+    old.close();
+    const upgraded = openDatabase(path);
+    try {
+      const store = new BoardStore(upgraded);
+      assert.deepEqual(store.list('wall')[0], { id: 'legacy', resourceId: 'wall', authorSessionId: 'old-session',
+        authorUserId: '', name: 'Legacy', text: 'preserved', createdAt: 123 });
+      assert.equal(store.delete('wall', 'legacy', 'old-session'), false);
+      assert.equal(store.delete('wall', 'legacy', 'admin-user', true), true);
+      assert.throws(() => upgraded.prepare('INSERT INTO profiles (user_id, updated_at, role) VALUES (?, ?, ?)').run('bad-role', 123, 'owner'));
+    } finally { upgraded.close(); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('boards enforce capacity, resource separation, identity ownership and unsubscribe', () => {
   const database = openDatabase(':memory:');
   try {
     const store = new BoardStore(database);

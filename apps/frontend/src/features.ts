@@ -120,7 +120,8 @@ export class FeaturePanels {
     const notes = [...this.room.state.notes.entries()]
       .filter(([, note]) => note.resourceId === this.current?.resourceId)
       .sort(([a, x], [b, y]) => x.createdAt - y.createdAt || a.localeCompare(b));
-    const key = JSON.stringify([this.current.resourceId, this.connected, this.pending, notes.map(([id]) => id)]);
+    const player = this.room.state.players.get(this.room.sessionId);
+    const key = JSON.stringify([this.current.resourceId, this.connected, this.pending, player?.userId, player?.role, notes.map(([id]) => id)]);
     if (key === this.notesKey) return;
     this.notesKey = key;
     const children = notes.map(([id, note]) => {
@@ -130,10 +131,10 @@ export class FeaturePanels {
       const body = document.createElement('p');
       body.textContent = note.text;
       item.append(meta, body);
-      if (note.authorSessionId === this.room.sessionId) {
+      if (player && (note.authorUserId === player.userId || player.role === 'admin')) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.textContent = '删除我的留言';
+        button.textContent = note.authorUserId === player.userId ? '删除我的留言' : '管理员删除';
         button.dataset.noteId = id;
         button.disabled = !this.connected || this.pending;
         item.append(button);

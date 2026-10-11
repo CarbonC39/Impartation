@@ -13,6 +13,8 @@ button:disabled { cursor: default; }
 #messages li { overflow-wrap: anywhere; }
 #chat-form label { flex: 1; }
 #message { width: min(75%, 500px); }
+#identity-status, #identity-feedback { overflow-wrap: anywhere; }
+#identity-code { max-width: 100%; box-sizing: border-box; }
 .feature-panel { padding: 16px; margin: 16px 0; border: 1px solid #cbd6cf; border-radius: 8px; background: white; }
 .feature-panel h2 { margin-top: 0; }
 .feature-panel small { font-size: 13px; font-weight: normal; color: #52655b; }

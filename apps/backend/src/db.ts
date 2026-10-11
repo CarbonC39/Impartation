@@ -10,9 +10,8 @@ export function openDatabase(path: string) {
     database.pragma('journal_mode = WAL');
     database.pragma('foreign_keys = ON');
     database.pragma('busy_timeout = 5000');
-    // Reserved profile storage. Guest identities are never persisted as accounts.
     const version = database.pragma('user_version', { simple: true }) as number;
-    if (version > 2) throw new Error('Database is newer than this application');
+    if (version > 3) throw new Error('Database is newer than this application');
     if (version < 1) database.transaction(() => {
       database.exec(`CREATE TABLE profiles (
         user_id TEXT PRIMARY KEY,
@@ -32,6 +31,12 @@ export function openDatabase(path: string) {
       );
       CREATE INDEX board_notes_resource ON board_notes(resource_id, created_at);`);
       database.pragma('user_version = 2');
+    })();
+    if (version < 3) database.transaction(() => {
+      database.exec(`ALTER TABLE profiles ADD COLUMN name TEXT NOT NULL DEFAULT '';
+        ALTER TABLE profiles ADD COLUMN role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin'));
+        ALTER TABLE board_notes ADD COLUMN author_user_id TEXT;`);
+      database.pragma('user_version = 3');
     })();
     return database;
   } catch (error) {

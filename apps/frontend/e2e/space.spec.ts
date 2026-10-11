@@ -4,6 +4,7 @@ import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
 
 async function enter(page: Page, name: string, avatar = 'mint') {
   await page.goto('/');
+  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
   await page.locator('#name').fill(name);
   await page.locator('#avatar').selectOption(avatar);
   await page.locator('#join').click();
@@ -11,7 +12,10 @@ async function enter(page: Page, name: string, avatar = 'mint') {
   await expect(page.locator('#game canvas')).toBeVisible();
 }
 async function observe(): Promise<Room<SpaceRoom>> {
-  const room = await new Client('http://127.0.0.1:5173').joinOrCreate<SpaceRoom>('space', { name: 'E2EObserver', avatar: 'mint' });
+  const response = await fetch('http://127.0.0.1:5173/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  expect(response.status).toBe(200);
+  const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  const room = await new Client('http://127.0.0.1:5173', { headers: { Cookie: cookie } }).joinOrCreate<SpaceRoom>('space', { name: 'E2EObserver', avatar: 'mint' });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;
@@ -20,19 +24,21 @@ async function observe(): Promise<Room<SpaceRoom>> {
 async function walkTo(page: Page, observer: Room<SpaceRoom>, name: string, kind: 'board' | 'pomodoro') {
   const zoneId = kind === 'board' ? 'message-wall' : 'focus-corner';
   const direction = kind === 'board' ? 'd' : 'a';
-  await expect.poll(() => [...observer.state.players.values()].some(player => player.name === name)).toBe(true);
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  await expect.poll(() => observer.state.players.get(sessionId)?.name).toBe(name);
   await page.bringToFront();
   await page.locator('#game canvas').scrollIntoViewIfNeeded();
   await page.locator('#game canvas').focus();
   await page.keyboard.down(direction);
   try {
-    await expect.poll(() => [...observer.state.players.values()].find(player => player.name === name)?.zoneId).toBe(zoneId);
+    await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(zoneId);
   } finally { await page.keyboard.up(direction); }
   await expect(page.locator(`#${kind}-panel`)).toBeVisible();
 }
 
-test('map board panel publishes safe text, synchronizes browsers and keeps notes after rejoining', async ({ page, context }, testInfo) => {
-  const bob = await context.newPage();
+test('map board panel publishes safe text, synchronizes browsers and keeps notes after rejoining', async ({ page, browser }, testInfo) => {
+  test.setTimeout(30000);
+  const bob = await browser.newPage();
   await enter(page, 'E2EBoardAlice');
   await enter(bob, 'E2EBoardBob');
   const observer = await observe();
@@ -64,11 +70,20 @@ test('map board panel publishes safe text, synchronizes browsers and keeps notes
     await walkTo(page, observer, 'E2EBoardAlice', 'board');
     const retained = page.locator('#board-notes li').filter({ hasText: note });
     await expect(retained).toBeVisible();
-    await expect(retained.getByRole('button')).toHaveCount(0);
-  } finally { if (observer.connection.isOpen) await observer.leave(); }
+    await expect(retained.getByRole('button')).toHaveCount(1);
+    await page.reload();
+    await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+    await expect(page.locator('#name')).toHaveValue('E2EBoardAlice');
+    await page.locator('#join').click();
+    await expect(page.locator('#status')).toContainText('已进入空间');
+    await walkTo(page, observer, 'E2EBoardAlice', 'board');
+    await page.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
+    await expect(bob.locator('#board-notes')).not.toContainText(note);
+  } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
 
-test('shared pomodoro starts, pauses, resumes and resets from its map panel', async ({ page, context }, testInfo) => {
+test('shared pomodoro starts, pauses, resumes and resets from its map panel', async ({ page, browser }, testInfo) => {
+  const bob = await browser.newPage();
   await enter(page, 'E2ETimerAlice');
   const observer = await observe();
   try {
@@ -78,7 +93,6 @@ test('shared pomodoro starts, pauses, resumes and resets from its map panel', as
     await expect(page.locator('#pomodoro-status')).toHaveText('休息 · 进行中');
     await expect(page.locator('#pomodoro-time')).toHaveText(/0[45]:\d{2}/);
     await expect(page.locator('#pomodoro-start')).toBeDisabled();
-    const bob = await context.newPage();
     await enter(bob, 'E2ETimerBob');
     await walkTo(bob, observer, 'E2ETimerBob', 'pomodoro');
     await expect(bob.locator('#pomodoro-status')).toHaveText('休息 · 进行中');
@@ -98,13 +112,13 @@ test('shared pomodoro starts, pauses, resumes and resets from its map panel', as
     await bob.setViewportSize({ width: 390, height: 844 });
     await expect.poll(() => bob.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await bob.screenshot({ path: testInfo.outputPath('pomodoro-mobile.png'), fullPage: true });
-  } finally { if (observer.connection.isOpen) await observer.leave(); }
+  } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
 
-test('two browser guests render their avatars and exchange plain-text chat through the Vite proxy', async ({ page, context }) => {
+test('two browser guests render their avatars and exchange plain-text chat through the Vite proxy', async ({ page, browser }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  const bob = await context.newPage();
+  const bob = await browser.newPage();
   bob.on('pageerror', error => errors.push(error.message));
   await enter(page, 'E2EAlice', 'amber');
   await enter(bob, 'E2EBob', 'violet');
@@ -121,7 +135,7 @@ test('two browser guests render their avatars and exchange plain-text chat throu
     await bob.locator('#send').click();
     await expect(page.locator('#messages')).toContainText('E2EBob：收到');
     expect(errors).toEqual([]);
-  } finally { if (observer.connection.isOpen) await observer.leave(); }
+  } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
 
 test('keyboard moves the authoritative player while typing pauses movement', async ({ page }) => {
@@ -177,4 +191,39 @@ test('health and Tiled assets are reachable through the dev server', async ({ re
   expect(map.status()).toBe(200);
   expect((await map.json()).layers.some((layer: { name: string }) => layer.name === 'ground')).toBe(true);
   expect((await request.get('/maps/tiles.png')).status()).toBe(200);
+});
+
+
+test('binding a second browser restores the same identity, profile and note permissions', async ({ page, browser }) => {
+  await enter(page, 'E2EBound', 'violet');
+  const target = await browser.newPage();
+  const observer = await observe();
+  try {
+    await walkTo(page, observer, 'E2EBound', 'board');
+    const note = `跨设备 ${Date.now()}`;
+    await page.locator('#board-text').fill(note);
+    await page.locator('#board-post').click();
+    await expect(page.locator('#feature-status')).toContainText('留言已发布');
+    await page.locator('summary').click();
+    await page.locator('#identity-export').click();
+    await expect(page.locator('#identity-code')).toHaveValue(/.{32}/);
+    const code = await page.locator('#identity-code').inputValue();
+    const identity = await page.locator('#identity-status').textContent();
+    await page.locator('#leave').click();
+    await expect(page.locator('#status')).toContainText('已离开');
+    await target.goto('/');
+    await expect(target.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+    await target.locator('summary').click();
+    await target.locator('#identity-code').fill(code);
+    await target.locator('#identity-import').click();
+    await expect(target.locator('#identity-feedback')).toHaveText('已绑定同一身份');
+    await expect(target.locator('#identity-status')).toHaveText(identity!);
+    await expect(target.locator('#name')).toHaveValue('E2EBound');
+    await expect(target.locator('#avatar')).toHaveValue('violet');
+    await target.locator('#join').click();
+    await expect(target.locator('#status')).toContainText('已进入空间');
+    await walkTo(target, observer, 'E2EBound', 'board');
+    await target.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
+    await expect(target.locator('#feature-status')).toContainText('留言已删除');
+  } finally { if (observer.connection.isOpen) await observer.leave(); await target.close(); }
 });
