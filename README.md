@@ -22,7 +22,7 @@
 - [x] 留言板与共享番茄钟基础行为
 - [x] 单元、真实 WebSocket 集成、Chromium 端到端测试框架
 - [x] 项目须知、架构边界、Agent 协作规范
-- [ ] 正式账号与登录（已启动范围讨论，见 [账号方案草案](docs/account-system.md)）
+- [ ] 跨端访客身份（范围讨论中，见 [方案草案](docs/account-system.md)；正式账号暂缓）
 - [ ] 私密房间、好友邀请与成员权限
 - [ ] 共享影音、白板
 - [ ] 正式 avatar 素材与换装
@@ -70,6 +70,6 @@ npm start       # 启动已构建的后端；不会启动/托管前端
 
 ## 项目须知
 
-维护要求见 [AGENTS.md](AGENTS.md)：服务端权威、TypeScript strict、不要自行实现认证或 CRDT、账号系统先讨论范围，并准确记录验证结果。代码变更应及时在本地 git commit；远程 push 由用户自行处理。
+维护要求见 [AGENTS.md](AGENTS.md)：服务端权威、TypeScript strict、不要自行实现认证或 CRDT、跨端访客身份先讨论范围，并准确记录验证结果。代码变更应及时在本地 git commit；远程 push 由用户自行处理。
 
 Colyseus skill 官方安装方式：`npx skills add colyseus/skill`，见 [官方指南](https://docs.colyseus.io/getting-started)。当前 Codex 环境已安装，其他环境需自行安装。版本/API 以 lockfile 和对应官方文档为准。
