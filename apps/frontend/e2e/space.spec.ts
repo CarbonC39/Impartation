@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
-import type { ExternalTool, SpaceProtocol } from '@virtual-workspace/shared';
+import type { WebTool, SpaceProtocol } from '@virtual-workspace/shared';
 
 async function enter(page: Page, name: string, avatar = 'mint') {
   await page.goto('/');
@@ -37,13 +37,13 @@ async function walkTo(page: Page, observer: Room<SpaceProtocol>, name: string, k
 }
 
 const toolCases = [
-  { resourceId: 'shared-canvas', kind: 'whiteboard', label: '白板', x: 560 },
-  { resourceId: 'shared-drawing', kind: 'drawing', label: '共同作画', x: 144 },
-  { resourceId: 'lounge-screen', kind: 'media', label: '同步观看', x: 144 },
-  { resourceId: 'shared-document', kind: 'document', label: '协作文档', x: 560 },
+  { resourceId: 'shared-canvas', x: 560 },
+  { resourceId: 'shared-drawing', x: 144 },
+  { resourceId: 'lounge-screen', x: 144 },
+  { resourceId: 'shared-document', x: 560 },
 ] as const;
-const toolDirectory: ExternalTool[] = toolCases.map(({ resourceId, kind }) => ({
-  resourceId, kind, url: `https://tools.example/native/${kind}`,
+const toolDirectory: WebTool[] = toolCases.map(({ resourceId }) => ({
+  resourceId, url: `https://tools.example/resources/${resourceId}`,
 }));
 
 async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typeof toolCases[number]) {
@@ -65,18 +65,18 @@ async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typ
 }
 
 for (const target of toolCases) {
-  test(`${target.kind} map entry opens its native page in an isolated tab`, async ({ page, context }) => {
+  test(`${target.resourceId} web map entry opens its configured page in an isolated tab`, async ({ page, context }) => {
     test.setTimeout(30000);
     await page.route('**/api/tools', route => route.fulfill({ json: toolDirectory }));
     await context.route('https://tools.example/**', route => route.fulfill({
-      contentType: 'text/html', body: '<!doctype html><title>Native tool fixture</title><p>Tool page</p>',
+      contentType: 'text/html', body: '<!doctype html><title>Web tool fixture</title><p>Tool page</p>',
     }));
     await enter(page, 'E2ETool');
     const observer = await observe();
     try {
       await walkToTool(page, observer, target);
-      await expect(page.locator('#tool-heading')).toHaveText(target.label);
-      const url = `https://tools.example/native/${target.kind}`;
+      await expect(page.locator('#tool-heading')).toHaveText('网页工具');
+      const url = `https://tools.example/resources/${target.resourceId}`;
       await expect(page.locator('#tool-open')).toHaveAttribute('href', url);
       const popupReady = page.waitForEvent('popup');
       await page.locator('#tool-open').click();
@@ -336,14 +336,31 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
 });
 
 
-test('missing native handler uses explicit external fallback', async ({ page }) => {
-  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'native', fallback: 'external' }] }));
-  await enter(page, 'E2ENativeFallback');
+test('embed presentation provides an explicit external fallback and clears both on zone exit', async ({ page, context }) => {
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', fallback: 'external' }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Web tool fallback fixture</p>' }));
+  await enter(page, 'E2EWebFallback');
   const observer = await observe();
   try {
     await walkToTool(page, observer, toolCases[1]);
-    await expect(page.locator('#tool-open')).toHaveAttribute('href', toolDirectory[1].url!);
+    const fallback = page.locator('#tool-panel').getByRole('link', { name: '打开工具', exact: true });
+    await expect(fallback).toHaveAttribute('href', toolDirectory[1].url);
+    await expect(page.locator('#tool-panel iframe')).toBeVisible();
+    const openedPage = page.waitForEvent('popup');
+    await fallback.click();
+    const toolPage = await openedPage;
+    await toolPage.waitForLoadState('domcontentloaded');
+    await expect(toolPage).toHaveURL(toolDirectory[1].url);
+    expect(await toolPage.evaluate(() => window.opener === null)).toBe(true);
+    expect(await toolPage.evaluate(() => document.referrer)).toBe('');
+    await toolPage.close();
+    await page.bringToFront();
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('d');
+    try { await expect(page.locator('#tool-panel')).toBeHidden(); }
+    finally { await page.keyboard.up('d'); }
     await expect(page.locator('#tool-panel iframe')).toHaveCount(0);
+    await expect(fallback).toHaveCount(0);
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
 import { PLAYER_RADIUS, TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
-import { zoneLabels } from './zone-labels';
+import { zoneLabels } from './interactions/labels';
 
 const colors: Record<string, number> = { mint: 0x88dbb4, amber: 0xefbd65, violet: 0xbb9de8 };
 

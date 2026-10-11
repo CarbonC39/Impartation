@@ -1,5 +1,5 @@
-import { Pomodoro, POMODORO_DURATIONS, pomodoroActionSchema, type PomodoroActionInput, type FeatureResult } from '@virtual-workspace/shared';
-import type { InteractionContext, SpaceClient } from './context.js';
+import { Pomodoro, POMODORO_DURATIONS, pomodoroActionSchema, type PomodoroActionInput, type InteractionResult } from '@virtual-workspace/shared';
+import type { InteractionContext, SpaceClient } from '../context.js';
 
 export function createPomodoroInteraction(context: InteractionContext) {
   function updateTimers() {
@@ -23,7 +23,7 @@ export function createPomodoroInteraction(context: InteractionContext) {
     },
     tick: updateTimers,
     messages: {
-      pomodoro: { format: pomodoroActionSchema, handler: async (client: SpaceClient, input: PomodoroActionInput): Promise<FeatureResult> => {
+      pomodoro: { format: pomodoroActionSchema, handler: async (client: SpaceClient, input: PomodoroActionInput): Promise<InteractionResult> => {
         if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
         const error = context.check(client, 'pomodoro', input.resourceId);
         if (error) return { ok: false, message: error };

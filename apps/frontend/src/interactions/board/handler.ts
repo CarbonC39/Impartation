@@ -1,6 +1,6 @@
 import type { Room } from '@colyseus/sdk';
 import { boardPostSchema, type SpaceProtocol, type Zone } from '@virtual-workspace/shared';
-import { PanelInteraction, element } from './panel-interaction';
+import { PanelInteraction, element } from '../panel';
 
 export class BoardInteraction extends PanelInteraction {
   private notes = element<HTMLOListElement>('board-notes');

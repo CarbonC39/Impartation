@@ -30,13 +30,13 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | --- | --- | --- |
 | 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长 | [world.test.ts](../apps/backend/test/world.test.ts) |
-| 工具配置 | 跨地图资源一致性、native/embed/external mode、native external fallback、非法 JSON/URL 与额外凭据字段拒绝 | [external-tools.test.ts](../apps/backend/test/external-tools.test.ts) |
+| WebTool 配置 | 跨地图资源一致性、embed/external mode、embed 的手动 external fallback、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
 | 交互架构 | 通用前后端分发、handler 清理、消息冲突、展示策略与 shared 协议一致性 | [architecture.test.ts](../apps/backend/test/architecture.test.ts) |
 | 多地图服务 | registry/API、多图层和外置 TSJ 资源、权威 Portal 转换、目标地图碰撞和身份保留 | [portal.test.ts](../apps/backend/test/portal.test.ts) |
 | SQLite | v1-v3 迁移、旧留言保留、持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
 | 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
 | HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开配置 API | [space.test.ts](../apps/backend/test/space.test.ts) |
-| 浏览器 | 跨浏览器身份绑定、聊天、移动、留言、计时器、窄屏；多地图 Portal 与多图层/tileset；embed、native 缺少 handler 时的 external fallback、external 和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+| 浏览器 | 身份绑定、聊天、移动、留言、计时器、窄屏；多地图 Portal 与多图层/tileset；embed、embed 的手动 external fallback、external 和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
 工具入口浏览器测试拦截 `/api/tools` 提供固定配置，以 HTML 替身模拟工具页面，并检查目标 URL、opener 和 referrer。真实 HTTP 配置响应由 Node 集成测试验证。它们不验证真实服务的编辑、绘画与播放功能。
 
@@ -50,4 +50,4 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 ## 未覆盖项
 
-真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。外置 integration 若选择 native，需要项目提供并注册对应 handler；它不会自动生成 UI 或第三方服务实现。
+真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。测试验证 iframe 容器和 external 链接行为，不验证第三方站点允许嵌入或真实服务功能。

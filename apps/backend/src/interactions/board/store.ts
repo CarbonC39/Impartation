@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { BOARD_LIMIT } from '@virtual-workspace/shared';
-import { db } from './db.js';
+import { db } from '../../db.js';
 
 export type StoredNote = {
   id: string; resourceId: string; authorSessionId: string; authorUserId: string; name: string; text: string; createdAt: number;

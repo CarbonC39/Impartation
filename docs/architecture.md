@@ -22,19 +22,23 @@ flowchart LR
 
 | 路径 / 入口 | 职责 |
 | --- | --- |
-| [shared/index.ts](../packages/shared/src/index.ts) | Schema、消息输入校验、资源与 presentation 配置类型、公共常量 |
+| [shared/index.ts](../packages/shared/src/index.ts) | Schema、消息输入校验、`WebTool` 配置类型、公共常量 |
 | [shared/protocol.ts](../packages/shared/src/protocol.ts) | SDK 使用的 `SpaceProtocol` 结构类型，定义房间输入、请求响应及服务端消息 |
 | [shared/world.ts](../packages/shared/src/world.ts) | Tiled 语义提取、registry 校验、碰撞和移动函数 |
 | [shared/interactions.ts](../packages/shared/src/interactions.ts) | 泛型 `InteractionRegistry<T>`，按 kind 注册、查询和遍历；拒绝空 kind 和重复注册 |
 | [backend/app.config.ts](../apps/backend/src/app.config.ts) | 注册 `space` 房间、WebSocket transport 和 HTTP 路由 |
 | [backend/rooms/SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts) | 房间生命周期、身份复验、移动、聊天及交互授权上下文 |
 | [backend/world.ts](../apps/backend/src/world.ts) | 读取地图 registry，生成权威世界和浏览器可加载的渲染资源 |
-| [backend/integrations/index.ts](../apps/backend/src/integrations/index.ts) | 服务端交互组装入口；注册 board、pomodoro 和 Portal |
+| [backend/interactions/index.ts](../apps/backend/src/interactions/index.ts) | 服务端交互组装入口；注册 board、pomodoro 和 Portal |
+| [backend/interactions/context.ts](../apps/backend/src/interactions/context.ts) / [registry.ts](../apps/backend/src/interactions/registry.ts) | 服务端通用交互上下文、消息与生命周期组合 |
+| [backend/interactions/web/config.ts](../apps/backend/src/interactions/web/config.ts) | 解析并校验公开 WebTool 配置 |
 | [backend/identity.ts](../apps/backend/src/identity.ts) / [db.ts](../apps/backend/src/db.ts) | Better Auth、项目资料、数据库初始化和迁移 |
 | [frontend/main.ts](../apps/frontend/src/main.ts) | 页面与连接生命周期、地图获取和切换、聊天、顶层清理 |
 | [frontend/SpaceScene.ts](../apps/frontend/src/SpaceScene.ts) | Tiled 瓦片渲染、玩家插值、键盘输入和区域通知 |
-| [frontend/features.ts](../apps/frontend/src/features.ts) | 客户端交互组装入口；建立 handler registry 和 dispatcher |
-| [frontend/presentations.ts](../apps/frontend/src/presentations.ts) | 外置 integration 的 native/embed/external 展示策略 |
+| [frontend/interactions/index.ts](../apps/frontend/src/interactions/index.ts) | 客户端交互组装入口；注册面板、Portal 和 WebTool handler |
+| [frontend/interactions/dispatcher.ts](../apps/frontend/src/interactions/dispatcher.ts) | 通用区域、连接和销毁事件分发 |
+| [frontend/interactions/board/handler.ts](../apps/frontend/src/interactions/board/handler.ts) / [pomodoro/handler.ts](../apps/frontend/src/interactions/pomodoro/handler.ts) / [portal/handler.ts](../apps/frontend/src/interactions/portal/handler.ts) | 内置面板和 Portal 客户端交互 |
+| [frontend/interactions/web/handler.ts](../apps/frontend/src/interactions/web/handler.ts) / [web/presentations.ts](../apps/frontend/src/interactions/web/presentations.ts) | 按 resourceId 查找 WebTool 配置并呈现页面 |
 
 shared 编译到 `packages/shared/dist`，同时输出 JavaScript 和声明文件；workspace 引用通过 package exports 读取这些产物。backend 使用 NodeNext，编译到 `apps/backend/build`；frontend 使用 Vite，产物位于 `apps/frontend/dist`。根脚本先构建 shared，避免其它 workspace 使用过期或缺失的协议产物。
 
@@ -47,7 +51,7 @@ shared 编译到 `packages/shared/dist`，同时输出 JavaScript 和声明文�
 1. [config.ts](../apps/backend/src/config.ts) 用 Zod 解析环境变量；生产环境检查身份配置。
 2. 打开 SQLite，执行项目表迁移和 Better Auth 自身的 schema migration。
 3. 读取 `MAP_REGISTRY_PATH` 指定的 registry 和所有地图，校验语义、默认 spawn 与 Portal 目标，建立渲染 JSON 和资源索引。
-4. 解析 `EXTERNAL_TOOLS`，检查配置资源与所有地图中的 kind 是否一致。
+4. 解析 `EXTERNAL_TOOLS`，检查配置资源对应地图中的 `web` 区域。
 5. 注册 HTTP 路由和 `space` 房间类型。具体房间由 matchmaking 按需创建。
 
 数据库迁移、地图或工具配置出错会阻止正常启动。地图和配置在启动时读入内存；当前没有运行时重新加载机制，更改后需重启后端。
@@ -108,7 +112,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 
 交互 kind 取对象 `class`，没有 class 时使用 `type`；properties 保存为 `Record<string, unknown>`。`resourceId` 是从 properties 提取的共享资源标识，与 zone ID 不同：多个区域或地图可以引用同一资源。Portal 使用 `targetMap` 和 `targetSpawn`。
 
-已注册的交互定义负责 kind 特有的语义校验。当前 `interactionDefinitions` 在 shared/world.ts 中集中注册：board、pomodoro 和四类外置工具检查非空 resourceId，Portal 检查目标属性。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
+已注册的交互定义负责 kind 特有的语义校验。当前 `interactionDefinitions` 在 shared/world.ts 中集中注册：board、pomodoro 和 `web` 检查非空 resourceId，Portal 检查目标属性。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
 
 校验范围与渲染能力分开。其它对象层中的装饰对象保持不透明，不套用语义矩形约束；多个 tile layer、多个 tileset 或额外 Tiled 元数据也不会仅因当前画面不需要而被语义解析器拒绝。语义层的可见性不控制碰撞或授权。
 
@@ -165,9 +169,9 @@ Player 包含 `userId`、昵称、形象 ID、权限 role、`mapId`、坐标、`
 ### 4.3 Portal 的完整路径
 
 1. 玩家进入 Portal，服务端同步 zoneId。
-2. 客户端 [PortalInteraction](../apps/frontend/src/portal-interaction.ts) 对本次区域进入发送一次 `portal` 请求，载荷只有 zoneId。
+2. 客户端 [PortalInteraction](../apps/frontend/src/interactions/portal/handler.ts) 对本次区域进入发送一次 `portal` 请求，载荷只有 zoneId。
 3. 服务端复验身份，按当前 mapId 与真实坐标寻找区域，检查 zone ID/kind、连接状态和操作间隔。
-4. [Portal handler](../apps/backend/src/integrations/portal.ts) 从服务端 Tiled 属性读取目标地图和命名 spawn，更新 mapId、坐标和 zoneId，并清除旧移动输入。
+4. [Portal handler](../apps/backend/src/interactions/portal/handler.ts) 从服务端 Tiled 属性读取目标地图和命名 spawn，更新 mapId、坐标和 zoneId，并清除旧移动输入。
 5. `main.ts` 观察本玩家 mapId，清除当前交互区域，获取目标渲染 JSON，销毁旧 Phaser Game 并创建新场景。异步加载以 generation 和 room 引用检查丢弃过期结果。
 
 Portal 保留同一房间、连接、身份和聊天。加入房间使用 initialMap 的 defaultSpawn；Portal 使用其明确指定的 targetSpawn，不强制使用目标地图默认出生点。目标地图和 spawn 在启动时已验证。失败请求不会改变地图；客户端需要重新进入区域才再次尝试。
@@ -187,47 +191,47 @@ Portal 保留同一房间、连接、身份和聊天。加入房间使用 initia
 | 接入点 | 注册内容 | 调用方式 |
 | --- | --- | --- |
 | shared `interactionDefinitions` | `validate(zone)` | Tiled 语义解析时按 kind 调用 |
-| frontend `features.ts` | `InteractionHandler` | dispatcher 路由区域、连接和销毁事件 |
-| backend `integrations/index.ts` | 消息字典及生命周期钩子 | `SpaceRoom` 合成消息并调用 initialize/tick/dispose |
-| frontend `PresentationRegistry` | 展示函数 | 外置工具面板按 mode 和 kind 打开、清理展示 |
+| frontend `interactions/index.ts` | `InteractionHandler` | 组装 handlers；dispatcher 路由区域、连接和销毁事件 |
+| backend `interactions/index.ts` | 消息字典及生命周期钩子 | `SpaceRoom` 合成消息并调用 initialize/tick/dispose |
+| frontend `web/presentations.ts` | WebTool 展示实现 | WebTool handler 按 mode 展示、清理页面 |
 
-客户端 [InteractionDispatcher](../apps/frontend/src/interactions.ts) 只认识 `setZone`、`setConnected`、`dispose`。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
+客户端 [InteractionDispatcher](../apps/frontend/src/interactions/dispatcher.ts) 只认识 `setZone`、`setConnected`、`dispose`。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
 
-board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/board-interaction.ts)、[PomodoroInteraction](../apps/frontend/src/pomodoro-interaction.ts)，共用 [PanelInteraction](../apps/frontend/src/panel-interaction.ts) 的连接、pending、反馈和订阅清理机制。它们在 features.ts 直接注册，其现有 UI 不通过外置工具配置或 PresentationRegistry 选择模式。Portal 也独立注册。四类外置 kind 共用 [ExternalToolPanel](../apps/frontend/src/external-tools.ts)，由它读取 `/api/tools` 并选择展示。
+board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/interactions/board/handler.ts)、[PomodoroInteraction](../apps/frontend/src/interactions/pomodoro/handler.ts)，共用 [panel.ts](../apps/frontend/src/interactions/panel.ts) 的连接、pending、反馈和订阅清理机制。它们在 interactions/index.ts 直接注册，其现有 UI 不通过 WebTool 配置选择模式。Portal 使用 [portal/handler.ts](../apps/frontend/src/interactions/portal/handler.ts) 独立注册。`web/handler.ts` 读取 `/api/tools`，按资源匹配配置。
 
-服务端 [registerServerInteractions](../apps/backend/src/integrations/registry.ts) 合并 handlers 的消息字典，保留具体消息类型，拒绝重复消息名。kind 注册只关联生命周期；实际请求按消息名进入对应 handler。通用容器不会自动执行身份或位置检查，handler 必须调用上下文中的 `authorize` 和 `check`。
+服务端 [registerServerInteractions](../apps/backend/src/interactions/registry.ts) 合并 handlers 的消息字典，保留具体消息类型，拒绝重复消息名。kind 注册只关联生命周期；实际请求按消息名进入对应 handler。通用容器不会自动执行身份或位置检查，handler 必须调用上下文中的 `authorize` 和 `check`。
 
 上下文提供 state、地图语义、身份复验和区域检查；Portal 另需要 map 索引与移动重置函数。房间在创建时调用 initialize，每秒及新玩家加入时调用 tick，销毁时调用 dispose。业务规则由 handler 和其 store 承担，SpaceRoom 提供通用授权与生命周期。
 
-### 5.2 native / embed / external
+### 5.2 embed / external
 
-`kind` 决定交互或工具的类型，`mode` 决定外置 integration 的展示。`EXTERNAL_TOOLS` 以 resourceId 为键；旧 `{ kind, url }` 默认 external。当前配置只接受 media、whiteboard、drawing、document 四类外置 kind，新增其它外置 kind 时也需更新 shared 配置契约和客户端组装入口。
+所有外置工具区域使用 Tiled 类型 `web`，并以 `resourceId` 匹配 `EXTERNAL_TOOLS` 中的 `WebTool`。配置不声明 kind；具体服务由 URL 决定。`mode` 省略时默认为 `external`。
 
 | mode | 当前实现 | 配置要求 |
 | --- | --- | --- |
-| `native` | `registerNative(kind, handler)` 注册的宿主展示函数；kind handler 优先于通用 native strategy | 不必有 URL；配置本身不会生成 UI |
 | `embed` | 在宿主中创建 iframe，离开时移除 | 必须有 HTTP(S) URL |
 | `external` | 显示新标签页链接，使用 `noopener noreferrer` | 必须有 HTTP(S) URL |
 
-展示函数签名为 `(tool, host) => cleanup`。`createPresentations()` 默认注册 embed/external，不注册第三方 native 实现；扩展时在创建客户端 handlers 前构造并注入自定义 registry：
+展示实现签名为 `(tool, host) => cleanup`。presentation registry 注册 embed 与 external 展示策略；外置配置只选择这两种方式。需要自定义展示时，创建并注入 registry：
 
 ```ts
-const presentations = createPresentations();
-presentations.registerNative('whiteboard', renderWhiteboard);
+const presentations = new PresentationRegistry()
+  .register('embed', renderEmbed)
+  .register('external', renderExternal);
 const interactions = createInteractions(room, presentations);
-// renderWhiteboard 接收工具配置与宿主元素，并返回清理函数。
+// renderEmbed / renderExternal 接收 WebTool 与宿主元素，并返回清理函数。
 ```
 
-`fallback: 'external'` 要求 URL。缺少 native handler/strategy 时，它选择 external；embed 设置 fallback 时，同时提供外部打开链接。当前没有 iframe 加载失败检测或自动切换；已注册展示函数抛错时也不会自动触发 fallback，面板显示错误反馈。
+`fallback: 'external'` 可选，仅对 embed 生效：iframe 旁显示手动打开链接，不检测加载失败，也不自动切换。external 需要 URL；embed 同样需要 URL。
 
-iframe sandbox 仅开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。第三方 CSP、登录或浏览器能力要求可能使其无法嵌入，应按服务选择 external 或实现 native handler。项目不代理工具流量、不管理容器、不签发工具凭据；native 接入也不会自动提供跨服务身份或权限映射。
+iframe sandbox 仅开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。第三方 CSP、登录或浏览器能力要求可能使其无法嵌入，应选 external。项目不代理工具流量、不管理容器、不签发工具凭据或映射跨服务身份与权限。
 
 ### 5.3 增加交互时的修改顺序
 
 1. 定义 Tiled kind 和所需 properties；有特定语义约束时注册 `InteractionDefinition`。
 2. 定义 shared 输入校验、请求结果和 `SpaceProtocol` 消息；仅需本地展示的交互可省略服务端消息。
-3. 在 backend/integrations 实现需要的业务规则和存储，注册消息与生命周期；受保护操作使用已验证身份和当前位置。
-4. 实现前端 `InteractionHandler`，在 features.ts 注册；如果复用外置面板，提供配置 kind 和 presentation。
+3. 在 backend/interactions 实现需要的业务规则和存储，注册消息与生命周期；受保护操作使用已验证身份和当前位置。
+4. 实现前端 `InteractionHandler`，在 `interactions/index.ts` 注册；外置页面使用 `web` handler 和按 `resourceId` 配置的 WebTool。
 5. 为语义、授权、资源共享范围和清理行为添加对应测试。通用 dispatcher 和 SpaceRoom 的生命周期遍历通常无需增加业务分支。
 
 ## 6. 身份、权限和数据生命周期
@@ -244,9 +248,9 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | 昵称、avatar ID、member/admin role | SQLite profiles；按持久 userId | identity.ts；role 通过本地 CLI 更新 |
 | 玩家位置、mapId、zoneId、connected | 房间内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
 | 聊天 | 房间广播；没有服务端历史 | SpaceRoom |
-| 留言 | SQLite board_notes；同一进程所有房间按 resourceId 共享 | [BoardStore](../apps/backend/src/board.ts) |
-| 番茄钟 | 每房间按 resourceId 共享；房间销毁或服务重启后重置 | [pomodoro handler](../apps/backend/src/integrations/pomodoro.ts) |
-| 地图目录和工具配置 | 启动时载入；整个后端实例共享 | world.ts / external-tools.ts |
+| 留言 | SQLite board_notes；同一进程所有房间按 resourceId 共享 | [BoardStore](../apps/backend/src/interactions/board/store.ts) |
+| 番茄钟 | 每房间按 resourceId 共享；房间销毁或服务重启后重置 | [pomodoro handler](../apps/backend/src/interactions/pomodoro/handler.ts) |
+| 地图目录和工具配置 | 启动时载入；整个后端实例共享 | [world.ts](../apps/backend/src/world.ts) / [web/config.ts](../apps/backend/src/interactions/web/config.ts) |
 | 第三方内容及工具会话 | 第三方服务拥有 | 不写入项目 Schema 或数据库 |
 
 留言写入后，进程级 BoardStore 通知所有活跃房间的 board handler 更新 Schema。容量检查和插入在 SQLite 事务中完成，每资源最多 100 条；作者依据持久 userId 删除，admin 可删除其他作者留言。旧记录的 author_user_id 保持 NULL，不按昵称认领；Schema 中对应空字符串。详细规则见 [integrations](integrations.md)。
@@ -285,8 +289,8 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | Schema / 消息 | `protocol.test.ts`、`architecture.test.ts` 和 strict 类型检查；前后端载荷是否同步 |
 | 地图语义 / 移动 | `world.test.ts`；单位、偏移、碰撞边界、未知 kind 与无关 Tiled 元数据 |
 | 地图加载 / Portal | `portal.test.ts` 和浏览器地图切换用例；目标验证、资源 API、身份与房间保留 |
-| integration handler | `space.test.ts` / `db.test.ts`；身份、权限、位置、限流和持久化范围 |
-| presentation / 清理 | `architecture.test.ts` / `external-tools.test.ts` / 浏览器用例；策略选择、fallback 和离开清理 |
+| interaction handler | `space.test.ts` / `db.test.ts`；身份、权限、位置、限流和持久化范围 |
+| presentation / 清理 | `architecture.test.ts` / `web-tools.test.ts` / 浏览器用例；策略选择、embed 的手动 fallback 和离开清理 |
 
 `npm run check` 执行类型检查、Node 测试和构建；`npm run test:e2e` 使用独立开发服务、内存数据库和临时多地图 fixture。测试世界不向默认示例地图添加测试 Portal。第三方页面用替身验证展示契约，不验证真实编辑、绘画或同步播放。浏览器测试当前只覆盖 Chromium，触屏移动、其它浏览器和弱网络压力仍需额外验证；仓库尚无 CI 配置。
 

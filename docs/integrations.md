@@ -1,6 +1,6 @@
 # Integrations：内置与外置接入
 
-Integrations 是通过地图交互区域接入的功能。Tiled `class`/`type` 由共享 `InteractionRegistry<T>` 校验并关联定义；前端 presentation registry 与服务端 integration handlers 分开注册。服务端负责身份、地图位置和操作权限，presentation mode 只决定用户界面。客户端可通过 `createInteractions(room, presentations)` 使用指定 registry；native handler 按 kind 通过 `PresentationRegistry.registerNative(kind, handler)` 显式注册。
+地图交互区域连接内置功能与外置页面。Tiled `class`/`type` 由共享 `InteractionRegistry<T>` 关联语义定义；前端和服务端分别组装各自的 interaction handlers。服务端负责身份、地图位置和操作权限。所有外置页面使用 Tiled 类型 `web`，以 `resourceId` 查找 WebTool 配置；`embed` 或 `external` 决定呈现方式。
 
 ## 内置接入
 
@@ -19,26 +19,26 @@ Integrations 是通过地图交互区域接入的功能。Tiled `class`/`type` �
 
 数据库 v3 增加 `board_notes.author_user_id`。旧留言只有临时 `author_session_id`，迁移后作者 user id 保持 NULL，不按昵称自动认领，可由管理员清理。
 
-存储实现见 [board.ts](../apps/backend/src/board.ts)，消息见 [留言板 handler](../apps/backend/src/integrations/board.ts)，权限检查见 [SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts)。
+存储实现见 [board/store.ts](../apps/backend/src/interactions/board/store.ts)，消息见 [留言板 handler](../apps/backend/src/interactions/board/handler.ts)，权限检查见 [SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts)。
 
 ### 共享番茄钟
 
 支持专注 25 分钟、休息 5 分钟，以及开始、暂停、继续和重置；完成后需手动开始下一轮。有效身份且位于对应区域的成员均可控制。计时以服务端截止时间为准，客户端结合服务端时间快照平滑显示。
 
-计时器不跨房间共享，房间销毁或后端重启后重置。计时与权限检查由服务端 integration handler 执行；面板通过前端 InteractionRegistry 注册。
+计时器不跨房间共享，房间销毁或后端重启后重置。计时与权限检查由[服务端番茄钟 handler](../apps/backend/src/interactions/pomodoro/handler.ts)执行；[前端面板 handler](../apps/frontend/src/interactions/pomodoro/handler.ts)接收用户操作并显示同步状态。
 
 ## 外置接入
 
 | 功能 | 地图类型 | 默认 resourceId |
 | --- | --- | --- |
-| 白板 | `whiteboard` | `shared-canvas` |
-| 共同作画 | `drawing` | `shared-drawing` |
-| YouTube/Bilibili 同步观看 | `media` | `lounge-screen` |
-| 协作文档 | `document` | `shared-document` |
+| 白板 | `web` | `shared-canvas` |
+| 共同作画 | `web` | `shared-drawing` |
+| YouTube/Bilibili 同步观看 | `web` | `lounge-screen` |
+| 协作文档 | `web` | `shared-document` |
 
-优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再通过 `EXTERNAL_TOOLS` 配置资源、展示模式和页面地址；配置格式和公开 API 见[入口配置](integration-plan.md)。旧 `{ kind, url }` 配置默认使用 `external`，也可指定 `native`、`embed` 或 `external`，以及可选的 fallback。embed/external 需要 URL；native 使用该 kind 已注册的 handler，不需要 URL。若未注册 handler，可设置 `fallback: "external"`，并提供 URL。留言板和番茄钟已有面板属于 native handler；外置 integration 使用 native 不会自动提供 UI。
+优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再在地图中为外置入口使用 `web` 类型，并通过 `EXTERNAL_TOOLS` 以 `resourceId` 配置 URL；配置格式和公开 API 见[入口配置](integration-plan.md)。配置形状为 `{ url, mode?, fallback? }`，URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。embed 可设置 `fallback: "external"`，在 iframe 旁显示手动打开链接；不检测加载失败或自动切换。board 和 pomodoro 是项目内置交互，有独立面板 handler。
 
-项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 使用沙盒 iframe 作为显示容器，但不改变第三方服务的授权边界；项目身份和管理员角色不映射到外置服务。离开区域、项目 session 失效或角色变化都不撤销工具自己的会话。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
+项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 使用带 `allow-scripts allow-forms allow-popups` 且不含 `allow-same-origin` 的沙盒 iframe，但不改变第三方服务的授权边界；项目身份和管理员角色不映射到外置服务。离开区域、项目 session 失效或角色变化都不撤销工具自己的会话。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
 
 白板与面向绘师的共同作画是独立功能；视频通话和屏幕共享不在范围内。
 

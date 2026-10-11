@@ -1621,7 +1621,7 @@
           "width": 160,
           "height": 96,
           "rotation": 0,
-          "type": "media",
+          "type": "web",
           "visible": true,
           "properties": [
             {
@@ -1639,7 +1639,7 @@
           "width": 160,
           "height": 96,
           "rotation": 0,
-          "type": "whiteboard",
+          "type": "web",
           "visible": true,
           "properties": [
             {
@@ -1693,7 +1693,7 @@
           "width": 160,
           "height": 96,
           "rotation": 0,
-          "type": "drawing",
+          "type": "web",
           "visible": true,
           "properties": [
             {
@@ -1711,7 +1711,7 @@
           "width": 160,
           "height": 96,
           "rotation": 0,
-          "type": "document",
+          "type": "web",
           "visible": true,
           "properties": [
             {

@@ -1,6 +1,6 @@
 import type { Room } from '@colyseus/sdk';
 import type { SpaceProtocol, Zone } from '@virtual-workspace/shared';
-import type { InteractionHandler } from './interactions';
+import type { InteractionHandler } from '../dispatcher';
 
 /** A Portal sends only the zone ID; destination and position come from the server. */
 export class PortalInteraction implements InteractionHandler {

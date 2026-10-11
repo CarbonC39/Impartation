@@ -1,6 +1,6 @@
-import { createBoardInteraction } from './board.js';
-import { createPomodoroInteraction } from './pomodoro.js';
-import { createPortalInteraction } from './portal.js';
+import { createBoardInteraction } from './board/handler.js';
+import { createPomodoroInteraction } from './pomodoro/handler.js';
+import { createPortalInteraction } from './portal/handler.js';
 import { registerServerInteractions } from './registry.js';
 
 export function createInteractions(context: Parameters<typeof createPortalInteraction>[0]) {

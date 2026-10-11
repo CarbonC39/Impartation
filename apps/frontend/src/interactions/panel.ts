@@ -1,6 +1,6 @@
 import type { Room } from '@colyseus/sdk';
-import type { SpaceProtocol, FeatureResult, Zone } from '@virtual-workspace/shared';
-import type { InteractionHandler } from './interactions';
+import type { SpaceProtocol, InteractionResult, Zone } from '@virtual-workspace/shared';
+import type { InteractionHandler } from './dispatcher';
 
 export function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -34,7 +34,7 @@ export abstract class PanelInteraction implements InteractionHandler {
     this.setZone(undefined);
   }
   protected abstract render(): void;
-  protected async run(request: () => Promise<FeatureResult>, success?: () => void) {
+  protected async run(request: () => Promise<InteractionResult>, success?: () => void) {
     if (!this.connected || this.pending || this.disposed || !this.current) return;
     const zone = this.current;
     this.pending = true;

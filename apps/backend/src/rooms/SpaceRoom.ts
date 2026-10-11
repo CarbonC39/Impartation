@@ -3,8 +3,8 @@ import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
 import { SpaceState, Player, joinSchema, inputSchema, chatSchema, stepMovement, contains,
   TICK_MS, type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
 import { worldRegistry, worlds } from '../world.js';
-import { createInteractions } from '../integrations/index.js';
-import type { SpaceClient } from '../integrations/context.js';
+import { createInteractions } from '../interactions/index.js';
+import type { SpaceClient } from '../interactions/context.js';
 import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
 import { config } from '../config.js';
 
@@ -15,10 +15,10 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   private identities = new Map<string, Identity>();
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
   private lastChat = new Map<string, number>();
-  private lastFeature = new Map<string, number>();
+  private lastInteraction = new Map<string, number>();
   private interactions = createInteractions({
     state: this.state, maps: worlds, worlds: worldRegistry.maps.map(map => map.world),
-    authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkFeature(client, kind, resource),
+    authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkInteraction(client, kind, resource),
     resetMovement: client => this.movementInputs.delete(client.sessionId),
   });
 
@@ -48,13 +48,13 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     return value;
   }
 
-  private checkFeature(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
+  private checkInteraction(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
     const player = this.state.players.get(client.sessionId);
     const current = player && worlds.get(player.mapId)?.world.zones.find(zone => contains(zone, player.x, player.y));
     if (!player?.connected || current?.kind !== kind || current.resourceId !== resourceId) return '请先走进对应功能区';
     const now = Date.now();
-    if (now - (this.lastFeature.get(client.sessionId) ?? 0) < 500) return '操作过快，请稍后重试';
-    this.lastFeature.set(client.sessionId, now);
+    if (now - (this.lastInteraction.get(client.sessionId) ?? 0) < 500) return '操作过快，请稍后重试';
+    this.lastInteraction.set(client.sessionId, now);
   }
 
   onCreate() {
@@ -121,7 +121,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     this.lastChat.delete(client.sessionId);
-    this.lastFeature.delete(client.sessionId);
+    this.lastInteraction.delete(client.sessionId);
   }
   onDispose() { for (const handler of this.interactions.registry.values()) handler.dispose?.(); }
 }

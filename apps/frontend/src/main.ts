@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
 import { ROOM_NAME, joinSchema, chatSchema, worldRegistryResponseSchema, validateMapRegistry, type WorldRegistry, type SpaceProtocol } from '@virtual-workspace/shared';
 import { SpaceScene } from './SpaceScene';
-import { createInteractions } from './features';
-import type { InteractionDispatcher } from './interactions';
+import { createInteractions } from './interactions';
+import type { InteractionDispatcher } from './interactions/dispatcher';
 import { z } from 'zod';
-import { zoneLabels } from './zone-labels';
+import { zoneLabels } from './interactions/labels';
 import { loadProfile, saveProfile, generateBinding, importBinding, type Profile } from './identity';
 import './style.css';
 
@@ -25,7 +25,7 @@ const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.ori
 let room: Room<SpaceProtocol> | undefined;
 let game: Phaser.Game | undefined;
 let connected = false;
-let features: InteractionDispatcher | undefined;
+let interactions: InteractionDispatcher | undefined;
 let worldRegistry: WorldRegistry | undefined;
 let renderedMap = '';
 let renderingMap = '';
@@ -67,13 +67,13 @@ function setConnected(value: boolean) {
   connected = value;
   send.disabled = !value;
   messageInput.disabled = !value;
-  features?.setConnected(value);
+  interactions?.setConnected(value);
 }
 function cleanup() {
   renderGeneration++;
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
-  features?.dispose();
-  features = undefined;
+  interactions?.dispose();
+  interactions = undefined;
   game?.destroy(true);
   game = undefined;
   room = undefined;
@@ -99,7 +99,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     room = await client.joinOrCreate<SpaceProtocol>(ROOM_NAME, options);
     room.reconnection.minUptime = 0;
     if (!room.state?.players) await new Promise<void>(resolve => room!.onStateChange.once(() => resolve()));
-    features = createInteractions(room);
+    interactions = createInteractions(room);
     messages.replaceChildren();
     room.onMessage('chat', message => {
       const li = document.createElement('li');
@@ -137,7 +137,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   if (!entry) throw new Error(`Unknown map: ${mapId}`);
   const generation = ++renderGeneration;
   renderingMap = mapId;
-  features?.setZone(undefined);
+  interactions?.setZone(undefined);
   try {
     const response = await fetch(entry.url);
     if (!response.ok) throw new Error('地图加载失败');
@@ -152,7 +152,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
         const current = entry.world.zones.find(item => item.id === id);
         const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
-        features?.setZone(current);
+        interactions?.setZone(current);
       }),
     });
     renderedMap = mapId;

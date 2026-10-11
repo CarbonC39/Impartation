@@ -45,7 +45,7 @@ const tiledSemanticsSchema = z.object({
 const identifier = z.string().trim().min(1).max(128);
 export type InteractionDefinition = { validate(zone: Zone): void };
 export const interactionDefinitions = new InteractionRegistry<InteractionDefinition>();
-for (const kind of ['board', 'pomodoro', 'media', 'whiteboard', 'drawing', 'document']) {
+for (const kind of ['board', 'pomodoro', 'web']) {
   interactionDefinitions.register(kind, { validate: zone => { identifier.parse(zone.resourceId); } });
 }
 export const portalPropertiesSchema = z.object({ targetMap: identifier, targetSpawn: identifier });

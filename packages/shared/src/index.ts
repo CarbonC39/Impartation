@@ -30,7 +30,7 @@ export const pomodoroActionSchema = z.discriminatedUnion('action', [
 export type BoardPostInput = z.infer<typeof boardPostSchema>;
 export type BoardDeleteInput = z.infer<typeof boardDeleteSchema>;
 export type PomodoroActionInput = z.infer<typeof pomodoroActionSchema>;
-export type FeatureResult = { ok: boolean; message: string };
+export type InteractionResult = { ok: boolean; message: string };
 export const BOARD_LIMIT = 100;
 export const POMODORO_DURATIONS = { focus: 25 * 60_000, break: 5 * 60_000 } as const;
 export const BoardNote = schema({
@@ -54,29 +54,22 @@ export const SpaceState = schema({
 }, 'SpaceState');
 export type SpaceState = SchemaType<typeof SpaceState>;
 
-export const externalToolKindSchema = z.enum(['media', 'whiteboard', 'drawing', 'document']);
-export const externalToolUrlSchema = z.url().refine(value => {
+export const webToolUrlSchema = z.url().refine(value => {
   if (!URL.canParse(value)) return false;
   const url = new URL(value);
   return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
 }, 'Tool URLs must use HTTP(S) without embedded credentials');
-export const presentationModeSchema = z.enum(['native', 'embed', 'external']);
+export const presentationModeSchema = z.enum(['embed', 'external']);
 export type PresentationMode = z.infer<typeof presentationModeSchema>;
-export const externalToolConfigSchema = z.object({
-  kind: externalToolKindSchema,
+export const webToolConfigSchema = z.object({
   mode: presentationModeSchema.optional(),
-  url: externalToolUrlSchema.optional(),
+  url: webToolUrlSchema,
   fallback: z.literal('external').optional(),
-}).strict().superRefine((entry, ctx) => {
-  const mode = entry.mode ?? 'external';
-  if ((mode === 'external' || mode === 'embed' || entry.fallback === 'external') && !entry.url) {
-    ctx.addIssue({ code: 'custom', message: 'This presentation requires a URL', path: ['url'] });
-  }
-});
-export const externalToolsConfigSchema = z.record(resourceIdSchema, externalToolConfigSchema);
-export const externalToolSchema = externalToolConfigSchema.safeExtend({ resourceId: resourceIdSchema });
-export const externalToolsSchema = z.array(externalToolSchema);
-export type ExternalTool = z.infer<typeof externalToolSchema>;
+}).strict();
+export const webToolsConfigSchema = z.record(resourceIdSchema, webToolConfigSchema);
+export const webToolSchema = webToolConfigSchema.safeExtend({ resourceId: resourceIdSchema });
+export const webToolsSchema = z.array(webToolSchema);
+export type WebTool = z.infer<typeof webToolSchema>;
 
 export * from './world.js';
 export * from './interactions.js';

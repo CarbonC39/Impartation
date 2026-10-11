@@ -1,6 +1,6 @@
-import { BoardNote, boardPostSchema, boardDeleteSchema, type BoardPostInput, type BoardDeleteInput, type FeatureResult } from '@virtual-workspace/shared';
-import { boards } from '../board.js';
-import type { InteractionContext, SpaceClient } from './context.js';
+import { BoardNote, boardPostSchema, boardDeleteSchema, type BoardPostInput, type BoardDeleteInput, type InteractionResult } from '@virtual-workspace/shared';
+import { boards } from './store.js';
+import type { InteractionContext, SpaceClient } from '../context.js';
 
 export function createBoardInteraction(context: InteractionContext) {
   let unsubscribe: (() => void) | undefined;
@@ -15,7 +15,7 @@ export function createBoardInteraction(context: InteractionContext) {
     initialize() { syncBoard(); unsubscribe = boards.subscribe(syncBoard); },
     dispose() { unsubscribe?.(); },
     messages: {
-      boardPost: { format: boardPostSchema, handler: async (client: SpaceClient, { resourceId, text }: BoardPostInput): Promise<FeatureResult> => {
+      boardPost: { format: boardPostSchema, handler: async (client: SpaceClient, { resourceId, text }: BoardPostInput): Promise<InteractionResult> => {
         if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
         const error = context.check(client, 'board', resourceId);
         if (error) return { ok: false, message: error };
@@ -23,7 +23,7 @@ export function createBoardInteraction(context: InteractionContext) {
         const ok = boards.post(resourceId, player.userId, player.name, text, client.sessionId);
         return { ok, message: ok ? '留言已发布' : '留言板已满（100 条），请先删除自己的留言' };
       } },
-      boardDelete: { format: boardDeleteSchema, handler: async (client: SpaceClient, { resourceId, id }: BoardDeleteInput): Promise<FeatureResult> => {
+      boardDelete: { format: boardDeleteSchema, handler: async (client: SpaceClient, { resourceId, id }: BoardDeleteInput): Promise<InteractionResult> => {
         const profile = await context.authorize(client);
         if (!profile) return { ok: false, message: '身份已失效，请重新连接' };
         const error = context.check(client, 'board', resourceId);

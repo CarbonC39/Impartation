@@ -8,9 +8,9 @@ import { auth, identityFromHeaders, ensureProfile, updateProfile } from './ident
 import { joinSchema } from '@virtual-workspace/shared';
 import { config } from './config.js';
 import { worldRegistry, renderMaps, worldAssets } from './world.js';
-import { loadExternalTools } from './external-tools.js';
+import { loadWebTools } from './interactions/web/config.js';
 
-const externalTools = loadExternalTools(config.EXTERNAL_TOOLS, worldRegistry.maps.map(map => map.world));
+const webTools = loadWebTools(config.EXTERNAL_TOOLS, worldRegistry.maps.map(map => map.world));
 
 export const server = defineServer({
   transport: new WebSocketTransport(),
@@ -41,7 +41,7 @@ export const server = defineServer({
       if (!file) { res.sendStatus(404); return; }
       res.sendFile(file);
     });
-    app.get('/api/tools', (_req, res) => { res.json(externalTools); });
+    app.get('/api/tools', (_req, res) => { res.json(webTools); });
     app.get('/api/me', async (req, res) => {
       const identity = await identityFromHeaders(fromNodeHeaders(req.headers), cookies => {
         for (const cookie of cookies) res.append('Set-Cookie', cookie);

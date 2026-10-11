@@ -7,7 +7,7 @@ import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 process.env.DATABASE_PATH = ':memory:';
 process.env.EXTERNAL_TOOLS = JSON.stringify({
-  'shared-canvas': { kind: 'whiteboard', url: 'https://board.example/boards/workspace' },
+  'shared-canvas': { url: 'https://board.example/boards/workspace' },
 });
 const { server } = await import('../src/app.config.js');
 const { db } = await import('../src/db.js');
@@ -56,13 +56,13 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await room.waitForInitialState();
     return room;
   }
-  test('tool directory publishes only native launch configuration, without creating or granting an identity', async () => {
+  test('tool directory publishes only web resource configuration, without creating or granting an identity', async () => {
     const response = await fetch(endpoint + '/api/tools');
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(response.headers.getSetCookie(), []);
     assert.deepEqual(await response.json(), [
-      { resourceId: 'shared-canvas', kind: 'whiteboard', url: 'https://board.example/boards/workspace' },
+      { resourceId: 'shared-canvas', url: 'https://board.example/boards/workspace' },
     ]);
   });
   test('two guests share the same room and avatar state; consented leave removes only that player', async () => {

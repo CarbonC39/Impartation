@@ -20,11 +20,11 @@ function mutate(change: (map: Record<string, unknown>, layers: Record<string, un
 const objects = (layer: Record<string, unknown>) => array(layer.objects).map(record);
 
 // Keep pixel geometry stable during the 32px -> 16px authoring migration.
-test('Tiled source supplies named spawn, collision geometry and integration resources at 16px', () => {
+test('Tiled source supplies named spawn, collision geometry and interaction resources at 16px', () => {
   assert.deepEqual(spawn, { x: 352, y: 384 });
   assert.deepEqual([world.width, world.height], [768, 512]);
   assert.equal(world.collisions.length, 1);
-  assert.deepEqual(world.zones.map(zone => zone.kind), ['media', 'whiteboard', 'board', 'pomodoro', 'drawing', 'document']);
+  assert.deepEqual(world.zones.map(zone => zone.kind), ['web', 'web', 'board', 'pomodoro', 'web', 'web']);
   assert.equal(world.zones[0].resourceId, 'lounge-screen');
   assert.equal(contains(world.zones[0], 64, 64), true);
   assert.equal(contains(world.zones[0], 224, 64), false);
@@ -115,5 +115,6 @@ for (const [name, change] of Object.entries({
   'polygon collision': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[2]); list[0].polygon = [{ x: 0, y: 0 }]; layers[2].objects = list; },
   'duplicate interaction IDs': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[3]); list[1].name = list[0].name; layers[3].objects = list; },
   'missing board resource': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[3]); list[2].properties = []; layers[3].objects = list; },
+  'missing web resource': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[3]); list[0].properties = []; layers[3].objects = list; },
   'out-of-bounds interaction': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[3]); list[0].width = 9999; layers[3].objects = list; },
 })) test(`project semantics reject ${name}`, () => assert.throws(() => parseWorldMap(mutate(change))));

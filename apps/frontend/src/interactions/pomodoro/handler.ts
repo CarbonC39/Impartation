@@ -1,6 +1,6 @@
 import type { Room } from '@colyseus/sdk';
 import { pomodoroModeSchema, type SpaceProtocol } from '@virtual-workspace/shared';
-import { PanelInteraction, element } from './panel-interaction';
+import { PanelInteraction, element } from '../panel';
 
 export class PomodoroInteraction extends PanelInteraction {
   private mode = element<HTMLSelectElement>('pomodoro-mode');

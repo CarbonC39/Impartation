@@ -29,7 +29,7 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 
 ### 交互区与 Portal
 
-`interactions` 中每个矩形对象需要唯一非空 Name。交互类型从 Tiled `class`（旧版 `type`）读取。类型定义由共享的泛型 `InteractionRegistry<T>` 注册；注册项可校验该类型需要的 properties，并提供前后端各自的 handler。交互区域的坐标、类型和 properties 是地图定义的一部分，`resourceId` 只由需要资源归属的 integration 使用。
+`interactions` 中每个矩形对象需要唯一非空 Name。交互类型从 Tiled `class`（旧版 `type`）读取。共享的泛型 `InteractionRegistry<T>` 保存按 kind 关联的定义；当前解析定义只负责校验 properties，前后端 handlers 在各自模块组装。交互区域的坐标、类型和 properties 是地图定义的一部分，`resourceId` 用于需要共享资源归属的交互。
 
 Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 
@@ -52,11 +52,11 @@ Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 
 ## Integration 接入
 
-内置留言板与番茄钟分别注册为 `board`、`pomodoro`，按 `resourceId` 归属数据。地图中的已有外置入口类型为 `media`、`whiteboard`、`drawing` 和 `document`。地图对象的 `name` 标识区域，`resourceId` 标识共享资源；多个区域可引用相同资源。
+内置留言板与番茄钟分别注册为 `board`、`pomodoro`，按 `resourceId` 归属数据。所有地图外置页面入口统一使用类型 `web`，并按 `resourceId` 关联配置；多个区域可引用相同资源。`name` 标识区域本身。
 
-展示由 presentation mode 决定：`native` 按 integration kind 查找通过 `PresentationRegistry.registerNative(kind, handler)` 显式注册的 handler；`embed` 在沙盒 iframe 容器内呈现配置页面；`external` 打开配置的原生页面。可将自定义 registry 传给 `createInteractions(room, presentations)`。现有 board/pomodoro 面板 handler 属于 native。外置 integration 选择 native 不会自动提供 UI；找不到 handler 时可配置 `fallback: "external"`，且必须提供 URL。embed/external 需要 URL。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
+`EXTERNAL_TOOLS` 以 resourceId 为键配置 `{ url, mode?, fallback? }`，其中 URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。embed 在沙盒 iframe 容器内呈现配置页面；external 打开配置的原生页面。`fallback: "external"` 仅在 embed 旁增加手动打开链接，不检测 iframe 加载失败，也不自动切换。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
 
-现有 `EXTERNAL_TOOLS` 的 `{ kind, url }` 配置继续有效，并默认采用 `external`。可选 mode 为 `native`、`embed`、`external`；可为 native handler 配置 external fallback。公共配置不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
+公共 WebTool 配置会通过 `GET /api/tools` 暴露给浏览器，不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
 
 ## 校验与发布
 

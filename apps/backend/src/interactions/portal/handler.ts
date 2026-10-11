@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { contains, portalPropertiesSchema, type FeatureResult, type RegisteredMap } from '@virtual-workspace/shared';
-import type { InteractionContext, SpaceClient } from './context.js';
+import { contains, portalPropertiesSchema, type InteractionResult, type RegisteredMap } from '@virtual-workspace/shared';
+import type { InteractionContext, SpaceClient } from '../context.js';
 
 export function createPortalInteraction(context: InteractionContext & {
   maps: ReadonlyMap<string, RegisteredMap>;
@@ -8,7 +8,7 @@ export function createPortalInteraction(context: InteractionContext & {
 }) {
   return { messages: {
     portal: { format: z.object({ zoneId: z.string().trim().min(1).max(128) }),
-      handler: async (client: SpaceClient, { zoneId }: { zoneId: string }): Promise<FeatureResult> => {
+      handler: async (client: SpaceClient, { zoneId }: { zoneId: string }): Promise<InteractionResult> => {
         if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
         const player = context.state.players.get(client.sessionId);
         const zone = player && context.maps.get(player.mapId)?.world.zones.find(zone => contains(zone, player.x, player.y));

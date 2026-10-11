@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { z } from 'zod';
 import { InteractionRegistry, type SpaceProtocol, type Zone } from '@virtual-workspace/shared';
-import { InteractionDispatcher, type InteractionHandler } from '../../frontend/src/interactions.js';
-import { PresentationRegistry } from '../../frontend/src/presentations.js';
+import { InteractionDispatcher, type InteractionHandler } from '../../frontend/src/interactions/dispatcher.js';
+import { PresentationRegistry } from '../../frontend/src/interactions/web/presentations.js';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 // Compile-time check: moving the public contract must not let wire payloads drift.
@@ -51,28 +51,27 @@ test('generic interaction dispatch supports new kinds and shared handlers with d
   assert.deepEqual(events, ['connected:true', 'one', 'exit', 'connected:true', 'two', 'connected:false', 'exit', 'dispose']);
 });
 
-test('presentation dispatch selects three modes, resolves native handlers by kind and uses explicit fallback', () => {
+test('web presentation dispatch selects embed or external by resource configuration and cleans up', () => {
   const events: string[] = [];
   const host = {} as HTMLElement;
   const registry = new PresentationRegistry().register('external', tool => {
-    events.push(`external:${tool.kind}`); return () => events.push('cleanup:external');
+    events.push(`external:${tool.resourceId}`); return () => events.push('cleanup:external');
   }).register('embed', tool => {
-    events.push(`embed:${tool.kind}`); return () => events.push('cleanup:embed');
-  }).registerNative('whiteboard', tool => {
-    events.push(`${tool.mode}:${tool.kind}`); return () => events.push('cleanup:native');
+    events.push(`embed:${tool.resourceId}`); return () => events.push('cleanup:embed');
   });
-  const base = { resourceId: 'resource', kind: 'whiteboard' as const, url: 'https://tools.example/' };
+  const base = { resourceId: 'resource', url: 'https://tools.example/' };
   registry.open(base, host)();
   registry.open({ ...base, mode: 'embed' }, host)();
-  registry.open({ ...base, mode: 'native', url: undefined }, host)();
-  registry.open({ ...base, kind: 'drawing', mode: 'native', fallback: 'external' }, host)();
-  assert.throws(() => registry.open({ ...base, kind: 'drawing', mode: 'native' }, host));
-  assert.deepEqual(events, ['external:whiteboard', 'cleanup:external', 'embed:whiteboard', 'cleanup:embed',
-    'native:whiteboard', 'cleanup:native', 'external:drawing', 'cleanup:external']);
+  registry.open({ ...base, resourceId: 'another-resource', mode: 'external' }, host)();
+  assert.deepEqual(events, ['external:resource', 'cleanup:external', 'embed:resource', 'cleanup:embed',
+    'external:another-resource', 'cleanup:external']);
+  const fallback = new PresentationRegistry().register('external', () => () => {});
+  assert.throws(() => fallback.open({ ...base, mode: 'embed' }, host));
+  fallback.open({ ...base, mode: 'embed', fallback: 'external' }, host)();
 });
 
 test('server interactions compose new kinds and reject ambiguous message names', async () => {
-  const { registerServerInteractions } = await import('../src/integrations/registry.js');
+  const { registerServerInteractions } = await import('../src/interactions/registry.js');
   let initialized = false;
   const interactions = registerServerInteractions({ custom: { initialize() { initialized = true; }, messages: { customAction: () => 'custom-result' } } });
   for (const handler of interactions.registry.values()) handler.initialize?.();

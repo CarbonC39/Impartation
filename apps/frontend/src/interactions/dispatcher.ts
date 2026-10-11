@@ -6,7 +6,7 @@ export interface InteractionHandler {
   dispose(): void;
 }
 
-/** Routes lifecycle events; the dispatcher has no integration-specific branches. */
+/** Routes lifecycle events; the dispatcher has no interaction-specific branches. */
 export class InteractionDispatcher implements InteractionHandler {
   private active?: InteractionHandler;
   private zone?: Zone;

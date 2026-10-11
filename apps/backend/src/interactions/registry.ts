@@ -4,7 +4,7 @@ import type { ServerInteraction } from './context.js';
 type UnionToIntersection<U> = (U extends unknown ? (value: U) => void : never) extends (value: infer I) => void ? I : never;
 type Messages<T> = UnionToIntersection<{ [K in keyof T]: T[K] extends { messages: infer M } ? M : object }[keyof T]>;
 
-/** Compose typed message handlers and lifecycle hooks without integration-specific dispatch. */
+/** Compose typed message handlers and lifecycle hooks without interaction-specific dispatch. */
 export function registerServerInteractions<T extends Record<string, ServerInteraction>>(handlers: T) {
   const registry = new InteractionRegistry<ServerInteraction>();
   const messages: Record<string, unknown> = {};
