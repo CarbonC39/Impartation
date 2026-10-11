@@ -10,12 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@virtual-workspace/shared": "*",
     "@colyseus/sdk": "~0.18.5",
-    "phaser": "3.90.0"
+    "@virtual-workspace/shared": "*",
+    "phaser": "^4.2.1"
   },
   "devDependencies": {
-    "@virtual-workspace/backend": "*",
     "typescript": "~5.9.3",
     "vite": "^8.3.4"
   }

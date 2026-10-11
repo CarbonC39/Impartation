@@ -1,5 +1,54 @@
 import { readFileSync } from 'node:fs';
-import { parseWorldMap } from '@virtual-workspace/shared';
+import { dirname, resolve } from 'node:path';
+import { z } from 'zod';
+import { mapRegistrySchema, parseWorldMap, validateMapRegistry, type WorldRegistry } from '@virtual-workspace/shared';
 import { config } from './config.js';
 
-export const world = parseWorldMap(JSON.parse(readFileSync(config.MAP_PATH, 'utf8')));
+const jsonObject = z.record(z.string(), z.unknown());
+const tilesetReference = z.object({ firstgid: z.number().int().positive(), source: z.string().optional() }).passthrough();
+const tilesetImages = z.object({
+  image: z.string().optional(), tiles: z.array(z.object({ image: z.string().optional() }).passthrough()).optional(),
+}).passthrough();
+
+/** Resolve render assets independently of authoritative geometry validation. */
+export function loadWorldRegistry(path: string) {
+  const input = mapRegistrySchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+  const renderMaps = new Map<string, Record<string, unknown>>();
+  const assets = new Map<string, string>();
+  const registry: WorldRegistry = { initialMap: input.initialMap, maps: input.maps.map(entry => {
+    const file = resolve(dirname(path), entry.file);
+    const raw: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    const world = parseWorldMap(raw);
+    const render = jsonObject.parse(raw);
+    const base = `/api/maps/${encodeURIComponent(entry.id)}`;
+    let assetIndex = 0;
+    const asset = (value: string, directory: string) => {
+      const key = `${entry.id}/${assetIndex++}`;
+      assets.set(key, resolve(directory, value));
+      return `${base}/assets/${key.slice(key.lastIndexOf('/') + 1)}`;
+    };
+    const references = z.array(tilesetReference).parse(render.tilesets ?? []);
+    render.tilesets = references.map(reference => {
+      const sourceFile = reference.source ? resolve(dirname(file), reference.source) : file;
+      const data = tilesetImages.parse(reference.source ? JSON.parse(readFileSync(sourceFile, 'utf8')) : reference);
+      delete data.source;
+      if (data.image) data.image = asset(data.image, dirname(sourceFile));
+      if (data.tiles) data.tiles = data.tiles.map(tile => tile.image ? { ...tile, image: asset(tile.image, dirname(sourceFile)) } : tile);
+      return { ...data, firstgid: reference.firstgid };
+    });
+    // Image layers can appear anywhere, including groups. Other Tiled metadata is retained.
+    const rewriteLayers = (layers: unknown[]): unknown[] => layers.map(value => {
+      const layer = jsonObject.parse(value);
+      if (typeof layer.image === 'string') layer.image = asset(layer.image, dirname(file));
+      if (Array.isArray(layer.layers)) layer.layers = rewriteLayers(layer.layers);
+      return layer;
+    });
+    if (Array.isArray(render.layers)) render.layers = rewriteLayers(render.layers);
+    renderMaps.set(entry.id, render);
+    return { id: entry.id, defaultSpawn: entry.defaultSpawn, url: `${base}/map.json`, world };
+  }) };
+  return { registry: validateMapRegistry(registry), renderMaps, assets };
+}
+
+export const { registry: worldRegistry, renderMaps, assets: worldAssets } = loadWorldRegistry(config.MAP_REGISTRY_PATH);
+export const worlds = new Map(worldRegistry.maps.map(map => [map.id, map]));

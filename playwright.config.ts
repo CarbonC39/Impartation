@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { createWorldFixture } from './apps/frontend/e2e/world-fixture';
 
 export default defineConfig({
   testDir: './apps/frontend/e2e',
@@ -18,8 +19,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://127.0.0.1:5173/health',
-    reuseExistingServer: !process.env.CI,
-    env: { DATABASE_PATH: ':memory:' },
+    reuseExistingServer: false,
+    env: { DATABASE_PATH: ':memory:', MAP_REGISTRY_PATH: createWorldFixture() },
     timeout: 30000,
   },
 });

@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
-import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
-import type { ExternalTool } from '@virtual-workspace/shared';
+import type { WebTool, SpaceProtocol } from '@virtual-workspace/shared';
 
 async function enter(page: Page, name: string, avatar = 'mint') {
   await page.goto('/');
@@ -12,17 +11,17 @@ async function enter(page: Page, name: string, avatar = 'mint') {
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
-async function observe(): Promise<Room<SpaceRoom>> {
+async function observe(): Promise<Room<SpaceProtocol>> {
   const response = await fetch('http://127.0.0.1:5173/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  const room = await new Client('http://127.0.0.1:5173', { headers: { Cookie: cookie } }).joinOrCreate<SpaceRoom>('space', { name: 'E2EObserver', avatar: 'mint' });
+  const room = await new Client('http://127.0.0.1:5173', { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name: 'E2EObserver', avatar: 'mint' });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;
 }
 
-async function walkTo(page: Page, observer: Room<SpaceRoom>, name: string, kind: 'board' | 'pomodoro') {
+async function walkTo(page: Page, observer: Room<SpaceProtocol>, name: string, kind: 'board' | 'pomodoro') {
   const zoneId = kind === 'board' ? 'message-wall' : 'focus-corner';
   const direction = kind === 'board' ? 'd' : 'a';
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
@@ -38,16 +37,16 @@ async function walkTo(page: Page, observer: Room<SpaceRoom>, name: string, kind:
 }
 
 const toolCases = [
-  { resourceId: 'shared-canvas', kind: 'whiteboard', label: '白板', x: 560 },
-  { resourceId: 'shared-drawing', kind: 'drawing', label: '共同作画', x: 144 },
-  { resourceId: 'lounge-screen', kind: 'media', label: '同步观看', x: 144 },
-  { resourceId: 'shared-document', kind: 'document', label: '协作文档', x: 560 },
+  { resourceId: 'shared-canvas', x: 560 },
+  { resourceId: 'shared-drawing', x: 144 },
+  { resourceId: 'lounge-screen', x: 144 },
+  { resourceId: 'shared-document', x: 560 },
 ] as const;
-const toolDirectory: ExternalTool[] = toolCases.map(({ resourceId, kind }) => ({
-  resourceId, kind, url: `https://tools.example/native/${kind}`,
+const toolDirectory: WebTool[] = toolCases.map(({ resourceId }) => ({
+  resourceId, url: `https://tools.example/resources/${resourceId}`,
 }));
 
-async function walkToTool(page: Page, observer: Room<SpaceRoom>, target: typeof toolCases[number]) {
+async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typeof toolCases[number]) {
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
   await expect.poll(() => observer.state.players.has(sessionId)).toBe(true);
   await page.bringToFront();
@@ -66,18 +65,18 @@ async function walkToTool(page: Page, observer: Room<SpaceRoom>, target: typeof 
 }
 
 for (const target of toolCases) {
-  test(`${target.kind} map entry opens its native page in an isolated tab`, async ({ page, context }) => {
+  test(`${target.resourceId} web map entry opens its configured page in an isolated tab`, async ({ page, context }) => {
     test.setTimeout(30000);
     await page.route('**/api/tools', route => route.fulfill({ json: toolDirectory }));
     await context.route('https://tools.example/**', route => route.fulfill({
-      contentType: 'text/html', body: '<!doctype html><title>Native tool fixture</title><p>Tool page</p>',
+      contentType: 'text/html', body: '<!doctype html><title>Web tool fixture</title><p>Tool page</p>',
     }));
     await enter(page, 'E2ETool');
     const observer = await observe();
     try {
       await walkToTool(page, observer, target);
-      await expect(page.locator('#tool-heading')).toHaveText(target.label);
-      const url = `https://tools.example/native/${target.kind}`;
+      await expect(page.locator('#tool-heading')).toHaveText('网页工具');
+      const url = `https://tools.example/resources/${target.resourceId}`;
       await expect(page.locator('#tool-open')).toHaveAttribute('href', url);
       const popupReady = page.waitForEvent('popup');
       await page.locator('#tool-open').click();
@@ -271,10 +270,15 @@ test('health and Tiled assets are reachable through the dev server', async ({ re
   const response = await request.get('/health');
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual({ status: 'ok' });
-  const map = await request.get('/maps/lobby.tmj');
+  const directory = await request.get('/api/world');
+  const registry = await directory.json() as { initialMap: string; maps: { id: string; url: string }[] };
+  const entry = registry.maps.find(map => map.id === registry.initialMap)!;
+  const map = await request.get(entry.url);
   expect(map.status()).toBe(200);
-  expect((await map.json()).layers.some((layer: { name: string }) => layer.name === 'ground')).toBe(true);
-  expect((await request.get('/maps/tiles.png')).status()).toBe(200);
+  expect((await map.json()).layers.some((layer: { type: string }) => layer.type === 'tilelayer')).toBe(true);
+  const data = await map.json() as { tilewidth: number; tileheight: number; tilesets: { image: string }[] };
+  expect([data.tilewidth, data.tileheight]).toEqual([16, 16]);
+  expect((await request.get(data.tilesets[0].image)).status()).toBe(200);
 });
 
 
@@ -310,4 +314,87 @@ test('binding a second browser restores the same identity, profile and note perm
     await target.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
     await expect(target.locator('#feature-status')).toContainText('留言已删除');
   } finally { if (observer.connection.isOpen) await observer.leave(); await target.close(); }
+});
+
+
+test('embed presentation uses a sandboxed container and clears it when leaving', async ({ page, context }) => {
+  const target = toolCases[1];
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', fallback: 'external' }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Embedded tool fixture</p>' }));
+  await enter(page, 'E2EPresentation');
+  const observer = await observe();
+  try {
+    await walkToTool(page, observer, target);
+    const frame = page.locator('#tool-panel iframe');
+    await expect(frame).toBeVisible();
+    await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+    await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
+    await expect(page.frameLocator('#tool-panel iframe').getByText('Embedded tool fixture')).toBeVisible();
+    await page.locator('#leave').click();
+    await expect(frame).toHaveCount(0);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+
+test('embed presentation provides an explicit external fallback and clears both on zone exit', async ({ page, context }) => {
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', fallback: 'external' }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Web tool fallback fixture</p>' }));
+  await enter(page, 'E2EWebFallback');
+  const observer = await observe();
+  try {
+    await walkToTool(page, observer, toolCases[1]);
+    const fallback = page.locator('#tool-panel').getByRole('link', { name: '打开工具', exact: true });
+    await expect(fallback).toHaveAttribute('href', toolDirectory[1].url);
+    await expect(page.locator('#tool-panel iframe')).toBeVisible();
+    const openedPage = page.waitForEvent('popup');
+    await fallback.click();
+    const toolPage = await openedPage;
+    await toolPage.waitForLoadState('domcontentloaded');
+    await expect(toolPage).toHaveURL(toolDirectory[1].url);
+    expect(await toolPage.evaluate(() => window.opener === null)).toBe(true);
+    expect(await toolPage.evaluate(() => document.referrer)).toBe('');
+    await toolPage.close();
+    await page.bringToFront();
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('d');
+    try { await expect(page.locator('#tool-panel')).toBeHidden(); }
+    finally { await page.keyboard.up('d'); }
+    await expect(page.locator('#tool-panel iframe')).toHaveCount(0);
+    await expect(fallback).toHaveCount(0);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+test('Portal switches rendered maps, loads multiple tilesets and returns to the named spawn', async ({ page }) => {
+  test.setTimeout(30000);
+  const errors: string[] = [];
+  const assets = new Set<string>();
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('response', response => { if (response.ok() && response.url().includes('/api/maps/studio/assets/')) assets.add(response.url()); });
+  await enter(page, 'E2ETraveler');
+  const observer = await observe();
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  try {
+    await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'workspace');
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('s');
+    try { await expect.poll(() => observer.state.players.get(sessionId)!.y, { intervals: [50] }).toBeGreaterThan(458); }
+    finally { await page.keyboard.up('s'); }
+    await page.keyboard.down('d');
+    try { await expect.poll(() => observer.state.players.get(sessionId)!.mapId).toBe('studio'); }
+    finally { await page.keyboard.up('d'); }
+    await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'studio');
+    await expect.poll(() => assets.size).toBe(2);
+    expect(observer.state.players.get(sessionId)!.x).toBe(96);
+    expect(observer.state.players.get(sessionId)!.y).toBe(96);
+    await page.waitForTimeout(550); // Respect the shared server interaction cooldown.
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('a');
+    try { await expect.poll(() => observer.state.players.get(sessionId)!.mapId).toBe('workspace'); }
+    finally { await page.keyboard.up('a'); }
+    await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'workspace');
+    expect(observer.state.players.get(sessionId)!.x).toBe(352);
+    expect(observer.state.players.get(sessionId)!.y).toBe(384);
+    await expect(page.locator('#game canvas')).toHaveCount(1);
+    expect(errors).toEqual([]);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
 });

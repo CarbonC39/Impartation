@@ -1,15 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { Room, validate, CloseCode, type Client, type AuthContext } from '@colyseus/core';
+import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
 import { SpaceState, Player, joinSchema, inputSchema, chatSchema, stepMovement, contains,
-  TICK_MS, BoardNote, Pomodoro, POMODORO_DURATIONS, boardPostSchema, boardDeleteSchema, pomodoroActionSchema,
-  type JoinOptions, type MovementInput, type ChatMessage, type BoardPostInput, type BoardDeleteInput,
-  type PomodoroActionInput, type FeatureResult, type Zone } from '@virtual-workspace/shared';
-import { world } from '../world.js';
-import { boards } from '../board.js';
+  TICK_MS, type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
+import { worldRegistry, worlds } from '../world.js';
+import { createInteractions } from '../interactions/index.js';
+import type { SpaceClient } from '../interactions/context.js';
 import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
 import { config } from '../config.js';
-
-type SpaceClient = Client<{ messages: { chat: ChatMessage } }>;
 
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> {
   state = new SpaceState();
@@ -18,8 +15,12 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   private identities = new Map<string, Identity>();
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
   private lastChat = new Map<string, number>();
-  private lastFeature = new Map<string, number>();
-  private unsubscribeBoard?: () => void;
+  private lastInteraction = new Map<string, number>();
+  private interactions = createInteractions({
+    state: this.state, maps: worlds, worlds: worldRegistry.maps.map(map => map.world),
+    authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkInteraction(client, kind, resource),
+    resetMovement: client => this.movementInputs.delete(client.sessionId),
+  });
 
   messages = {
     input: validate(inputSchema, async (client: SpaceClient, input: MovementInput) => {
@@ -35,58 +36,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       const message: ChatMessage = { id: randomUUID(), name: player.name, text, sentAt: now };
       this.broadcast('chat', message);
     }),
-    boardPost: { format: boardPostSchema, handler: async (client: SpaceClient, { resourceId, text }: BoardPostInput): Promise<FeatureResult> => {
-      if (!await this.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
-      const error = this.checkFeature(client, 'board', resourceId);
-      if (error) return { ok: false, message: error };
-      const player = this.state.players.get(client.sessionId)!;
-      const ok = boards.post(resourceId, player.userId, player.name, text, client.sessionId);
-      return { ok, message: ok ? '留言已发布' : '留言板已满（100 条），请先删除自己的留言' };
-    } },
-    boardDelete: { format: boardDeleteSchema, handler: async (client: SpaceClient, { resourceId, id }: BoardDeleteInput): Promise<FeatureResult> => {
-      const profile = await this.authorize(client);
-      if (!profile) return { ok: false, message: '身份已失效，请重新连接' };
-      const error = this.checkFeature(client, 'board', resourceId);
-      if (error) return { ok: false, message: error };
-      const ok = boards.delete(resourceId, id, profile.id, profile.role === 'admin');
-      return { ok, message: ok ? '留言已删除' : '只有作者或管理员可以删除留言' };
-    } },
-    pomodoro: { format: pomodoroActionSchema, handler: async (client: SpaceClient, input: PomodoroActionInput): Promise<FeatureResult> => {
-      if (!await this.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
-      const error = this.checkFeature(client, 'pomodoro', input.resourceId);
-      if (error) return { ok: false, message: error };
-      this.updateTimers();
-      const timer = this.state.pomodoros.get(input.resourceId)!;
-      const now = Date.now();
-      switch (input.action) {
-        case 'start':
-          if (timer.status === 'running' || timer.status === 'paused') return { ok: false, message: '计时已开始，请暂停或重置' };
-          timer.mode = input.mode;
-          timer.remainingMs = POMODORO_DURATIONS[input.mode];
-          timer.endsAt = now + timer.remainingMs;
-          timer.status = 'running';
-          break;
-        case 'pause':
-          if (timer.status !== 'running') return { ok: false, message: '当前没有正在运行的计时' };
-          timer.remainingMs = Math.max(0, timer.endsAt - now);
-          timer.endsAt = 0;
-          timer.status = 'paused';
-          break;
-        case 'resume':
-          if (timer.status !== 'paused') return { ok: false, message: '只有暂停的计时可以继续' };
-          timer.endsAt = now + timer.remainingMs;
-          timer.status = 'running';
-          break;
-        case 'reset':
-          timer.mode = input.mode;
-          timer.remainingMs = POMODORO_DURATIONS[input.mode];
-          timer.endsAt = 0;
-          timer.status = 'idle';
-          break;
-      }
-      this.state.serverTime = now;
-      return { ok: true, message: '番茄钟已更新' };
-    } },
+    ...this.interactions.messages,
   };
 
   private async authorize(client: SpaceClient) {
@@ -98,42 +48,20 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     return value;
   }
 
-  private checkFeature(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
+  private checkInteraction(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
     const player = this.state.players.get(client.sessionId);
-    const current = player && world.zones.find(zone => contains(zone, player.x, player.y));
+    const current = player && worlds.get(player.mapId)?.world.zones.find(zone => contains(zone, player.x, player.y));
     if (!player?.connected || current?.kind !== kind || current.resourceId !== resourceId) return '请先走进对应功能区';
     const now = Date.now();
-    if (now - (this.lastFeature.get(client.sessionId) ?? 0) < 500) return '操作过快，请稍后重试';
-    this.lastFeature.set(client.sessionId, now);
-  }
-
-  private syncBoard() {
-    const notes = world.zones.filter(zone => zone.kind === 'board').flatMap(zone => boards.list(zone.resourceId));
-    const ids = new Set(notes.map(note => note.id));
-    for (const id of this.state.notes.keys()) if (!ids.has(id)) this.state.notes.delete(id);
-    for (const note of notes) if (!this.state.notes.has(note.id)) this.state.notes.set(note.id, new BoardNote(note));
-  }
-
-  private updateTimers() {
-    const now = Date.now();
-    this.state.serverTime = now;
-    for (const timer of this.state.pomodoros.values()) {
-      if (timer.status === 'running' && now >= timer.endsAt) {
-        timer.status = 'finished';
-        timer.endsAt = 0;
-        timer.remainingMs = 0;
-      }
-    }
+    if (now - (this.lastInteraction.get(client.sessionId) ?? 0) < 500) return '操作过快，请稍后重试';
+    this.lastInteraction.set(client.sessionId, now);
   }
 
   onCreate() {
     this.patchRate = TICK_MS;
-    this.syncBoard();
-    this.unsubscribeBoard = boards.subscribe(() => this.syncBoard());
-    for (const zone of world.zones) if (zone.kind === 'pomodoro') this.state.pomodoros.set(zone.resourceId, new Pomodoro());
-    this.updateTimers();
+    for (const handler of this.interactions.registry.values()) handler.initialize?.();
     this.clock.setInterval(() => {
-      this.updateTimers();
+      for (const handler of this.interactions.registry.values()) handler.tick?.();
       for (const client of this.clients) void this.authorize(client).then(value => {
         if (!value) { this.movementInputs.delete(client.sessionId); client.leave(4003, 'Identity expired'); }
       });
@@ -142,6 +70,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       for (const [id, player] of this.state.players) {
         const input = this.movementInputs.get(id);
         if (!input || !player.connected || Date.now() - input.receivedAt > 250) continue;
+        const world = worlds.get(player.mapId)!.world;
         const next = stepMovement(world, player, input, delta);
         player.x = next.x;
         player.y = next.y;
@@ -161,10 +90,13 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     return identity;
   }
   onJoin(client: SpaceClient, _options: JoinOptions, auth: Identity) {
-    this.updateTimers();
+    for (const handler of this.interactions.registry.values()) handler.tick?.();
     this.identities.set(client.sessionId, auth);
     const { name, avatar, role } = ensureProfile(auth.userId);
-    const player = new Player({ name, avatar, role, userId: auth.userId, x: world.spawn.x, y: world.spawn.y });
+    const map = worlds.get(worldRegistry.initialMap)!;
+    const world = map.world;
+    const spawn = world.spawns[map.defaultSpawn];
+    const player = new Player({ name, avatar, role, userId: auth.userId, mapId: map.id, x: spawn.x, y: spawn.y });
     player.zoneId = world.zones.find(zone => contains(zone, player.x, player.y))?.id ?? '';
     this.state.players.set(client.sessionId, player);
   }
@@ -189,7 +121,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     this.lastChat.delete(client.sessionId);
-    this.lastFeature.delete(client.sessionId);
+    this.lastInteraction.delete(client.sessionId);
   }
-  onDispose() { this.unsubscribeBoard?.(); }
+  onDispose() { for (const handler of this.interactions.registry.values()) handler.dispose?.(); }
 }

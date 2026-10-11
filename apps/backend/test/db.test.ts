@@ -7,7 +7,7 @@ import { after, test } from 'node:test';
 
 process.env.DATABASE_PATH = ':memory:';
 const { openDatabase, db } = await import('../src/db.js');
-const { BoardStore } = await import('../src/board.js');
+const { BoardStore } = await import('../src/interactions/board/store.js');
 after(() => db.close());
 
 test('SQLite migration is idempotent and data survives reopen', () => {
