@@ -1,43 +1,293 @@
-# 架构
+# 工程架构
 
-## 模块
+本文描述当前代码的组织方式、运行流程和扩展契约。启动命令见 [README](../README.md)，地图格式见 [Tiled 契约](tiled.md)，身份 API 和绑定流程见 [身份说明](account-system.md)，工具配置见 [integration 配置](integration-plan.md)。尚未实现的能力见 [待办](roadmap.md)。
 
-| 路径 | 职责 |
+Virtual Workspace 由浏览器客户端和一个 Node.js 后端组成。浏览器使用 Phaser 4 渲染地图，通过 HTTP 获取身份、地图和工具配置，通过 Colyseus 0.18 WebSocket 收发输入、状态和交互请求。后端拥有玩家位置、地图归属和内置 integration 状态的写入权；SQLite 保存身份、资料和留言。Tiled 文件决定世界几何与交互语义，第三方服务拥有自己的内容、账号和权限。
+
+## 1. 代码结构与依赖方向
+
+仓库使用 npm workspaces，要求 Node.js 24 或更新版本，所有 workspace 启用 TypeScript strict。
+
+```mermaid
+flowchart LR
+    F["apps/frontend<br/>Phaser · DOM · Colyseus SDK"] --> S["packages/shared<br/>Schema · 协议 · 校验 · 世界规则"]
+    B["apps/backend<br/>HTTP · 权威房间 · integrations"] --> S
+    T["assets/maps<br/>registry · Tiled · 图片"] --> B
+    B --> D["SQLite<br/>Better Auth · profiles · board_notes"]
+    F <-->|"HTTP / WebSocket"| B
+    F -->|"presentation"| E["第三方工具页面或客户端接入"]
+```
+
+前端不依赖 backend 包或服务端类型。客户端可见的 Colyseus Schema 和 `SpaceProtocol` 都从 shared 导出；数据库、认证 token 和服务端 handler 留在 backend。
+
+| 路径 / 入口 | 职责 |
 | --- | --- |
-| `apps/frontend` | Phaser 4 客户端、地图展示和 integration presentation handlers，通过 `@colyseus/sdk` 订阅状态 |
-| `apps/backend` | Colyseus 0.18 权威房间、地图 registry/API、HTTP API、匿名身份与 SQLite 存储 |
-| `packages/shared` | Colyseus Schema、`SpaceProtocol`、Zod 校验、Tiled 语义解析、地图 registry 和移动规则 |
-| `assets/maps` | Tiled JSON 源地图及 `registry.json` |
+| [shared/index.ts](../packages/shared/src/index.ts) | Schema、消息输入校验、资源与 presentation 配置类型、公共常量 |
+| [shared/protocol.ts](../packages/shared/src/protocol.ts) | SDK 使用的 `SpaceProtocol` 结构类型，定义房间输入、请求响应及服务端消息 |
+| [shared/world.ts](../packages/shared/src/world.ts) | Tiled 语义提取、registry 校验、碰撞和移动函数 |
+| [shared/interactions.ts](../packages/shared/src/interactions.ts) | 泛型 `InteractionRegistry<T>`，按 kind 注册、查询和遍历；拒绝空 kind 和重复注册 |
+| [backend/app.config.ts](../apps/backend/src/app.config.ts) | 注册 `space` 房间、WebSocket transport 和 HTTP 路由 |
+| [backend/rooms/SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts) | 房间生命周期、身份复验、移动、聊天及交互授权上下文 |
+| [backend/world.ts](../apps/backend/src/world.ts) | 读取地图 registry，生成权威世界和浏览器可加载的渲染资源 |
+| [backend/integrations/index.ts](../apps/backend/src/integrations/index.ts) | 服务端交互组装入口；注册 board、pomodoro 和 Portal |
+| [backend/identity.ts](../apps/backend/src/identity.ts) / [db.ts](../apps/backend/src/db.ts) | Better Auth、项目资料、数据库初始化和迁移 |
+| [frontend/main.ts](../apps/frontend/src/main.ts) | 页面与连接生命周期、地图获取和切换、聊天、顶层清理 |
+| [frontend/SpaceScene.ts](../apps/frontend/src/SpaceScene.ts) | Tiled 瓦片渲染、玩家插值、键盘输入和区域通知 |
+| [frontend/features.ts](../apps/frontend/src/features.ts) | 客户端交互组装入口；建立 handler registry 和 dispatcher |
+| [frontend/presentations.ts](../apps/frontend/src/presentations.ts) | 外置 integration 的 native/embed/external 展示策略 |
 
-地图几何与语义以 `.tmj` 为源数据。后端通过 `MAP_REGISTRY_PATH` 读取地图 registry，校验地图和 Portal 目标，并提供 `GET /api/world`。响应包含 `initialMap` 和 `{ id, url, defaultSpawn, world }` 地图条目；`url` 指向服务端规范化后的 Tiled JSON，地图显式引用的图片等资源由地图资源 API 提供。前端按地图 ID 加载目录、渲染地图并筛选对应玩家。
+shared 编译到 `packages/shared/dist`，同时输出 JavaScript 和声明文件；workspace 引用通过 package exports 读取这些产物。backend 使用 NodeNext，编译到 `apps/backend/build`；frontend 使用 Vite，产物位于 `apps/frontend/dist`。根脚本先构建 shared，避免其它 workspace 使用过期或缺失的协议产物。
 
-解析器只约束项目语义对象：命名出生点、碰撞矩形、交互矩形和 Portal。语义层可嵌套在 group 中并使用层偏移。地图必须是有限、正交、16×16 tile；渲染器只支持其实际实现的 Tiled 特性，不承诺完整 Tiled 兼容。服务端每 50ms 权威更新移动和区域。客户端提交经过验证的输入；服务端按玩家 `mapId` 计算碰撞和交互，并验证位置后执行留言板、番茄钟或 Portal 操作。
+`SpaceProtocol` 是显式维护的公共契约，并非从 backend 自动生成。修改消息时，需要同步 shared 的协议、输入校验和服务端实现。[架构测试](../apps/backend/test/architecture.test.ts) 在编译时比较两侧载荷及请求结果类型，同时检查前端没有 backend 依赖。
 
-## 状态与存储
+## 2. 启动与进入空间
 
-| 数据 | 归属与生命周期 |
+后端入口 [index.ts](../apps/backend/src/index.ts) 调用 `listen(server, config.PORT)`。监听前，模块初始化完成以下工作：
+
+1. [config.ts](../apps/backend/src/config.ts) 用 Zod 解析环境变量；生产环境检查身份配置。
+2. 打开 SQLite，执行项目表迁移和 Better Auth 自身的 schema migration。
+3. 读取 `MAP_REGISTRY_PATH` 指定的 registry 和所有地图，校验语义、默认 spawn 与 Portal 目标，建立渲染 JSON 和资源索引。
+4. 解析 `EXTERNAL_TOOLS`，检查配置资源与所有地图中的 kind 是否一致。
+5. 注册 HTTP 路由和 `space` 房间类型。具体房间由 matchmaking 按需创建。
+
+数据库迁移、地图或工具配置出错会阻止正常启动。地图和配置在启动时读入内存；当前没有运行时重新加载机制，更改后需重启后端。
+
+浏览器的进入流程由 `main.ts` 和 [identity.ts](../apps/frontend/src/identity.ts) 协作完成：
+
+```mermaid
+sequenceDiagram
+    participant UI as 浏览器
+    participant API as HTTP / Better Auth
+    participant Room as SpaceRoom
+    UI->>API: GET /api/me
+    opt 首次进入且没有有效身份
+        UI->>API: POST /api/auth/sign-in/anonymous
+        API-->>UI: session cookie
+    end
+    UI->>API: PATCH /api/me {name, avatar}
+    UI->>API: GET /api/world
+    UI->>Room: joinOrCreate("space", {name, avatar}) + cookie
+    Room->>Room: 校验来源、session，读取持久资料
+    Room-->>UI: 初始 SpaceState
+    UI->>UI: 创建交互 handlers
+    UI->>API: GET 当前 map 的渲染 JSON 和图片
+    UI->>UI: 创建 Phaser 场景
+```
+
+打开页面只尝试恢复已有资料；提交进入表单时才按需创建匿名身份并保存资料。客户端校验 `/api/world` 响应，等待房间初始状态后，用本玩家 `mapId` 选择地图；`initialMap` 是目录中的初始入口。
+
+当前只有公共 `space` 房间类型，每房间最多 32 个连接。房间包含整个已登记地图集合；地图 ID 不是房间 ID。客户端调用 `joinOrCreate`，没有私密房间、成员名单或按地图创建房间的机制。
+
+## 3. 世界数据：Tiled 到权威状态与画面
+
+### 3.1 同一源数据的两种用途
+
+[loadWorldRegistry](../apps/backend/src/world.ts) 对每个 registry 条目读取 `.tmj`，分别产生：
+
+| 产物 | 消费方 | 内容 |
+| --- | --- | --- |
+| `WorldMap` | 服务端移动/授权；客户端区域显示 | 像素宽高、命名 `spawns`、碰撞矩形 `collisions`、交互矩形 `zones` |
+| 规范化 Tiled JSON | Phaser | 保留地图渲染数据；外置 JSON tileset 展开，图片路径改写为地图资源 API URL |
+| 资源索引 | HTTP 资源路由 | 该地图显式引用的图片文件与服务端生成的 asset ID 对应关系 |
+
+registry 配置条目是 `{ id, file, defaultSpawn }`，另有顶层 `initialMap`。`file` 相对 registry 文件所在目录解析；map ID 不要求与文件名相同。公共目录条目是 `{ id, url, defaultSpawn, world }`，不暴露源文件路径。客户端使用 `url` 获取渲染数据，无需知道默认示例地图的文件名。
+
+registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn 存在，并逐一解析 Portal 的目标地图和 spawn。map ID、zone ID、spawn 名称采用非空、最多 128 字符的标识约束，已知资源型交互的 resourceId 也采用该约束；未知 kind 可不提供 resourceId。zone ID 和 spawn 名称在各自地图内唯一，resourceId 可以跨地图复用。
+
+所有坐标和移动规则使用像素。标准 tile 为 16×16；地图宽高从 tile 数换算为像素。tile 不直接决定碰撞，服务端碰撞来自 Tiled 的语义对象层。
+
+### 3.2 项目语义校验
+
+`parseWorldMap` 要求有限、正交、16×16 tile 的地图，以及以下三个对象层。层名在整张地图中各出现一次，可以嵌套在 group 中；group 和 layer 的位置偏移会累加到语义坐标。
+
+| 对象层 | 提取规则 |
 | --- | --- |
-| 匿名 user、session、绑定凭据 | Better Auth 管理，写入 SQLite |
-| 昵称、所选角色形象 ID、member/admin 权限角色 | 项目 `profiles` 表，跨设备共享 |
-| 玩家位置、地图 ID、连接和区域 | Colyseus 房间状态；自动重连窗口为 20 秒 |
-| 聊天 | 房间内实时广播，不保留历史；地图切换不改变房间 |
-| 留言板 integration 数据 | SQLite 按 `resourceId` 保存，同一进程的房间共享内容与变更通知 |
-| 番茄钟 integration 数据 | 每个房间按资源独立计时，房间销毁或后端重启后重置 |
-| integration presentation 配置 | 后端启动时校验；公开所需 URL、mode 和 fallback |
-| 第三方工具内容与会话 | 第三方服务管理，不复制到 Colyseus Schema 或项目数据库 |
+| `spawns` | 至少一个命名 point；名称唯一，按玩家碰撞体检查可站立性 |
+| `collisions` | 地图内的非旋转、正面积轴对齐矩形；可为空 |
+| `interactions` | 地图内的非旋转、正面积轴对齐矩形；可为空；对象 `name` 是该地图内唯一的 zone ID |
 
-Portal 在同一房间内改变玩家 `mapId` 和位置；不创建新房间。地图 registry 的 `defaultSpawn` 选择加入时出生点，Portal 的 `targetSpawn` 选择转换后的出生点。碰撞和交互均按该玩家当前地图解析。角色形象 `avatar` 与权限 `role` 分离；角色精灵图目前仍由彩色圆形占位。
+交互 kind 取对象 `class`，没有 class 时使用 `type`；properties 保存为 `Record<string, unknown>`。`resourceId` 是从 properties 提取的共享资源标识，与 zone ID 不同：多个区域或地图可以引用同一资源。Portal 使用 `targetMap` 和 `targetSpawn`。
 
-项目表通过 `PRAGMA user_version` 迁移；Better Auth 表通过其 schema migration 独立管理。SQLite 使用 WAL 和 5000ms busy timeout，支持本地 CLI 在线修改角色。旧留言作者 user id 保持 NULL，不按昵称认领。
+已注册的交互定义负责 kind 特有的语义校验。当前 `interactionDefinitions` 在 shared/world.ts 中集中注册：board、pomodoro 和四类外置工具检查非空 resourceId，Portal 检查目标属性。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
 
-## Integration 边界
+校验范围与渲染能力分开。其它对象层中的装饰对象保持不透明，不套用语义矩形约束；多个 tile layer、多个 tileset 或额外 Tiled 元数据也不会仅因当前画面不需要而被语义解析器拒绝。语义层的可见性不控制碰撞或授权。
 
-共享的泛型 `InteractionRegistry<T>` 按 Tiled `class`/`type` 注册交互定义和校验。前端 presentation registry 与后端行为 handlers 分离：留言板、番茄钟保留各自 handlers；外部工具使用 integration 配置。Presentation mode 为 `native`、`embed` 或 `external`。`PresentationRegistry.registerNative(kind, handler)` 按 integration kind 显式注册 native handler；客户端可将 registry 传给 `createInteractions(room, presentations)`。native 不需要 URL；若找不到 handler，可配置 `fallback: 'external'`，此时必须提供 URL。embed 使用沙盒 iframe，embed/external 均需要 URL。
+一个位置只激活一个 zone：服务端取解析顺序中第一个包含玩家中心点的矩形。包含判断左/上边界闭合、右/下边界开放；重叠区域没有独立优先级配置，制图时应考虑对象顺序。
 
-`EXTERNAL_TOOLS` 兼容既有 `{ kind, url }` 配置，默认 mode 为 `external`，并可选 mode 和 fallback。board/pomodoro 现有面板 handler 属于 native；外置 integration 选择 native 时，只有存在对应显式注册 handler 才能展示，不会自动产生 UI。项目不启动容器、不签发第三方凭据、不映射项目身份或管理员权限。iframe 展示不等于工具授权，外置工具仍管理自己的用户、权限、内容和会话。白板与面向绘师的共同作画是独立功能；视频通话和屏幕共享不在范围内。身份 SSO、跨服务权限映射与自行实现协作协议不在当前范围内。
+### 3.3 渲染加载和支持边界
 
-身份细节见[匿名身份与权限](account-system.md)，地图契约见[地图说明](tiled.md)，integration 配置见[外置入口](integration-plan.md)。
+后端支持内嵌 tileset 和外置 JSON `.tsj`，解析其图片引用，递归改写 group 内 image layer 的图片路径。资源路由仅接受已建立索引的 map/asset ID；没有任意文件路径下载接口。地图与 tileset 是部署者控制的可信文件，加载器允许其引用文件系统资源，制图文件本身不是面向不可信上传的沙盒。
 
-## 部署约束
+`SpaceScene.preload` 把规范化 JSON 交给 Phaser Tiled parser，并加载带顶层 `image` 的 atlas tileset。`create` 按 Phaser 解析得到的 tile layer 顺序创建图层，使用全部已加载 atlas；不要求图层叫 ground，也不要求只有一张内嵌 tileset。玩家和交互区提示在瓦片层之后绘制。
 
-前端静态资源需单独托管；后端提供 HTTP 与 WebSocket，同源代理方式见 [README](../README.md)。地图 registry 和其引用文件必须随后端部署；服务端公开规范化地图与显式引用的资源。SQLite 按单实例部署；多进程运行需要额外的存储与变更通知方案，不能让多个后端直接共享同一 SQLite 文件。
+当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和 tile object 没有相应的客户端绘制实现。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
+
+地图逻辑尺寸来自 registry 中的 world，Phaser 使用 FIT 缩放；页面的 `#game` 容器仍使用固定 3:2 aspect ratio。registry 不限制地图纵横比，非 3:2 地图需单独检查容器留白和缩放布局。
+
+## 4. 实时状态、移动与地图切换
+
+### 4.1 同步状态和消息
+
+`SpaceState` 包含以下集合，由服务端写入并通过 Colyseus Schema patch 同步：
+
+| 字段 | 键与值 | 范围 |
+| --- | --- | --- |
+| `players` | Colyseus `sessionId` → `Player` | 当前房间全部玩家，含不同地图的玩家 |
+| `notes` | note UUID → `BoardNote` | registry 内 board 资源的留言快照 |
+| `pomodoros` | `resourceId` → `Pomodoro` | 当前房间的共享计时器 |
+| `serverTime` | 服务端时间戳 | 番茄钟显示使用的时间基准 |
+
+Player 包含 `userId`、昵称、形象 ID、权限 role、`mapId`、坐标、`connected` 和 `zoneId`。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
+
+消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal，后者返回 `{ ok, message }`。服务端 chat 是实时广播；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
+
+| 消息名 | 客户端载荷 | 服务端效果 |
+| --- | --- | --- |
+| `input` | `{ x, y }` 方向 | 更新该连接的最近输入，不接收客户端坐标 |
+| `chat` | `{ text }` | 生成 ID、作者名和时间，向整个房间广播 |
+| `boardPost` | `{ resourceId, text }` | 以已验证作者身份写入留言 |
+| `boardDelete` | `{ resourceId, id }` | 检查作者或 admin 权限后删除 |
+| `pomodoro` | `{ resourceId, action, mode? }` | start/reset 要求 mode；pause/resume 不接收客户端剩余时间 |
+| `portal` | `{ zoneId }` | 使用服务端地图属性选择目标及出生点 |
+
+当前没有按地图或资源进行 Schema 的可见性过滤。客户端只绘制同 mapId 的玩家、只展示当前 resourceId 的留言；同房间客户端仍接收其它地图玩家和所有已同步 integration 数据。区域检查约束操作，不是读取隔离；地图转换也不隔离聊天。
+
+### 4.2 权威移动
+
+前端发送 `{ x, y }` 方向输入，两轴均为 -1、0 或 1。输入变化时立即发送，持续输入每 100ms 刷新；表单获焦、页面失焦或隐藏时停止移动。断线时不提交新的移动输入。
+
+`SpaceRoom` 校验输入和身份后，保存该连接的最近方向及接收时间。每 50ms 更新一次权威移动，state patch 间隔也是 50ms；输入超过 250ms 未更新或玩家已断线时停止推进。
+
+[stepMovement](../packages/shared/src/world.ts) 将斜向输入归一化，以 150 像素/秒移动；单步 delta 限制在 0–50ms，依次尝试 X、Y 方向，允许沿墙滑动。虽然玩家画为半径 10 的圆，当前碰撞检测使用中心周围半径 10 的轴对齐方形。边界及 collision 矩形都由当前 mapId 对应的 `WorldMap` 决定。移动后，服务端重新计算 zoneId。
+
+客户端对服务端位置做线性插值，无本地预测或重演。场景中的区域通知使用服务端 zoneId；界面提示和按钮状态不会替代服务端位置校验。
+
+### 4.3 Portal 的完整路径
+
+1. 玩家进入 Portal，服务端同步 zoneId。
+2. 客户端 [PortalInteraction](../apps/frontend/src/portal-interaction.ts) 对本次区域进入发送一次 `portal` 请求，载荷只有 zoneId。
+3. 服务端复验身份，按当前 mapId 与真实坐标寻找区域，检查 zone ID/kind、连接状态和操作间隔。
+4. [Portal handler](../apps/backend/src/integrations/portal.ts) 从服务端 Tiled 属性读取目标地图和命名 spawn，更新 mapId、坐标和 zoneId，并清除旧移动输入。
+5. `main.ts` 观察本玩家 mapId，清除当前交互区域，获取目标渲染 JSON，销毁旧 Phaser Game 并创建新场景。异步加载以 generation 和 room 引用检查丢弃过期结果。
+
+Portal 保留同一房间、连接、身份和聊天。加入房间使用 initialMap 的 defaultSpawn；Portal 使用其明确指定的 targetSpawn，不强制使用目标地图默认出生点。目标地图和 spawn 在启动时已验证。失败请求不会改变地图；客户端需要重新进入区域才再次尝试。
+
+### 4.4 断线和资源清理
+
+后端 `onDrop` 标记玩家 disconnected 并删除移动输入，对允许重试的网络 close code 提供 20 秒重连窗口；SDK 在同一 Room 实例上自动重试。`onReconnect` 再检查身份，恢复 connected。最终 `onLeave` 才删除玩家、身份引用和限流记录；`onDispose` 调用各 integration 的清理钩子。
+
+浏览器断线时禁用聊天和交互控制，重连后恢复。最终离开时，`main.ts.cleanup` 使未完成地图加载失效，dispose dispatcher，销毁 Phaser Game，并复位连接与页面状态。交互 handler 负责移除自身 DOM 监听、房间订阅、计时器和 iframe。外置工具面板会 abort 配置 fetch；内置面板与 Portal 不取消已发出的 `room.request`，而是在销毁或区域变化后忽略迟到响应的界面更新。清理是 handler 接入契约的一部分。
+
+## 5. Interaction 与 presentation 扩展
+
+### 5.1 四个接入点
+
+`InteractionRegistry<T>` 是通用容器，不是自动发现插件的系统。以下 registry 各自保存不同契约，按职责独立组装：
+
+| 接入点 | 注册内容 | 调用方式 |
+| --- | --- | --- |
+| shared `interactionDefinitions` | `validate(zone)` | Tiled 语义解析时按 kind 调用 |
+| frontend `features.ts` | `InteractionHandler` | dispatcher 路由区域、连接和销毁事件 |
+| backend `integrations/index.ts` | 消息字典及生命周期钩子 | `SpaceRoom` 合成消息并调用 initialize/tick/dispose |
+| frontend `PresentationRegistry` | 展示函数 | 外置工具面板按 mode 和 kind 打开、清理展示 |
+
+客户端 [InteractionDispatcher](../apps/frontend/src/interactions.ts) 只认识 `setZone`、`setConnected`、`dispose`。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
+
+board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/board-interaction.ts)、[PomodoroInteraction](../apps/frontend/src/pomodoro-interaction.ts)，共用 [PanelInteraction](../apps/frontend/src/panel-interaction.ts) 的连接、pending、反馈和订阅清理机制。它们在 features.ts 直接注册，其现有 UI 不通过外置工具配置或 PresentationRegistry 选择模式。Portal 也独立注册。四类外置 kind 共用 [ExternalToolPanel](../apps/frontend/src/external-tools.ts)，由它读取 `/api/tools` 并选择展示。
+
+服务端 [registerServerInteractions](../apps/backend/src/integrations/registry.ts) 合并 handlers 的消息字典，保留具体消息类型，拒绝重复消息名。kind 注册只关联生命周期；实际请求按消息名进入对应 handler。通用容器不会自动执行身份或位置检查，handler 必须调用上下文中的 `authorize` 和 `check`。
+
+上下文提供 state、地图语义、身份复验和区域检查；Portal 另需要 map 索引与移动重置函数。房间在创建时调用 initialize，每秒及新玩家加入时调用 tick，销毁时调用 dispose。业务规则由 handler 和其 store 承担，SpaceRoom 提供通用授权与生命周期。
+
+### 5.2 native / embed / external
+
+`kind` 决定交互或工具的类型，`mode` 决定外置 integration 的展示。`EXTERNAL_TOOLS` 以 resourceId 为键；旧 `{ kind, url }` 默认 external。当前配置只接受 media、whiteboard、drawing、document 四类外置 kind，新增其它外置 kind 时也需更新 shared 配置契约和客户端组装入口。
+
+| mode | 当前实现 | 配置要求 |
+| --- | --- | --- |
+| `native` | `registerNative(kind, handler)` 注册的宿主展示函数；kind handler 优先于通用 native strategy | 不必有 URL；配置本身不会生成 UI |
+| `embed` | 在宿主中创建 iframe，离开时移除 | 必须有 HTTP(S) URL |
+| `external` | 显示新标签页链接，使用 `noopener noreferrer` | 必须有 HTTP(S) URL |
+
+展示函数签名为 `(tool, host) => cleanup`。`createPresentations()` 默认注册 embed/external，不注册第三方 native 实现；扩展时在创建客户端 handlers 前构造并注入自定义 registry：
+
+```ts
+const presentations = createPresentations();
+presentations.registerNative('whiteboard', renderWhiteboard);
+const interactions = createInteractions(room, presentations);
+// renderWhiteboard 接收工具配置与宿主元素，并返回清理函数。
+```
+
+`fallback: 'external'` 要求 URL。缺少 native handler/strategy 时，它选择 external；embed 设置 fallback 时，同时提供外部打开链接。当前没有 iframe 加载失败检测或自动切换；已注册展示函数抛错时也不会自动触发 fallback，面板显示错误反馈。
+
+iframe sandbox 仅开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。第三方 CSP、登录或浏览器能力要求可能使其无法嵌入，应按服务选择 external 或实现 native handler。项目不代理工具流量、不管理容器、不签发工具凭据；native 接入也不会自动提供跨服务身份或权限映射。
+
+### 5.3 增加交互时的修改顺序
+
+1. 定义 Tiled kind 和所需 properties；有特定语义约束时注册 `InteractionDefinition`。
+2. 定义 shared 输入校验、请求结果和 `SpaceProtocol` 消息；仅需本地展示的交互可省略服务端消息。
+3. 在 backend/integrations 实现需要的业务规则和存储，注册消息与生命周期；受保护操作使用已验证身份和当前位置。
+4. 实现前端 `InteractionHandler`，在 features.ts 注册；如果复用外置面板，提供配置 kind 和 presentation。
+5. 为语义、授权、资源共享范围和清理行为添加对应测试。通用 dispatcher 和 SpaceRoom 的生命周期遍历通常无需增加业务分支。
+
+## 6. 身份、权限和数据生命周期
+
+Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校验，未打包进浏览器。session 有效期为 30 天，cookie cache 关闭；绑定码使用哈希存储，有效期 3 分钟且单次兑换。新设备兑换后共享同一认证 session，撤销它会影响所有绑定设备。正式注册、登录和账号恢复尚未实现。
+
+`SpaceRoom.onAuth` 从 HTTP headers/cookie 验证身份并检查提供的 Origin，不接受客户端声明的 userId 或 role。入房时保存服务端验证得到的认证 session 引用；每条受保护消息及每秒巡检通过 Better Auth adapter 复验有效性，再读取最新 profile。资料和角色因此可在线更新；失效连接会被关闭。前端检查只改善交互反馈。
+
+统一交互检查按玩家真实 mapId/位置确认 kind 和 resourceId，并共享每连接至少 500ms 的操作间隔；聊天另有每连接 500ms 间隔。管理员不会绕过身份、区域或限流。`avatar` 是已有地图角色形象的预设 ID，与权限 `role` 分离；当前图像仍以彩色圆形占位。
+
+| 数据 | 持久化和共享范围 | 实现 |
+| --- | --- | --- |
+| auth user/session/verification 等 | SQLite；跨浏览器绑定共享身份 | Better Auth |
+| 昵称、avatar ID、member/admin role | SQLite profiles；按持久 userId | identity.ts；role 通过本地 CLI 更新 |
+| 玩家位置、mapId、zoneId、connected | 房间内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
+| 聊天 | 房间广播；没有服务端历史 | SpaceRoom |
+| 留言 | SQLite board_notes；同一进程所有房间按 resourceId 共享 | [BoardStore](../apps/backend/src/board.ts) |
+| 番茄钟 | 每房间按 resourceId 共享；房间销毁或服务重启后重置 | [pomodoro handler](../apps/backend/src/integrations/pomodoro.ts) |
+| 地图目录和工具配置 | 启动时载入；整个后端实例共享 | world.ts / external-tools.ts |
+| 第三方内容及工具会话 | 第三方服务拥有 | 不写入项目 Schema 或数据库 |
+
+留言写入后，进程级 BoardStore 通知所有活跃房间的 board handler 更新 Schema。容量检查和插入在 SQLite 事务中完成，每资源最多 100 条；作者依据持久 userId 删除，admin 可删除其他作者留言。旧记录的 author_user_id 保持 NULL，不按昵称认领；Schema 中对应空字符串。详细规则见 [integrations](integrations.md)。
+
+番茄钟以服务端 endsAt 为准，handler 每秒更新 serverTime 和完成状态。前端用收到的服务端时间加本地单调时间推算显示，每 250ms 刷新；这只影响显示，暂停/继续/重置都由服务端决定。同一房间中跨地图引用同一 resourceId 的区域共用计时器。
+
+项目表由 `PRAGMA user_version` 的 v1–v3 迁移管理；Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
+
+## 7. HTTP 接口和部署边界
+
+[app.config.ts](../apps/backend/src/app.config.ts) 提供以下项目接口，`/api` 响应设置 `Cache-Control: no-store`：
+
+| 接口 | 访问与用途 |
+| --- | --- |
+| `GET /api/world` | 公开地图目录与所有权威地图语义 |
+| `GET /api/maps/:id/map.json` | 公开规范化 Tiled JSON；未知地图返回 404 |
+| `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
+| `GET /api/tools` | 公开工具 resourceId、kind、mode、URL 和 fallback；不能放凭据 |
+| `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
+| `PATCH /api/me` | JSON 更新昵称/avatar，校验提供的 Origin，不接受 role 更新 |
+| `/api/auth/*` | 只开放匿名登录、session 查询、退出和绑定码生成/兑换的指定方法，其余返回 404 |
+| `GET /health` | 执行 SQLite `SELECT 1` 后返回状态 |
+
+项目 `/api` JSON parser 的请求体限制为 16KB；auth 路由在它之前交给 Better Auth 处理。Colyseus 自身提供 matchmaking 与 WebSocket 路由。`VITE_SERVER_URL` 仅改变 Colyseus 连接目标，身份、地图和工具 API 始终请求当前页面同源 `/api`；改变连接地址时需确保两侧服务使用一致的身份和地图配置。
+
+开发时 [vite.config.ts](../apps/frontend/vite.config.ts) 代理 `/api`、`/health`、`/matchmake` 和 Colyseus WebSocket。Vite 的 publicDir 指向根 assets，构建也会复制其中的资源；运行时地图选择仍通过后端目录。生产环境 `npm start` 只启动 backend，前端静态产物需单独托管；registry、地图、tileset 和图片文件也必须随后端部署。
+
+当前部署模型为单后端实例和本地 SQLite。房间状态、BoardStore 通知和配置索引都在进程内；直接增加多个进程无法保留现有跨房间共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
+
+## 8. 验证与定位问题
+
+文档和代码的关键契约由以下检查覆盖；运行方法及完整覆盖边界见 [测试说明](testing.md)。
+
+| 修改范围 | 优先核对 |
+| --- | --- |
+| Schema / 消息 | `protocol.test.ts`、`architecture.test.ts` 和 strict 类型检查；前后端载荷是否同步 |
+| 地图语义 / 移动 | `world.test.ts`；单位、偏移、碰撞边界、未知 kind 与无关 Tiled 元数据 |
+| 地图加载 / Portal | `portal.test.ts` 和浏览器地图切换用例；目标验证、资源 API、身份与房间保留 |
+| integration handler | `space.test.ts` / `db.test.ts`；身份、权限、位置、限流和持久化范围 |
+| presentation / 清理 | `architecture.test.ts` / `external-tools.test.ts` / 浏览器用例；策略选择、fallback 和离开清理 |
+
+`npm run check` 执行类型检查、Node 测试和构建；`npm run test:e2e` 使用独立开发服务、内存数据库和临时多地图 fixture。测试世界不向默认示例地图添加测试 Portal。第三方页面用替身验证展示契约，不验证真实编辑、绘画或同步播放。浏览器测试当前只覆盖 Chromium，触屏移动、其它浏览器和弱网络压力仍需额外验证；仓库尚无 CI 配置。
+
+排查时沿数据流定位：启动失败先检查 config、迁移和 registry；画面与碰撞不一致时分别检查渲染 JSON 与 `WorldMap`；请求被拒绝时检查已验证身份、真实 mapId/位置、资源匹配和限流；切换后出现旧界面时检查 handler 清理与异步 generation 检查。工具页面自身的登录或协作问题应在对应服务中定位。
