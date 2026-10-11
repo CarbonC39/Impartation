@@ -51,25 +51,24 @@ test('generic interaction dispatch supports new kinds and shared handlers with d
   assert.deepEqual(events, ['connected:true', 'one', 'exit', 'connected:true', 'two', 'connected:false', 'exit', 'dispose']);
 });
 
-test('presentation dispatch selects modes and adapters independently of kind, and fallback is explicit', () => {
+test('presentation dispatch selects three modes, resolves native handlers by kind and uses explicit fallback', () => {
   const events: string[] = [];
   const host = {} as HTMLElement;
   const registry = new PresentationRegistry().register('external', tool => {
     events.push(`external:${tool.kind}`); return () => events.push('cleanup:external');
   }).register('embed', tool => {
     events.push(`embed:${tool.kind}`); return () => events.push('cleanup:embed');
-  }).registerAdapter('custom-view', tool => {
-    events.push(`${tool.mode}:${tool.kind}`); return () => events.push('cleanup:adapter');
+  }).registerNative('whiteboard', tool => {
+    events.push(`${tool.mode}:${tool.kind}`); return () => events.push('cleanup:native');
   });
   const base = { resourceId: 'resource', kind: 'whiteboard' as const, url: 'https://tools.example/' };
   registry.open(base, host)();
   registry.open({ ...base, mode: 'embed' }, host)();
-  registry.open({ ...base, mode: 'native', adapterId: 'custom-view' }, host)();
-  registry.open({ ...base, mode: 'adapter', adapterId: 'custom-view' }, host)();
-  registry.open({ ...base, mode: 'adapter', adapterId: 'missing', fallback: 'external' }, host)();
-  assert.throws(() => registry.open({ ...base, mode: 'adapter', adapterId: 'missing' }, host));
+  registry.open({ ...base, mode: 'native', url: undefined }, host)();
+  registry.open({ ...base, kind: 'drawing', mode: 'native', fallback: 'external' }, host)();
+  assert.throws(() => registry.open({ ...base, kind: 'drawing', mode: 'native' }, host));
   assert.deepEqual(events, ['external:whiteboard', 'cleanup:external', 'embed:whiteboard', 'cleanup:embed',
-    'native:whiteboard', 'cleanup:adapter', 'adapter:whiteboard', 'cleanup:adapter', 'external:whiteboard', 'cleanup:external']);
+    'native:whiteboard', 'cleanup:native', 'external:drawing', 'cleanup:external']);
 });
 
 test('server interactions compose new kinds and reject ambiguous message names', async () => {

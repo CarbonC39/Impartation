@@ -1,6 +1,6 @@
 # Integrations：内置与外置接入
 
-Integrations 是通过地图交互区域接入的功能。Tiled `class`/`type` 由共享 `InteractionRegistry<T>` 校验并关联定义；前端 presentation registry 与服务端 integration handlers 分开注册。服务端负责身份、地图位置和操作权限，presentation mode 只决定用户界面。
+Integrations 是通过地图交互区域接入的功能。Tiled `class`/`type` 由共享 `InteractionRegistry<T>` 校验并关联定义；前端 presentation registry 与服务端 integration handlers 分开注册。服务端负责身份、地图位置和操作权限，presentation mode 只决定用户界面。客户端可通过 `createInteractions(room, presentations)` 使用指定 registry；native handler 按 kind 通过 `PresentationRegistry.registerNative(kind, handler)` 显式注册。
 
 ## 内置接入
 
@@ -36,9 +36,9 @@ Integrations 是通过地图交互区域接入的功能。Tiled `class`/`type` �
 | YouTube/Bilibili 同步观看 | `media` | `lounge-screen` |
 | 协作文档 | `document` | `shared-document` |
 
-优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再通过 `EXTERNAL_TOOLS` 配置资源、展示模式和页面地址；配置格式和公开 API 见[入口配置](integration-plan.md)。旧 `{ kind, url }` 配置默认使用 `external`，也可指定 `native`、`overlay`、`embed`、`adapter`，以及可选的 adapter id 和 fallback。
+优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再通过 `EXTERNAL_TOOLS` 配置资源、展示模式和页面地址；配置格式和公开 API 见[入口配置](integration-plan.md)。旧 `{ kind, url }` 配置默认使用 `external`，也可指定 `native`、`embed` 或 `external`，以及可选的 fallback。embed/external 需要 URL；native 使用该 kind 已注册的 handler，不需要 URL。若未注册 handler，可设置 `fallback: "external"`，并提供 URL。留言板和番茄钟已有面板属于 native handler；外置 integration 使用 native 不会自动提供 UI。
 
-项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`overlay`/`embed` 使用沙盒 iframe 作为显示容器，但不改变第三方服务的授权边界；项目身份和管理员角色不映射到外置服务。离开区域、项目 session 失效或角色变化都不撤销工具自己的会话。adapter 必须由项目显式实现和注册，配置不会自动增加服务适配器。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
+项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 使用沙盒 iframe 作为显示容器，但不改变第三方服务的授权边界；项目身份和管理员角色不映射到外置服务。离开区域、项目 session 失效或角色变化都不撤销工具自己的会话。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
 
 白板与面向绘师的共同作画是独立功能；视频通话和屏幕共享不在范围内。
 

@@ -317,33 +317,28 @@ test('binding a second browser restores the same identity, profile and note perm
 });
 
 
-for (const mode of ['embed', 'overlay'] as const) {
-  test(`${mode} presentation uses a sandboxed container and clears it when leaving`, async ({ page, context }) => {
-    const target = toolCases[1];
-    await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode, fallback: 'external' }] }));
-    await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Embedded tool fixture</p>' }));
-    await enter(page, 'E2EPresentation');
-    const observer = await observe();
-    try {
-      await walkToTool(page, observer, target);
-      const frame = page.locator('#tool-panel iframe');
-      await expect(frame).toBeVisible();
-      await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
-      await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
-      await expect(page.frameLocator('#tool-panel iframe').getByText('Embedded tool fixture')).toBeVisible();
-      if (mode === 'overlay') {
-        await expect(page.locator('#tool-panel dialog')).toBeVisible();
-        await page.getByRole('button', { name: '关闭', exact: true }).click();
-      }
-      await page.locator('#leave').click();
-      await expect(frame).toHaveCount(0);
-    } finally { if (observer.connection.isOpen) await observer.leave(); }
-  });
-}
+test('embed presentation uses a sandboxed container and clears it when leaving', async ({ page, context }) => {
+  const target = toolCases[1];
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', fallback: 'external' }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Embedded tool fixture</p>' }));
+  await enter(page, 'E2EPresentation');
+  const observer = await observe();
+  try {
+    await walkToTool(page, observer, target);
+    const frame = page.locator('#tool-panel iframe');
+    await expect(frame).toBeVisible();
+    await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+    await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
+    await expect(page.frameLocator('#tool-panel iframe').getByText('Embedded tool fixture')).toBeVisible();
+    await page.locator('#leave').click();
+    await expect(frame).toHaveCount(0);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
 
-test('missing adapter uses explicit external fallback', async ({ page }) => {
-  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'adapter', adapterId: 'uninstalled', fallback: 'external' }] }));
-  await enter(page, 'E2EAdapterFallback');
+
+test('missing native handler uses explicit external fallback', async ({ page }) => {
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'native', fallback: 'external' }] }));
+  await enter(page, 'E2ENativeFallback');
   const observer = await observe();
   try {
     await walkToTool(page, observer, toolCases[1]);

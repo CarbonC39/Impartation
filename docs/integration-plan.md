@@ -10,7 +10,7 @@ Integration 由地图中的交互区域触发。交互类型与展示模式分�
 EXTERNAL_TOOLS='{"shared-canvas":{"kind":"whiteboard","url":"https://board.example.com/boards/workspace"}}'
 ```
 
-资源键对应地图 `resourceId`。配置项包含 `kind` 和所需的页面地址 `url`，可选字段用于指定 `mode`、`adapterId` 和 `fallback`。mode 可为 `native`、`overlay`、`embed`、`external` 或 `adapter`。未指定 mode 时按 `external` 处理；adapter 无可用实现时可选择回退展示。`external`/`embed`/`overlay` 需要 `url`；`native`/`adapter` 需要 `adapterId`。`fallback` 当前仅接受 `external`，且要求 `url`。
+资源键对应地图 `resourceId`。配置项包含 `kind`，并可选 `mode`、`url` 和 `fallback`。mode 仅为 `native`、`embed` 或 `external`；旧 `{ kind, url }` 格式未指定 mode 时按 `external` 处理。`embed` 和 `external` 必须提供 `url`；`native` 不需要 URL。若 native kind 没有已注册 handler，可设置 `fallback: "external"`，此时必须提供 `url`。
 
 URL 必须是绝对 HTTP(S) 地址，不得嵌入用户名或密码。不要配置 token、项目 user id、role 或邀请凭据。手机的 `localhost` 指向手机自身，Docker 内部服务名也不是公开页面地址。Drawpile 应配置其浏览器 Web 客户端入口，而非 TCP 服务端口。配置变更后重启后端。
 
@@ -31,11 +31,11 @@ URL 必须是绝对 HTTP(S) 地址，不得嵌入用户名或密码。不要配�
 
 ## 展示模式与安全边界
 
-- `native` 使用宿主面板/handler。留言板、番茄钟直接注册现有面板 handler；外置描述选择 native 时需要已注册的 `adapterId`，配置不会凭空提供内置 UI。
-- `overlay` 和 `embed` 将配置页面放在沙盒 iframe 容器中。sandbox 开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。服务需要其他浏览器能力或禁止 iframe 时，应选 external 或显式 adapter；工具仍负责自身登录与权限。
+- `native` 按 integration kind 查找 handler。通过 `PresentationRegistry.registerNative(kind, handler)` 显式注册；board/pomodoro 现有面板 handler 属于 native。外置 integration 设置 native 不会自动提供 UI。可将自定义 registry 传给 `createInteractions(room, presentations)`。
+- `embed` 将配置页面放在沙盒 iframe 容器中。sandbox 开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。服务需要其他浏览器能力或禁止 iframe 时，应选 external；工具仍负责自身登录与权限。
 - `external` 打开可访问的原生页面。
-- `adapter` 调用 `PresentationRegistry.registerAdapter(id, handler)` 显式注册的 adapter；配置 adapter id 不会自动安装服务或适配器。可配置 fallback 处理缺少 adapter 的情况。
+- `fallback: "external"` 可用于 native handler 缺失时打开 `url`；该 fallback 要求 URL。
 
 显示入口不构成访问授权。服务器仍需校验有效身份、当前连接、玩家所在地图、真实位置和操作速率。Portal 请求也由服务器校验当前玩家位置与目标地图/出生点。项目不代理工具流量、不签发工具凭据、不传递项目身份或管理员角色；代理门禁由部署者配置。
 
-扩展客户端时，可将自定义 `PresentationRegistry` 传给 `createInteractions(room, presentations)`。交互 handler 的接入点为 `features.ts` 的 composition root；通用 `InteractionDispatcher` 只负责区域、连接和清理事件，不包含留言板或番茄钟分支。服务端 integration 在 `integrations/index.ts` 注册，消息和生命周期由 `registerServerInteractions` 合成，并拒绝重复消息名。
+交互 handler 的接入点为 `features.ts` 的 composition root；通用 `InteractionDispatcher` 只负责区域、连接和清理事件，不包含留言板或番茄钟分支。服务端 integration 在 `integrations/index.ts` 注册，消息和生命周期由 `registerServerInteractions` 合成，并拒绝重复消息名。

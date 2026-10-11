@@ -40,20 +40,23 @@ for (const url of ['javascript:alert(1)', 'data:text/html,hello', 'file:///tmp/t
   });
 }
 
-test('presentation modes are independent of service kind, with explicit adapter and external fallback', () => {
-  for (const mode of ['external', 'embed', 'overlay', 'native', 'adapter']) {
+test('presentation configuration accepts native, embed and external with explicit external fallback', () => {
+  for (const mode of ['external', 'embed', 'native']) {
     const entry = { kind: 'whiteboard', mode, url: 'https://board.example/',
-      ...(['native', 'adapter'].includes(mode) ? { adapterId: 'canvas-view', fallback: 'external' } : {}) };
+      ...(mode === 'native' ? { fallback: 'external' } : {}) };
     assert.deepEqual(loadExternalTools(JSON.stringify({ 'shared-canvas': entry }), [world]), [{ resourceId: 'shared-canvas', ...entry }]);
   }
-  assert.deepEqual(loadExternalTools(JSON.stringify({ 'shared-canvas': { kind: 'whiteboard', mode: 'native', adapterId: 'canvas-view' } }), world),
-    [{ resourceId: 'shared-canvas', kind: 'whiteboard', mode: 'native', adapterId: 'canvas-view' }]);
+  assert.deepEqual(loadExternalTools(JSON.stringify({ 'shared-canvas': { kind: 'whiteboard', mode: 'native' } }), world),
+    [{ resourceId: 'shared-canvas', kind: 'whiteboard', mode: 'native' }]);
   for (const entry of [
     { kind: 'whiteboard', mode: 'unknown', url: 'https://board.example/' },
     { kind: 'whiteboard', mode: 'embed' },
+    { kind: 'whiteboard', mode: 'external' },
+    { kind: 'whiteboard', mode: 'overlay', url: 'https://board.example/' },
     { kind: 'whiteboard', mode: 'adapter', url: 'https://board.example/' },
-    { kind: 'whiteboard', mode: 'adapter', adapterId: 'view', fallback: 'external' },
-    { kind: 'whiteboard', mode: 'adapter', adapterId: 'view', fallback: 'unknown' },
+    { kind: 'whiteboard', mode: 'native', adapterId: 'view' },
+    { kind: 'whiteboard', mode: 'native', fallback: 'external' },
+    { kind: 'whiteboard', mode: 'native', url: 'https://board.example/', fallback: 'unknown' },
   ]) assert.throws(() => loadExternalTools(JSON.stringify({ 'shared-canvas': entry }), world));
 });
 

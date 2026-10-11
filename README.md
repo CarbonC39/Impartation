@@ -2,7 +2,7 @@
 
 基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
 
-Integration 按 `native`、`overlay`、`embed`、`external` 或 `adapter` presentation mode 展示。外置服务保留自己的账号和权限；项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
+Integration 按 `native`、`embed` 或 `external` presentation mode 展示。外置服务保留自己的账号和权限；项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
 
 ## 本地运行
 

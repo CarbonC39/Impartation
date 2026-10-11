@@ -54,9 +54,9 @@ Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 
 内置留言板与番茄钟分别注册为 `board`、`pomodoro`，按 `resourceId` 归属数据。地图中的已有外置入口类型为 `media`、`whiteboard`、`drawing` 和 `document`。地图对象的 `name` 标识区域，`resourceId` 标识共享资源；多个区域可引用相同资源。
 
-展示由 presentation mode 决定：`native` 使用项目现有面板/handler；`overlay` 与 `embed` 在沙盒 iframe 容器内呈现；`external` 打开配置的原生页面；`adapter` 调用已注册的客户端 adapter。模式和 adapter 选择属于 integration 描述，不改变服务器端身份、位置或权限校验。adapter 必须由项目代码显式注册；接入契约不自动增加第三方服务适配器，也不提供身份映射。
+展示由 presentation mode 决定：`native` 按 integration kind 查找通过 `PresentationRegistry.registerNative(kind, handler)` 显式注册的 handler；`embed` 在沙盒 iframe 容器内呈现配置页面；`external` 打开配置的原生页面。可将自定义 registry 传给 `createInteractions(room, presentations)`。现有 board/pomodoro 面板 handler 属于 native。外置 integration 选择 native 不会自动提供 UI；找不到 handler 时可配置 `fallback: "external"`，且必须提供 URL。embed/external 需要 URL。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
 
-现有 `EXTERNAL_TOOLS` 的 `{ kind, url }` 配置继续有效，并默认采用 `external`。可选 mode、adapter id 和 fallback 由接入配置定义；公共配置不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
+现有 `EXTERNAL_TOOLS` 的 `{ kind, url }` 配置继续有效，并默认采用 `external`。可选 mode 为 `native`、`embed`、`external`；可为 native handler 配置 external fallback。公共配置不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
 
 ## 校验与发布
 

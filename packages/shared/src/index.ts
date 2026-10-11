@@ -60,21 +60,17 @@ export const externalToolUrlSchema = z.url().refine(value => {
   const url = new URL(value);
   return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
 }, 'Tool URLs must use HTTP(S) without embedded credentials');
-export const presentationModeSchema = z.enum(['native', 'overlay', 'embed', 'external', 'adapter']);
+export const presentationModeSchema = z.enum(['native', 'embed', 'external']);
 export type PresentationMode = z.infer<typeof presentationModeSchema>;
 export const externalToolConfigSchema = z.object({
   kind: externalToolKindSchema,
   mode: presentationModeSchema.optional(),
   url: externalToolUrlSchema.optional(),
-  adapterId: z.string().trim().min(1).max(128).optional(),
   fallback: z.literal('external').optional(),
 }).strict().superRefine((entry, ctx) => {
   const mode = entry.mode ?? 'external';
-  if ((['external', 'embed', 'overlay'].includes(mode) || entry.fallback === 'external') && !entry.url) {
+  if ((mode === 'external' || mode === 'embed' || entry.fallback === 'external') && !entry.url) {
     ctx.addIssue({ code: 'custom', message: 'This presentation requires a URL', path: ['url'] });
-  }
-  if (['native', 'adapter'].includes(mode) && !entry.adapterId) {
-    ctx.addIssue({ code: 'custom', message: 'Native and adapter presentations require a registered adapterId', path: ['adapterId'] });
   }
 });
 export const externalToolsConfigSchema = z.record(resourceIdSchema, externalToolConfigSchema);

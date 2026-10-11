@@ -5,15 +5,14 @@ export type Presentation = (tool: ExternalTool, host: HTMLElement) => () => void
 /** Presentation strategies are independent of interaction kinds and service protocols. */
 export class PresentationRegistry {
   private strategies = new InteractionRegistry<Presentation>();
-  private adapters = new InteractionRegistry<Presentation>();
+  private nativeHandlers = new InteractionRegistry<Presentation>();
 
   register(mode: PresentationMode, strategy: Presentation): this { this.strategies.register(mode, strategy); return this; }
-  registerAdapter(id: string, adapter: Presentation): this { this.adapters.register(id, adapter); return this; }
+  registerNative(kind: string, handler: Presentation): this { this.nativeHandlers.register(kind, handler); return this; }
 
   open(tool: ExternalTool, host: HTMLElement): () => void {
     const mode = tool.mode ?? 'external';
-    const strategy = this.strategies.get(mode) ??
-      (mode === 'native' || mode === 'adapter' ? this.adapters.get(tool.adapterId ?? '') : undefined);
+    const strategy = (mode === 'native' ? this.nativeHandlers.get(tool.kind) : undefined) ?? this.strategies.get(mode);
     if (strategy) return strategy(tool, host);
     if (tool.fallback === 'external') return this.open({ ...tool, mode: 'external', fallback: undefined }, host);
     throw new Error('此展示方式尚未注册');
@@ -37,21 +36,11 @@ const embed: Presentation = (tool, host) => {
   const fallback = tool.fallback === 'external' ? external(tool, host) : undefined;
   return () => { frame.remove(); fallback?.(); };
 };
-const overlay: Presentation = (tool, host) => {
-  const dialog = document.createElement('dialog');
-  const close = document.createElement('button');
-  close.type = 'button'; close.textContent = '关闭';
-  close.addEventListener('click', () => dialog.close());
-  dialog.append(close); host.append(dialog);
-  const cleanup = embed(tool, dialog);
-  dialog.showModal();
-  return () => { cleanup(); dialog.close(); dialog.remove(); };
-};
 export function createPresentations(existingLink?: HTMLAnchorElement) {
   const externalStrategy: Presentation = existingLink ? (tool, _host) => {
     if (!tool.url) throw new Error('Missing external URL');
     existingLink.href = tool.url; existingLink.hidden = false;
     return () => { existingLink.hidden = true; existingLink.removeAttribute('href'); };
   } : external;
-  return new PresentationRegistry().register('external', externalStrategy).register('embed', embed).register('overlay', overlay);
+  return new PresentationRegistry().register('external', externalStrategy).register('embed', embed);
 }
