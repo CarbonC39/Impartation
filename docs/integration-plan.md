@@ -1,55 +1,41 @@
-# 外部工具入口
+# Integration 展示配置
 
-走进地图功能区后，点击链接在新标签页打开工具原生页面。工具使用自己的账号、权限、内容存储和协作机制；项目提供地址配置，不启动容器、不嵌入 iframe、不同步项目身份和管理员权限。
+Integration 由地图中的交互区域触发。交互类型与展示模式分开：Tiled `class`/`type` 选择注册的 integration，presentation mode 决定前端如何呈现。
 
-## 配置
+## 外置入口配置
 
-在宿主机部署工具，先确认其页面能从使用设备访问，再将地址写到根目录 `.env`：
+宿主机部署服务并确认浏览器可访问后，在根目录 `.env` 配置 `EXTERNAL_TOOLS`。旧格式继续有效，默认使用 `external`：
 
 ```dotenv
 EXTERNAL_TOOLS='{"shared-canvas":{"kind":"whiteboard","url":"https://board.example.com/boards/workspace"}}'
 ```
 
-替换示例域名和路径。可以只配置需要的资源，默认 `{}` 表示全部未配置。完整示例见 [`.env.example`](../.env.example)。修改后重启后端，无需重建前端。
+资源键对应地图 `resourceId`。配置项包含 `kind` 和所需的页面地址 `url`，可选字段用于指定 `mode`、`adapterId` 和 `fallback`。mode 可为 `native`、`overlay`、`embed`、`external` 或 `adapter`。未指定 mode 时按 `external` 处理；adapter 无可用实现时可选择回退展示。`external`/`embed`/`overlay` 需要 `url`；`native`/`adapter` 需要 `adapterId`。`fallback` 当前仅接受 `external`，且要求 `url`。
 
-| 默认 resourceId | kind | 功能 |
+URL 必须是绝对 HTTP(S) 地址，不得嵌入用户名或密码。不要配置 token、项目 user id、role 或邀请凭据。手机的 `localhost` 指向手机自身，Docker 内部服务名也不是公开页面地址。Drawpile 应配置其浏览器 Web 客户端入口，而非 TCP 服务端口。配置变更后重启后端。
+
+现有示例资源可在自定义地图中复用：
+
+| resourceId | kind | 功能 |
 | --- | --- | --- |
 | `shared-canvas` | `whiteboard` | 白板 |
 | `shared-drawing` | `drawing` | 共同作画 |
 | `lounge-screen` | `media` | 同步观看 |
 | `shared-document` | `document` | 协作文档 |
 
-`EXTERNAL_TOOLS` 必须是 JSON 对象，key 为地图 `resourceId`，value 只包含 `kind` 和 `url`：
+## World API 与资源
 
-- `kind` 必须与引用该资源的所有地图区域一致，只接受表中的四类。
-- `url` 必须是绝对 HTTP(S) 地址，不得内嵌用户名或密码；配置不能额外加入 token/role 等字段。
-- 地址可指向固定白板、文档或房间，也可指向工具大厅。同一资源的所有入口使用同一 URL，资源创建与成员设置由工具管理。
-- 使用浏览器可访问的地址；手机的 `localhost` 指向手机自身，Docker 内部服务名也不是发布地址。Drawpile 需填写 Web 客户端页面，TCP 服务端口不能作为网页入口。
+`GET /api/world` 公开返回初始地图 ID 和 registry 地图目录。每个地图条目包含 `id`、地图 JSON `url`、`defaultSpawn` 和服务端提取的权威 `world` 语义数据。规范化 Tiled JSON 位于地图条目的 URL；明确引用的图像资源通过其相对 API 路径提供。API 不要求 session。
 
-非法 JSON、未知资源、类型不符或非法 URL 会导致后端启动失败。自定义地图格式见[地图说明](tiled.md)。
+`GET /api/tools` 公开返回配置的 presentation 描述。响应不得包含凭据；客户端按当前交互的 `kind`/`resourceId` 和 mode 展示入口。地图与工具地址都是公开给浏览器的配置，不应放私密邀请 token。
 
-## API
+## 展示模式与安全边界
 
-`GET /api/tools` 公开返回已配置入口，响应设为 `Cache-Control: no-store`：
+- `native` 使用宿主面板/handler。留言板、番茄钟直接注册现有面板 handler；外置描述选择 native 时需要已注册的 `adapterId`，配置不会凭空提供内置 UI。
+- `overlay` 和 `embed` 将配置页面放在沙盒 iframe 容器中。sandbox 开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。服务需要其他浏览器能力或禁止 iframe 时，应选 external 或显式 adapter；工具仍负责自身登录与权限。
+- `external` 打开可访问的原生页面。
+- `adapter` 调用 `PresentationRegistry.registerAdapter(id, handler)` 显式注册的 adapter；配置 adapter id 不会自动安装服务或适配器。可配置 fallback 处理缺少 adapter 的情况。
 
-```json
-[
-  {
-    "resourceId": "shared-canvas",
-    "kind": "whiteboard",
-    "url": "https://board.example.com/boards/workspace"
-  }
-]
-```
+显示入口不构成访问授权。服务器仍需校验有效身份、当前连接、玩家所在地图、真实位置和操作速率。Portal 请求也由服务器校验当前玩家位置与目标地图/出生点。项目不代理工具流量、不签发工具凭据、不传递项目身份或管理员角色；代理门禁由部署者配置。
 
-该 API 不要求匿名 session，不创建身份或签发工具凭据。配置地址会公开发送到浏览器，因此不要放管理凭据或私密邀请 token。
-
-## 访问行为
-
-未配置的区域提示缺少工具地址。配置 API 加载失败或返回非法数据时显示错误，重新进入空间后再请求；不影响移动、聊天、留言板和番茄钟。工具本身不可用时，由新标签页显示错误，项目不探测或重试工具服务。
-
-链接使用 `noopener noreferrer`；离开区域或空间后隐藏链接，已打开的工具会话继续由工具管理。地图入口的显示不构成访问授权，项目 session 失效或管理员角色变化不会撤销工具权限。
-
-项目不代理工具请求，也不在 URL 中附加身份、角色或 Basic Auth 凭据。浏览器仍按目标地址与 Cookie/HTTP 认证规则携带已有凭据，同域子路径部署尤其如此。代理门禁由部署者配置。
-
-内置与外置工具的分类和权限边界见[接入说明](integrations.md)；入口测试和真实服务验收的区别见[测试说明](testing.md)。
+扩展客户端时，可将自定义 `PresentationRegistry` 传给 `createInteractions(room, presentations)`。交互 handler 的接入点为 `features.ts` 的 composition root；通用 `InteractionDispatcher` 只负责区域、连接和清理事件，不包含留言板或番茄钟分支。服务端 integration 在 `integrations/index.ts` 注册，消息和生命周期由 `registerServerInteractions` 合成，并拒绝重复消息名。

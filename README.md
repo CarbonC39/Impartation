@@ -1,8 +1,8 @@
 # Virtual Workspace
 
-基于 Phaser、Colyseus 和 Tiled 的 2D 多人社交/协作/活动空间，支持自定义地图事件和许多小工具。
+基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
 
-外部工具在新标签页打开，使用各自的账号和权限；项目不提供编辑器或播放同步。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
+Integration 按 `native`、`overlay`、`embed`、`external` 或 `adapter` presentation mode 展示。外置服务保留自己的账号和权限；项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
 
 ## 本地运行
 
@@ -33,13 +33,13 @@ npm run dev
 
 ## 配置与部署
 
-根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。
+根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。地图契约与渲染边界见[地图制作](docs/tiled.md)。
 
-生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。前端单独托管，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份与工具配置 API 始终使用同源 `/api`。
+生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。前端单独托管，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
 
 SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，需持久化并备份。HTTP Basic Auth 由部署者的代理提供。
 
-用 `EXTERNAL_TOOLS` 关联已有工具的页面地址，默认 `{}` 表示未配置；设置方法见[外部工具入口](docs/integration-plan.md)。本项目不启动 Docker 容器，实际工具的部署和使用需另行验证。
+用 `EXTERNAL_TOOLS` 关联已有工具的页面地址和 presentation 配置；旧 `{ kind, url }` 格式默认采用 `external`。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
 
 ## 文档
 

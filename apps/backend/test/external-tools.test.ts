@@ -39,3 +39,25 @@ for (const url of ['javascript:alert(1)', 'data:text/html,hello', 'file:///tmp/t
     assert.throws(() => loadExternalTools(JSON.stringify({ 'shared-canvas': { kind: 'whiteboard', url } }), world));
   });
 }
+
+test('presentation modes are independent of service kind, with explicit adapter and external fallback', () => {
+  for (const mode of ['external', 'embed', 'overlay', 'native', 'adapter']) {
+    const entry = { kind: 'whiteboard', mode, url: 'https://board.example/',
+      ...(['native', 'adapter'].includes(mode) ? { adapterId: 'canvas-view', fallback: 'external' } : {}) };
+    assert.deepEqual(loadExternalTools(JSON.stringify({ 'shared-canvas': entry }), [world]), [{ resourceId: 'shared-canvas', ...entry }]);
+  }
+  assert.deepEqual(loadExternalTools(JSON.stringify({ 'shared-canvas': { kind: 'whiteboard', mode: 'native', adapterId: 'canvas-view' } }), world),
+    [{ resourceId: 'shared-canvas', kind: 'whiteboard', mode: 'native', adapterId: 'canvas-view' }]);
+  for (const entry of [
+    { kind: 'whiteboard', mode: 'unknown', url: 'https://board.example/' },
+    { kind: 'whiteboard', mode: 'embed' },
+    { kind: 'whiteboard', mode: 'adapter', url: 'https://board.example/' },
+    { kind: 'whiteboard', mode: 'adapter', adapterId: 'view', fallback: 'external' },
+    { kind: 'whiteboard', mode: 'adapter', adapterId: 'view', fallback: 'unknown' },
+  ]) assert.throws(() => loadExternalTools(JSON.stringify({ 'shared-canvas': entry }), world));
+});
+
+test('resource kind consistency is checked across every registered map', () => {
+  const other = { ...world, zones: [{ ...world.zones[0], resourceId: 'shared-canvas' }] };
+  assert.throws(() => loadExternalTools(JSON.stringify({ 'shared-canvas': { kind: 'whiteboard', url: 'https://board.example/' } }), [world, other]));
+});

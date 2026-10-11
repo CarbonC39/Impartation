@@ -7,10 +7,10 @@ import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, identityFromHeaders, ensureProfile, updateProfile } from './identity.js';
 import { joinSchema } from '@virtual-workspace/shared';
 import { config } from './config.js';
-import { world } from './world.js';
+import { worldRegistry, renderMaps, worldAssets } from './world.js';
 import { loadExternalTools } from './external-tools.js';
 
-const externalTools = loadExternalTools(config.EXTERNAL_TOOLS, world);
+const externalTools = loadExternalTools(config.EXTERNAL_TOOLS, worldRegistry.maps.map(map => map.world));
 
 export const server = defineServer({
   transport: new WebSocketTransport(),
@@ -30,6 +30,17 @@ export const server = defineServer({
       return handleAuth(req, res);
     });
     app.use('/api', express.json({ limit: '16kb' }));
+    app.get('/api/world', (_req, res) => { res.json(worldRegistry); });
+    app.get('/api/maps/:id/map.json', (req, res) => {
+      const map = renderMaps.get(req.params.id);
+      if (!map) { res.sendStatus(404); return; }
+      res.json(map);
+    });
+    app.get('/api/maps/:id/assets/:asset', (req, res) => {
+      const file = worldAssets.get(`${req.params.id}/${req.params.asset}`);
+      if (!file) { res.sendStatus(404); return; }
+      res.sendFile(file);
+    });
     app.get('/api/tools', (_req, res) => { res.json(externalTools); });
     app.get('/api/me', async (req, res) => {
       const identity = await identityFromHeaders(fromNodeHeaders(req.headers), cookies => {
