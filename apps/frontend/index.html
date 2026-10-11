@@ -9,17 +9,57 @@
   <body>
     <main>
       <h1>Virtual Workspace</h1>
-      <p>开发验证：访客联机、Tiled 地图与文字聊天。账号功能稍后接入。</p>
+      <p>访客联机、文字聊天、留言板、共享番茄钟与外部工具入口。正式账号功能稍后接入。</p>
       <form id="join-form">
         <label>昵称 <input id="name" maxlength="24" value="访客" required /></label>
         <label>外观 <select id="avatar"><option value="mint">薄荷</option><option value="amber">琥珀</option><option value="violet">紫罗兰</option></select></label>
         <button id="join" type="submit">进入空间</button>
         <button id="leave" type="button" disabled>离开</button>
       </form>
+      <details>
+        <summary>跨设备身份</summary>
+        <p id="identity-status">尚未创建身份</p>
+        <p>首次进入时保存访客身份。可用一次性绑定码让桌面、手机和网页共用此身份。</p>
+        <form id="identity-form">
+          <label>绑定码 <input id="identity-code" maxlength="32" autocomplete="off" required /></label>
+          <button id="identity-export" type="button" disabled>生成绑定码</button>
+          <button id="identity-import" type="submit">绑定此身份</button>
+        </form>
+        <p id="identity-feedback" role="status"></p>
+      </details>
       <p id="status" role="status" aria-live="polite">尚未连接</p>
       <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"></div>
-      <p>WASD / 方向键移动；输入文字时暂停移动。彩色区域是未来功能的触发点。</p>
+      <p>WASD / 方向键移动；输入文字时暂停移动。走进地图标出的功能区即可使用。</p>
       <p id="zone" role="status">当前区域：无</p>
+      <section id="tool-panel" class="feature-panel" aria-labelledby="tool-heading" hidden>
+        <h2 id="tool-heading">外部工具</h2>
+        <p id="tool-status" role="status"></p>
+        <a id="tool-open" target="_blank" rel="noopener noreferrer" hidden>打开工具</a>
+      </section>
+      <section id="board-panel" class="feature-panel" aria-labelledby="board-heading" hidden>
+        <h2 id="board-heading">留言板 <small id="board-count">0 / 100 条</small></h2>
+        <p>留言会保存。同一身份可以删除自己的留言，管理员可删除所有留言。</p>
+        <ol id="board-notes" aria-label="已发布留言"></ol>
+        <form id="board-form">
+          <label for="board-text">写一条留言</label>
+          <textarea id="board-text" maxlength="500" rows="3" placeholder="想和大家分享什么？" required></textarea>
+          <button id="board-post" type="submit">发布留言</button>
+        </form>
+      </section>
+      <section id="pomodoro-panel" class="feature-panel" aria-labelledby="pomodoro-heading" hidden>
+        <h2 id="pomodoro-heading">共享番茄钟</h2>
+        <p>同房间共享计时，区域内访客均可控制；本轮结束后手动开始下一轮。</p>
+        <p id="pomodoro-status" role="status">准备开始</p>
+        <output id="pomodoro-time" aria-label="剩余时间">25:00</output>
+        <div class="timer-controls">
+          <label>模式 <select id="pomodoro-mode"><option value="focus">专注 · 25 分钟</option><option value="break">休息 · 5 分钟</option></select></label>
+          <button id="pomodoro-start" type="button">开始</button>
+          <button id="pomodoro-pause" type="button" disabled>暂停</button>
+          <button id="pomodoro-resume" type="button" disabled>继续</button>
+          <button id="pomodoro-reset" type="button">重置</button>
+        </div>
+      </section>
+      <p id="feature-status" role="status" aria-live="polite"></p>
       <section aria-label="房间聊天">
         <h2>房间聊天</h2>
         <ol id="messages" role="log" aria-live="polite"></ol>

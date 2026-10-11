@@ -8,16 +8,18 @@
     "start": "node --env-file-if-exists=../../.env build/index.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 test/*.test.ts"
+    "test": "tsx --test --test-concurrency=1 test/*.test.ts",
+    "identity": "tsx --env-file-if-exists=../../.env src/identity-cli.ts"
   },
   "dependencies": {
-    "@virtual-workspace/shared": "*",
+    "@colyseus/core": "~0.18.18",
     "@colyseus/tools": "~0.18.7",
+    "@colyseus/ws-transport": "~0.18.4",
+    "@virtual-workspace/shared": "*",
+    "better-auth": "^1.7.7",
     "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",
-    "zod": "^4.1.12",
-    "@colyseus/core": "~0.18.18",
-    "@colyseus/ws-transport": "~0.18.4"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@colyseus/sdk": "~0.18.5",

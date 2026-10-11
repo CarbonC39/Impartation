@@ -10,7 +10,7 @@
   "tilewidth": 32,
   "tileheight": 32,
   "nextlayerid": 5,
-  "nextobjectid": 7,
+  "nextobjectid": 9,
   "layers": [
     {
       "id": 1,
@@ -531,6 +531,34 @@
               "type": "string",
               "value": "focus-corner"
             }
+          ]
+        },
+        {
+          "id": 7,
+          "name": "shared-drawing",
+          "x": 64,
+          "y": 192,
+          "width": 160,
+          "height": 96,
+          "rotation": 0,
+          "type": "drawing",
+          "visible": true,
+          "properties": [
+            { "name": "resourceId", "type": "string", "value": "shared-drawing" }
+          ]
+        },
+        {
+          "id": 8,
+          "name": "shared-document",
+          "x": 480,
+          "y": 192,
+          "width": 160,
+          "height": 96,
+          "rotation": 0,
+          "type": "document",
+          "visible": true,
+          "properties": [
+            { "name": "resourceId", "type": "string", "value": "shared-document" }
           ]
         }
       ],

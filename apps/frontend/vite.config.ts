@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
       port: 5173, strictPort: true,
       proxy: {
         '/health': backend,
+        '/api': backend,
         '/matchmake': backend,
         '^/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+(?:\\?|$)': { target: backend, ws: true },
       },
