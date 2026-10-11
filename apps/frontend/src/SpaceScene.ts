@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
 import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
 import { PLAYER_RADIUS, TICK_MS, type WorldMap, type MovementInput } from '@virtual-workspace/shared';
+import { zoneLabels } from './zone-labels';
 
 const colors: Record<string, number> = { mint: 0x88dbb4, amber: 0xefbd65, violet: 0xbb9de8 };
 
@@ -28,7 +29,7 @@ export class SpaceScene extends Phaser.Scene {
     for (const zone of this.world.zones) {
       this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
         .setOrigin(0).setStrokeStyle(1, 0xd5d080, 0.6);
-      this.add.text(zone.x + 8, zone.y + 8, zone.kind, { fontSize: '14px', color: '#eeefd9' });
+      this.add.text(zone.x + 8, zone.y + 8, zoneLabels[zone.kind], { fontSize: '14px', color: '#eeefd9' });
     }
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT', false) as Record<string, Phaser.Input.Keyboard.Key>;
     const canvas = this.game.canvas;

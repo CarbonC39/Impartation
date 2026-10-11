@@ -9,7 +9,7 @@
   <body>
     <main>
       <h1>Virtual Workspace</h1>
-      <p>访客联机、文字聊天、留言板与共享番茄钟。账号功能稍后接入。</p>
+      <p>访客联机、文字聊天、留言板、共享番茄钟与外部工具入口。正式账号功能稍后接入。</p>
       <form id="join-form">
         <label>昵称 <input id="name" maxlength="24" value="访客" required /></label>
         <label>外观 <select id="avatar"><option value="mint">薄荷</option><option value="amber">琥珀</option><option value="violet">紫罗兰</option></select></label>
@@ -29,8 +29,13 @@
       </details>
       <p id="status" role="status" aria-live="polite">尚未连接</p>
       <div id="game" aria-label="空间地图，使用 WASD 或方向键移动"></div>
-      <p>WASD / 方向键移动；输入文字时暂停移动。走进右下方留言板或左下方番茄钟区域即可使用。</p>
+      <p>WASD / 方向键移动；输入文字时暂停移动。走进地图标出的功能区即可使用。</p>
       <p id="zone" role="status">当前区域：无</p>
+      <section id="tool-panel" class="feature-panel" aria-labelledby="tool-heading" hidden>
+        <h2 id="tool-heading">外部工具</h2>
+        <p id="tool-status" role="status"></p>
+        <a id="tool-open" target="_blank" rel="noopener noreferrer" hidden>打开工具</a>
+      </section>
       <section id="board-panel" class="feature-panel" aria-labelledby="board-heading" hidden>
         <h2 id="board-heading">留言板 <small id="board-count">0 / 100 条</small></h2>
         <p>留言会保存。同一身份可以删除自己的留言，管理员可删除所有留言。</p>

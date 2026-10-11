@@ -9,7 +9,7 @@ const world = parseWorldMap(raw);
 test('Tiled fixture supplies spawn, collision geometry, and resource zones', () => {
   assert.deepEqual(world.spawn, { x: 352, y: 384 });
   assert.equal(world.collisions.length, 1);
-  assert.deepEqual(world.zones.map(zone => zone.kind), ['media', 'whiteboard', 'board', 'pomodoro']);
+  assert.deepEqual(world.zones.map(zone => zone.kind), ['media', 'whiteboard', 'board', 'pomodoro', 'drawing', 'document']);
   assert.equal(world.zones[0].resourceId, 'lounge-screen');
   assert.equal(contains(world.zones[0], 64, 64), true);
   assert.equal(contains(world.zones[0], 224, 64), false);

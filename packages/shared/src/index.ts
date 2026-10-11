@@ -92,7 +92,18 @@ const groundSchema = z.object({
   data: z.array(z.number().int().min(0).max(0xffffffff)),
 });
 export type Rect = { x: number; y: number; width: number; height: number };
-export const zoneKindSchema = z.enum(['media', 'whiteboard', 'board', 'pomodoro']);
+export const externalToolKindSchema = z.enum(['media', 'whiteboard', 'drawing', 'document']);
+export const externalToolUrlSchema = z.url().refine(value => {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+}, 'Tool URLs must use HTTP(S) without embedded credentials');
+export const externalToolConfigSchema = z.object({ kind: externalToolKindSchema, url: externalToolUrlSchema }).strict();
+export const externalToolsConfigSchema = z.record(resourceIdSchema, externalToolConfigSchema);
+export const externalToolSchema = externalToolConfigSchema.extend({ resourceId: resourceIdSchema });
+export const externalToolsSchema = z.array(externalToolSchema);
+export type ExternalTool = z.infer<typeof externalToolSchema>;
+export const zoneKindSchema = z.enum(['media', 'whiteboard', 'drawing', 'document', 'board', 'pomodoro']);
 export type Zone = Rect & { id: string; kind: z.infer<typeof zoneKindSchema>; resourceId: string };
 export type WorldMap = {
   width: number; height: number; spawn: { x: number; y: number };

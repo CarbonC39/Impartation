@@ -1,6 +1,7 @@
 import type { Room } from '@colyseus/sdk';
 import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
 import { boardPostSchema, pomodoroModeSchema, type FeatureResult, type Zone } from '@virtual-workspace/shared';
+import { ExternalToolPanel } from './external-tools';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -9,6 +10,7 @@ function element<T extends HTMLElement>(id: string): T {
 }
 
 export class FeaturePanels {
+  private tools = new ExternalToolPanel();
   private board = element('board-panel');
   private pomodoro = element('pomodoro-panel');
   private notes = element<HTMLOListElement>('board-notes');
@@ -70,6 +72,7 @@ export class FeaturePanels {
     this.text.value = '';
     this.board.hidden = zone?.kind !== 'board';
     this.pomodoro.hidden = zone?.kind !== 'pomodoro';
+    this.tools.setZone(zone);
     this.renderNotes();
     this.renderTimer();
   }
@@ -84,6 +87,7 @@ export class FeaturePanels {
 
   dispose() {
     this.disposed = true;
+    this.tools.dispose();
     this.controller.abort();
     clearInterval(this.interval);
     this.room.onStateChange.remove(this.renderState);

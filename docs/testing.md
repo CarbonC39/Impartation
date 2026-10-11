@@ -1,19 +1,24 @@
-# 测试与验收
+# 测试
 
-## 命令
+## 运行
+
+安装项目依赖后执行：
 
 ```sh
-npm ci
 npm run check
 npx playwright install chromium
 npm run test:e2e
-# 或在浏览器准备好后一次执行：
-npm run check:all
 ```
 
-根目录 `check` 依次运行全部 workspace 和 E2E 代码的 TypeScript 检查、Node 测试和生产构建；它不运行浏览器测试。`test:e2e` 使用 Chromium，并自动启动开发服务；本地已有服务时会复用它。首次需要下载浏览器；Linux 缺系统依赖时按 Playwright 提示安装。可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定现有 Chromium。
+| 命令 | 执行内容 |
+| --- | --- |
+| `npm test` | Node 协议、存储、配置、HTTP 和真实 WebSocket 测试 |
+| `npm run typecheck` | 所有 workspace 及 E2E 代码的 strict 类型检查 |
+| `npm run check` | 类型检查、Node 测试和生产构建 |
+| `npm run test:e2e` | Chromium 浏览器测试 |
+| `npm run check:all` | `check` 后执行浏览器测试 |
 
-NixOS 上下载的通用 Linux 浏览器可能缺动态库，可用 Nix 提供的 Chromium：
+Playwright 自动启动开发服务；非 CI 环境会复用已运行的服务。Linux 缺系统依赖时按 Playwright 提示安装，或通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定现有 Chromium。NixOS 可使用：
 
 ```sh
 nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromium)" npm run check:all'
@@ -21,28 +26,26 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 ## 覆盖范围
 
-| 层级 | 覆盖行为 | 文件 |
+| 测试 | 覆盖行为 | 文件 |
 | --- | --- | --- |
-| 共享协议 | 昵称/头像合法与非法值、长度边界、trim、所有方向、NaN/Infinity、聊天类型与长度、留言板文本/资源 ID/UUID、番茄钟 action/mode、剥离伪造身份与计时字段 | `apps/backend/test/protocol.test.ts` |
-| 地图/移动 | 出生点、触发区资源、斜向速度、延迟步长限制、边界、墙面滑动、角落碰撞、无输入；ground/atlas、缺层、重复层、非法几何与数据 | `apps/backend/test/world.test.ts` |
-| SQLite | WAL/外键配置、项目 user_version v1-v3 升级、幂等重开、旧留言数据保留及 NULL 作者迁移、资料和留言存储、新版本拒绝 | `apps/backend/test/db.test.ts` |
-| 本地 CLI（真实磁盘子进程） | 创建匿名身份后启动真实 `npm run identity` 子进程执行 role/list；验证 admin/member 写入已打开的磁盘数据库，并拒绝未知 user、非法角色和多余参数 | `apps/backend/test/identity-cli.test.ts` |
-| HTTP 与真实 WebSocket | 匿名身份、profile 读写与 role 防伪、无效身份拒绝、持久作者归属、管理员/普通成员留言删除权限、旧留言清理、绑定码哈希/单次/过期/session 恢复、聊天限流、房间移动和重连、番茄钟 | `apps/backend/test/space.test.ts` |
-| 浏览器 | 双页面聊天、身份初始化和会话恢复、跨浏览器绑定同一身份/资料/留言权限、移动、留言与番茄钟面板、窄屏布局 | `apps/frontend/e2e/space.spec.ts` |
+| 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
+| 地图与移动 | 地图格式、出生点与功能区、碰撞、边界、斜向速度、延迟步长 | [world.test.ts](../apps/backend/test/world.test.ts) |
+| 工具配置 | 四类资源映射、未知资源、类型不符、非法 JSON/URL、内嵌密码与额外凭据字段拒绝 | [external-tools.test.ts](../apps/backend/test/external-tools.test.ts) |
+| SQLite | v1-v3 迁移、旧留言保留、持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
+| 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
+| HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开工具目录 | [space.test.ts](../apps/backend/test/space.test.ts) |
+| 浏览器 | 跨浏览器身份绑定、聊天、移动、留言、计时器、窄屏；四类工具区域、独立标签页、离开区域清理链接及配置失败提示 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
-本轮已执行 `npm run check`：strict 类型检查、109 项 Node 测试和生产构建通过；最后的客户端调整再次通过 `npm run typecheck` 和 `npm run build`。`PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指向 NixOS Chromium 后运行 `npm run test:e2e`，8 项浏览器测试通过。这些检查结果也不代表未来正式账号、影音或白板的验收。
+工具入口浏览器测试拦截 `/api/tools` 提供固定配置，以 HTML 替身模拟工具页面，并检查目标 URL、opener 和 referrer。真实 HTTP 配置响应由 Node 集成测试验证。它们不验证 WBO、Drawpile、SyncTV 或 Etherpad 的实际编辑、绘画与播放功能。
 
-## 隔离与失败排查
+## 隔离与排查
 
-- Node 联机测试使用 `@colyseus/testing`、真实 SDK 和 2568 端口；数据库设为 `:memory:`。SQLite 持久化测试使用临时目录，结束后删除。
-- 浏览器测试使用 5173/2567 端口；自动启动时设内存数据库。复用已有开发服务时会写入测试匿名身份、资料及留言；应使用独立测试服务以免留下留言。
-- 断线超时测试由服务端把测试房间的重连窗口缩短至 0.1 秒，生产默认仍为 20 秒；真实成功重连使用默认窗口。
-- 非法载荷测试会出现框架预期的校验错误日志。以测试统计及退出码为准；非法普通消息关闭发送方连接并释放座位，非法功能 request 返回错误且不修改状态、不关闭连接。
-- Playwright 失败时保留 trace 到忽略的 `test-results/`，可用 `npx playwright show-trace <trace.zip>` 排查。
-- 浏览器测试当前覆盖 Chromium；Firefox、WebKit、移动设备触控和弱网络压力测试留待对应需求阶段。当前移动支持键盘，没有触屏摇杆。
+- Node 联机测试使用 2568 端口和内存数据库；SQLite 持久化及 CLI 测试使用临时目录。
+- 浏览器测试使用 5173/2567 端口，自动启动时设内存数据库。复用现有服务时会写入测试身份、资料和留言，使用独立测试服务可避免污染本地数据。
+- 断线超时用例将测试房间的重连窗口缩短至 0.1 秒；正常重连用例仍使用默认 20 秒。
+- 非法载荷用例会产生预期校验日志，以退出码和测试统计为准。
+- Playwright 失败时保存 trace 到 `test-results/`，可用 `npx playwright show-trace TRACE_FILE` 查看。
 
-## 功能边界
+## 未覆盖项
 
-留言板数据写入 SQLite v2/v3 表；旧作者 user id 为 NULL。计时器只存在于各个房间运行状态中，房间销毁或后端重启后重置。番茄钟由房间服务端每秒核对截止时间，客户端用服务端时间快照和 `performance.now()` 平滑显示倒计时。留言操作要求匿名 session 有效、当前连接且处于对应功能区，并按连接限流 500ms；管理员权限只扩大可删除留言范围。
-
-留言删除权限绑定 Better Auth 持久 user id；20 秒断线重连保留房间连接，新的 Colyseus session 仍能以同一有效身份管理自己的留言。session 撤销或过期会阻止后续入房和功能操作。正式注册/登录仍待后续；影音阶段增加播放控制/晚加入对齐/自动播放限制；白板阶段增加并发编辑/断线合并/持久化。
+真实工具容器、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。

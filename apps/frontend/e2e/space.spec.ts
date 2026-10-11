@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
 import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
+import type { ExternalTool } from '@virtual-workspace/shared';
 
 async function enter(page: Page, name: string, avatar = 'mint') {
   await page.goto('/');
@@ -34,6 +35,89 @@ async function walkTo(page: Page, observer: Room<SpaceRoom>, name: string, kind:
     await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(zoneId);
   } finally { await page.keyboard.up(direction); }
   await expect(page.locator(`#${kind}-panel`)).toBeVisible();
+}
+
+const toolCases = [
+  { resourceId: 'shared-canvas', kind: 'whiteboard', label: '白板', x: 560 },
+  { resourceId: 'shared-drawing', kind: 'drawing', label: '共同作画', x: 144 },
+  { resourceId: 'lounge-screen', kind: 'media', label: '同步观看', x: 144 },
+  { resourceId: 'shared-document', kind: 'document', label: '协作文档', x: 560 },
+] as const;
+const toolDirectory: ExternalTool[] = toolCases.map(({ resourceId, kind }) => ({
+  resourceId, kind, url: `https://tools.example/native/${kind}`,
+}));
+
+async function walkToTool(page: Page, observer: Room<SpaceRoom>, target: typeof toolCases[number]) {
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  await expect.poll(() => observer.state.players.has(sessionId)).toBe(true);
+  await page.bringToFront();
+  await page.locator('#game canvas').scrollIntoViewIfNeeded();
+  await page.locator('#game canvas').focus();
+  const direction = target.x > 352 ? 'd' : 'a';
+  await page.keyboard.down(direction);
+  try {
+    await expect.poll(() => Math.abs(observer.state.players.get(sessionId)!.x - target.x), { intervals: [50] }).toBeLessThan(20);
+  } finally { await page.keyboard.up(direction); }
+  await page.keyboard.down('w');
+  try {
+    await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(target.resourceId);
+  } finally { await page.keyboard.up('w'); }
+  await expect(page.locator('#tool-panel')).toBeVisible();
+}
+
+for (const target of toolCases) {
+  test(`${target.kind} map entry opens its native page in an isolated tab`, async ({ page, context }) => {
+    test.setTimeout(30000);
+    await page.route('**/api/tools', route => route.fulfill({ json: toolDirectory }));
+    await context.route('https://tools.example/**', route => route.fulfill({
+      contentType: 'text/html', body: '<!doctype html><title>Native tool fixture</title><p>Tool page</p>',
+    }));
+    await enter(page, 'E2ETool');
+    const observer = await observe();
+    try {
+      await walkToTool(page, observer, target);
+      await expect(page.locator('#tool-heading')).toHaveText(target.label);
+      const url = `https://tools.example/native/${target.kind}`;
+      await expect(page.locator('#tool-open')).toHaveAttribute('href', url);
+      const popupReady = page.waitForEvent('popup');
+      await page.locator('#tool-open').click();
+      const popup = await popupReady;
+      await popup.waitForLoadState('domcontentloaded');
+      await expect(popup).toHaveURL(url);
+      expect(await popup.evaluate(() => window.opener === null)).toBe(true);
+      expect(await popup.evaluate(() => document.referrer)).toBe('');
+      await expect(page.locator('#status')).toContainText('已进入空间');
+      await popup.close();
+      await page.bringToFront();
+      await page.locator('#game canvas').focus();
+      const direction = target.x > 352 ? 'a' : 'd';
+      await page.keyboard.down(direction);
+      try { await expect(page.locator('#tool-panel')).toBeHidden(); }
+      finally { await page.keyboard.up(direction); }
+      await expect(page.locator('#tool-open')).not.toHaveAttribute('href');
+    } finally { if (observer.connection.isOpen) await observer.leave(); }
+  });
+}
+
+for (const scenario of [
+  { name: 'unconfigured', response: { json: [] }, message: '尚未配置工具地址' },
+  { name: 'unavailable', response: { status: 503 }, message: '工具入口加载失败' },
+  { name: 'invalid URL', response: { json: [{ ...toolDirectory[1], url: 'javascript:alert(1)' }] }, message: '工具入口加载失败' },
+]) {
+  test(`${scenario.name} tool directory keeps the space usable without an active link`, async ({ page }) => {
+    await page.route('**/api/tools', route => route.fulfill(scenario.response));
+    await enter(page, 'E2EToolFallback');
+    const observer = await observe();
+    try {
+      await walkToTool(page, observer, toolCases[1]);
+      await expect(page.locator('#tool-status')).toContainText(scenario.message);
+      await expect(page.locator('#tool-open')).toBeHidden();
+      await expect(page.locator('#tool-open')).not.toHaveAttribute('href');
+      await expect(page.locator('#status')).toContainText('已进入空间');
+      await page.locator('#leave').click();
+      await expect(page.locator('#tool-panel')).toBeHidden();
+    } finally { if (observer.connection.isOpen) await observer.leave(); }
+  });
 }
 
 test('map board panel publishes safe text, synchronizes browsers and keeps notes after rejoining', async ({ page, browser }, testInfo) => {

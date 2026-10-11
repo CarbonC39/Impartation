@@ -6,6 +6,9 @@ import { Client, type Room } from '@colyseus/sdk';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 process.env.DATABASE_PATH = ':memory:';
+process.env.EXTERNAL_TOOLS = JSON.stringify({
+  'shared-canvas': { kind: 'whiteboard', url: 'https://board.example/boards/workspace' },
+});
 const { server } = await import('../src/app.config.js');
 const { db } = await import('../src/db.js');
 const { setRole } = await import('../src/identity.js');
@@ -53,6 +56,15 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await room.waitForInitialState();
     return room;
   }
+  test('tool directory publishes only native launch configuration, without creating or granting an identity', async () => {
+    const response = await fetch(endpoint + '/api/tools');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(response.headers.getSetCookie(), []);
+    assert.deepEqual(await response.json(), [
+      { resourceId: 'shared-canvas', kind: 'whiteboard', url: 'https://board.example/boards/workspace' },
+    ]);
+  });
   test('two guests share the same room and avatar state; consented leave removes only that player', async () => {
     const alice = await join('Alice', 'amber');
     const bob = await join('Bob', 'violet');

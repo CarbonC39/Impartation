@@ -5,6 +5,7 @@ import type { SpaceRoom } from '@virtual-workspace/backend/rooms/SpaceRoom';
 import type { server } from '@virtual-workspace/backend/app.config';
 import { SpaceScene } from './SpaceScene';
 import { FeaturePanels } from './features';
+import { zoneLabels } from './zone-labels';
 import { loadProfile, saveProfile, generateBinding, importBinding, type Profile } from './identity';
 import './style.css';
 
@@ -110,8 +111,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: new SpaceScene(room, world, id => {
         const current = world.zones.find(item => item.id === id);
-        const names = { board: '留言板', pomodoro: '番茄钟', media: '影音（待接入）', whiteboard: '白板（待接入）' };
-        const text = current ? `当前区域：${names[current.kind]}` : '当前区域：无';
+        const text = current ? `当前区域：${zoneLabels[current.kind]}` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
         features?.setZone(current);
       }),

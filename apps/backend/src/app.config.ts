@@ -7,6 +7,10 @@ import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, identityFromHeaders, ensureProfile, updateProfile } from './identity.js';
 import { joinSchema } from '@virtual-workspace/shared';
 import { config } from './config.js';
+import { world } from './world.js';
+import { loadExternalTools } from './external-tools.js';
+
+const externalTools = loadExternalTools(config.EXTERNAL_TOOLS, world);
 
 export const server = defineServer({
   transport: new WebSocketTransport(),
@@ -26,6 +30,7 @@ export const server = defineServer({
       return handleAuth(req, res);
     });
     app.use('/api', express.json({ limit: '16kb' }));
+    app.get('/api/tools', (_req, res) => { res.json(externalTools); });
     app.get('/api/me', async (req, res) => {
       const identity = await identityFromHeaders(fromNodeHeaders(req.headers), cookies => {
         for (const cookie of cookies) res.append('Set-Cookie', cookie);
