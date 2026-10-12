@@ -18,7 +18,8 @@
     "test": "npm run build -w @virtual-workspace/shared && npm test -w @virtual-workspace/backend",
     "check": "npm run typecheck && npm test && npm run build",
     "test:e2e": "npm run build -w @virtual-workspace/shared && playwright test",
-    "check:all": "npm run check && npm run test:e2e"
+    "check:all": "npm run check && npm run test:e2e",
+    "identity": "npm run identity -w @virtual-workspace/backend --"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

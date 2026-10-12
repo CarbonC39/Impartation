@@ -1,0 +1,6 @@
+{
+  "initialMap": "lobby",
+  "maps": [
+    { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" }
+  ]
+}

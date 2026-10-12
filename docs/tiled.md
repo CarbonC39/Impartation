@@ -1,35 +1,63 @@
-# Tiled 地图约定
+# Tiled 地图契约
 
-当前地图为 `assets/maps/lobby.tmj`，图块为同目录的 `tiles.png`。Phaser 客户端读取可视地图，服务端在启动时读取同一张 JSON 并用共享解析器校验碰撞、出生点和交互区。
-
-## 支持范围
-
-- Tiled JSON 地图，`orientation: orthogonal`、`infinite: false`。
-- 渲染单一 `ground` 瓦片层，使用一个内嵌在 `.tmj` 中的图片 atlas tileset。图块名称和图片相对路径从地图读取；瓦片数据必须为数字数组，其尺寸和 GID 会在启动时校验。
-- `spawns`、`collisions` 和 `interactions` 三个对象层，层名不可重复。
-- 当前几何约定是地图内、无旋转、轴对齐的矩形，以及出生点对象。无限地图、group 层和偏移层不受支持；解析器会拒绝 ellipse、多边形、折线、tile object 和模板对象。外部 tileset、缺失 ground、压缩或 base64 瓦片数据会在启动时拒绝。图块图片是否存在仍由浏览器加载阶段检查。
-
-## 对象层
-
-- `spawns`：至少要有一个名为 `default` 的 Tiled point object，作为加入房间的位置。
-- `collisions`：每个矩形对象都是服务器端障碍。矩形必须为正尺寸并完全位于地图范围内；玩家视觉为半径 10px 的圆，当前碰撞使用其 20×20px 轴对齐包围盒，因此墙角处略保守。瓦片图案本身不产生碰撞，需要在此层画出障碍矩形。
-- `interactions`：矩形区域的类型从 Tiled `class` 或旧式 `type` 读取，当前允许 `media`、`whiteboard`、`board`、`pomodoro`。每个对象需有唯一非空 `name`，以及非空字符串自定义属性 `resourceId`。客户端目前只显示区域和资源 id 提示，不会打开对应功能。
-
-推荐在 Tiled 中使用自定义属性 `resourceId`（string），并保留以上对象层名和类型字面值。例如：
+Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数据。`assets/maps/registry.json` 选择地图集合的初始地图和每张地图的默认出生点：
 
 ```json
 {
-  "name": "lounge-screen",
-  "class": "media",
-  "x": 64,
-  "y": 64,
-  "width": 160,
-  "height": 96,
-  "rotation": 0,
-  "properties": [{ "name": "resourceId", "type": "string", "value": "lounge-screen" }]
+  "initialMap": "lobby",
+  "maps": [
+    { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" }
+  ]
 }
 ```
 
-编辑地图后重启后端以重新载入。无效地图会导致服务启动失败；检查尺寸、对象层名称、出生点和资源 id 后再启动。
+`file` 相对于 registry 文件。地图 registry 是服务端加载配置；新增地图要在此登记，并确保所有 Portal 目标均能解析。客户端从 `GET /api/world` 读取地图目录，再取对应地图和资源，不硬编码 `lobby.tmj`。服务端以相同 `.tmj` 提取权威语义，并发布规范化后的渲染 JSON 和该地图显式引用的资源。
 
-客户端当前固定从 `/maps/lobby.tmj` 读取地图。若配置后端 `MAP_PATH`，应同步替换前端托管的这份地图，保持几何与资源一致；当前不支持运行中热换地图。交互区重叠时，以对象顺序中的第一个命中区为准。
+## 地图设置
+
+使用有限、正交地图，图块宽高均为 **16 × 16 像素**。地图宽高可按需设置。Tiled 中把几何语义对象放入名为 `spawns`、`collisions`、`interactions` 的对象层；这些图层可位于 group 内，也可使用 layer 的偏移。解析器将 group/layer 偏移计入语义对象位置。其他图层、对象和 tileset 元数据不用于碰撞、出生点或交互校验。
+
+渲染加载器可解析多个内嵌 atlas 和外置 JSON `.tsj` tileset，Phaser 按 Tiled 顺序创建全部瓦片层，包括 group 中的瓦片层；不依赖 `ground` 名称。XML `.tsx` 尚无加载器，image layer、tile object 和 image-collection tileset 尚无专门渲染路径。它们不被共享语义解析器禁止；使用时需补充渲染加载/展示实现。
+
+项目只约束语义层的数据，不承诺 Phaser 渲染器支持 Tiled 的全部图层、对象或 tileset 表达。地图保存后应在实际浏览器检查所用渲染特性。无限地图和非正交地图不受支持，因为当前权威移动和 AABB 边界按有限矩形世界计算。语义对象使用无旋转点或轴对齐矩形；碰撞和交互必须为正尺寸且完全在地图范围内。
+
+### 出生点与碰撞
+
+- `spawns` 中放置一个或多个唯一命名的 Tiled point object。名称是出生点 ID；无需名为 `default` 的固定对象。registry 的 `defaultSpawn` 必须匹配该地图存在的名称。
+- 出生点应位于可通行区域。服务端使用玩家半径 10px 的碰撞体校验边界和障碍。
+- `collisions` 中每个矩形对象都是服务器端障碍。地面瓦片图案不会自动产生碰撞。
+
+### 交互区与 Portal
+
+`interactions` 中每个矩形对象需要唯一非空 Name。交互类型从 Tiled `class`（旧版 `type`）读取。共享的泛型 `InteractionRegistry<T>` 保存按 kind 关联的定义；当前解析定义只负责校验 properties，前后端 handlers 在各自模块组装。交互区域的坐标、类型和 properties 是地图定义的一部分，`resourceId` 用于需要共享资源归属的交互。
+
+Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
+
+```json
+{
+  "name": "to-lounge",
+  "class": "Portal",
+  "x": 16,
+  "y": 16,
+  "width": 32,
+  "height": 32,
+  "properties": [
+    { "name": "targetMap", "type": "string", "value": "lounge" },
+    { "name": "targetSpawn", "type": "string", "value": "arrival" }
+  ]
+}
+```
+
+服务端校验 Portal 指向 registry 中存在的地图和出生点。客户端仅提交当前 Portal 的 `zoneId`；服务端还会检查身份、玩家所在地图和实际位置，再在同一房间内切换玩家 `mapId` 并放置到目标出生点。交互显示和客户端碰撞都不能授权地图切换。
+
+## Integration 接入
+
+内置留言板与番茄钟分别注册为 `board`、`pomodoro`，按 `resourceId` 归属数据。所有地图外置页面入口统一使用类型 `web`，并按 `resourceId` 关联配置；多个区域可引用相同资源。`name` 标识区域本身。
+
+`EXTERNAL_TOOLS` 以 resourceId 为键配置 `{ url, mode?, fallback? }`，其中 URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。embed 在沙盒 iframe 容器内呈现配置页面；external 打开配置的原生页面。`fallback: "external"` 仅在 embed 旁增加手动打开链接，不检测 iframe 加载失败，也不自动切换。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
+
+公共 WebTool 配置会通过 `GET /api/tools` 暴露给浏览器，不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
+
+## 校验与发布
+
+服务启动时会解析 registry 中所有地图，检查 16px tile 尺寸、命名出生点、语义几何和 Portal 目标。验证地图契约后，还需在浏览器检查地图渲染、资源路径、出生点、碰撞、区域进入/退出及跨地图到达行为。更换 registry 或地图文件后重启后端。

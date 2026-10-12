@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AVATARS, joinSchema, inputSchema, chatSchema } from '@virtual-workspace/shared';
+import { AVATARS, joinSchema, inputSchema, chatSchema, boardPostSchema,
+  boardDeleteSchema, pomodoroActionSchema } from '@virtual-workspace/shared';
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {
   assert.deepEqual(joinSchema.parse({ name: ' Alice ' }), { name: 'Alice', avatar: 'mint' });
@@ -32,3 +33,69 @@ for (const [name, value] of [
   ['empty', { text: '' }], ['whitespace', { text: '\n\t ' }], ['too long', { text: 'x'.repeat(501) }],
   ['missing', {}], ['wrong type', { text: false }], ['null', null],
 ] as const) test(`chat validation rejects ${name}`, () => assert.equal(chatSchema.safeParse(value).success, false));
+
+test('board posts trim text and resource IDs, accept 128-character IDs, and strip client identity fields', () => {
+  assert.deepEqual(boardPostSchema.parse({
+    resourceId: ` ${'r'.repeat(128)} `,
+    text: '  hello board  ',
+    authorSessionId: 'forged-session',
+    name: 'Forged name',
+  }), { resourceId: 'r'.repeat(128), text: 'hello board' });
+});
+for (const [name, value] of [
+  ['empty text', { resourceId: 'board-1', text: '' }],
+  ['whitespace text', { resourceId: 'board-1', text: ' \n ' }],
+  ['oversized text', { resourceId: 'board-1', text: 'x'.repeat(501) }],
+  ['empty resource ID', { resourceId: ' ', text: 'note' }],
+  ['oversized resource ID', { resourceId: 'r'.repeat(129), text: 'note' }],
+  ['missing resource ID', { text: 'note' }],
+  ['missing text', { resourceId: 'board-1' }],
+  ['null', null],
+] as const) test(`board post validation rejects ${name}`, () => assert.equal(boardPostSchema.safeParse(value).success, false));
+
+test('board deletion accepts UUIDs and strips client supplied author identity', () => {
+  assert.deepEqual(boardDeleteSchema.parse({
+    resourceId: 'board-1',
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    authorSessionId: 'forged-session',
+  }), { resourceId: 'board-1', id: '550e8400-e29b-41d4-a716-446655440000' });
+});
+for (const [name, value] of [
+  ['malformed UUID', { resourceId: 'board-1', id: 'not-a-uuid' }],
+  ['missing UUID', { resourceId: 'board-1' }],
+  ['empty resource ID', { resourceId: '', id: '550e8400-e29b-41d4-a716-446655440000' }],
+  ['oversized resource ID', { resourceId: 'r'.repeat(129), id: '550e8400-e29b-41d4-a716-446655440000' }],
+  ['missing resource ID', { id: '550e8400-e29b-41d4-a716-446655440000' }],
+  ['null', null],
+] as const) test(`board delete validation rejects ${name}`, () => assert.equal(boardDeleteSchema.safeParse(value).success, false));
+
+test('pomodoro accepts every supported action and strips forged timer state', () => {
+  const cases = [
+    { resourceId: 'timer-1', action: 'start', mode: 'focus' },
+    { resourceId: 'timer-1', action: 'start', mode: 'break' },
+    { resourceId: 'timer-1', action: 'pause' },
+    { resourceId: 'timer-1', action: 'resume' },
+    { resourceId: 'timer-1', action: 'reset', mode: 'focus' },
+    { resourceId: 'timer-1', action: 'reset', mode: 'break' },
+  ] as const;
+  for (const value of cases) {
+    assert.deepEqual(pomodoroActionSchema.parse({
+      ...value, endsAt: 123, status: 'completed', name: 'Forged name',
+    }), value);
+  }
+  assert.deepEqual(pomodoroActionSchema.parse({ resourceId: 'timer-1', action: 'pause', mode: 'focus' }),
+    { resourceId: 'timer-1', action: 'pause' });
+  assert.deepEqual(pomodoroActionSchema.parse({ resourceId: 'timer-1', action: 'resume', mode: 'break' }),
+    { resourceId: 'timer-1', action: 'resume' });
+});
+for (const [name, value] of [
+  ['unknown action', { resourceId: 'timer-1', action: 'skip' }],
+  ['unknown mode', { resourceId: 'timer-1', action: 'start', mode: 'long-break' }],
+  ['start without mode', { resourceId: 'timer-1', action: 'start' }],
+  ['reset without mode', { resourceId: 'timer-1', action: 'reset' }],
+  ['missing action', { resourceId: 'timer-1' }],
+  ['missing resource ID', { action: 'pause' }],
+  ['empty resource ID', { resourceId: '', action: 'pause' }],
+  ['oversized resource ID', { resourceId: 'r'.repeat(129), action: 'pause' }],
+  ['null', null],
+] as const) test(`pomodoro validation rejects ${name}`, () => assert.equal(pomodoroActionSchema.safeParse(value).success, false));
