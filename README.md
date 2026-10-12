@@ -1,8 +1,8 @@
 # Virtual Workspace
 
-基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
+基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。玩家外观从预设中选择，作为地图角色形象使用；它不是个人头像图片。
 
-地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。页面可用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
+地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。页面可用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD、方向键或屏幕方向按钮。
 
 ## 本地运行
 
@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
+打开 <http://localhost:5173>，完成界面引导，选择昵称和角色外观后进入空间。当前登录页和世界选择是前端原型：表单不执行账号密码认证，世界名称只影响界面标签，后端仍使用持久匿名身份和地图 registry。使用 WASD、方向键或屏幕方向按钮移动；走到地图座位所在格后按 E 或点击“坐下”按钮，移动即可起身。输入文字时暂停键盘移动。标准地图 tile 的显示参考尺寸为 48px（见 [SpaceScene.ts](apps/frontend/src/SpaceScene.ts) 的 `DISPLAY_TILE_SIZE`）；默认 16px 地图 tile 经 3 倍整数相机缩放显示为 48px，角色尺寸按独立精灵素材绘制。后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
 
 ## 常用命令
 

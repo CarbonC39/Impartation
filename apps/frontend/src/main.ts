@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { zoneLabels } from './interactions/labels';
 import { loadProfile, saveProfile, generateBinding, importBinding, type Profile } from './identity';
 import './style.css';
+import { createPositionalInteractions, type PositionalInteractions } from './interactions/positional';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -43,6 +44,7 @@ const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.ori
 let room: Room<SpaceProtocol> | undefined;
 let connected = false;
 let interactions: InteractionDispatcher | undefined;
+let positional: PositionalInteractions | undefined;
 let worldRegistry: WorldRegistry | undefined;
 let renderedMap = '';
 let renderingMap = '';
@@ -89,6 +91,8 @@ function updateAvatarPreview() {
 }
 avatarChoices.forEach(input => input.addEventListener('change', updateAvatarPreview));
 const virtualDirections = new Set<string>();
+window.addEventListener('blur', () => virtualDirections.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) virtualDirections.clear(); });
 document.querySelectorAll<HTMLButtonElement>('[data-move]').forEach(button => {
   const direction = button.dataset.move;
   button.addEventListener('pointerdown', event => {
@@ -145,12 +149,17 @@ function setConnected(value: boolean) {
   send.disabled = !value;
   messageInput.disabled = !value;
   interactions?.setConnected(value);
+  positional?.refresh();
 }
 function cleanup() {
+  virtualDirections.clear();
   renderGeneration++;
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
   interactions?.dispose();
   interactions = undefined;
+  positional?.dispose();
+  positional = undefined;
+  element('object-feedback').textContent = '';
   game?.destroy(true);
   game = undefined;
   room = undefined;
@@ -178,6 +187,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     room.reconnection.minUptime = 0;
     if (!room.state?.players) await new Promise<void>(resolve => room!.onStateChange.once(() => resolve()));
     interactions = createInteractions(room);
+    positional = createPositionalInteractions(room);
     messages.replaceChildren();
     room.onMessage('chat', message => {
       const li = document.createElement('li');
@@ -216,22 +226,25 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   const generation = ++renderGeneration;
   renderingMap = mapId;
   interactions?.setZone(undefined);
+  positional?.setWorld(undefined);
   try {
     const response = await fetch(entry.url);
     if (!response.ok) throw new Error('地图加载失败');
     const renderMap = renderMapSchema.parse(await response.json());
     if (generation !== renderGeneration || room !== activeRoom) return;
     game?.destroy(true);
+    positional?.setWorld(entry);
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: entry.world.width, height: entry.world.height,
       backgroundColor: '#2b423e',
+      pixelArt: true,
       scale: { mode: Phaser.Scale.RESIZE },
       scene: new SpaceScene(activeRoom, entry, renderMap, id => {
         const current = entry.world.zones.find(item => item.id === id);
         const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
         interactions?.setZone(current);
-      }, readVirtualInput),
+      }, () => { void positional?.activate(); }, readVirtualInput),
     });
     renderedMap = mapId;
   } finally { if (generation === renderGeneration) renderingMap = ''; }
