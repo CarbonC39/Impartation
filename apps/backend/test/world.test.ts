@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { parseWorldMap, stepMovement, canStand, contains, PLAYER_SPEED, TICK_MS,
+import { parseWorldMap, stepMovement, canStand, contains, PLAYER_FOOTPRINT, PLAYER_SPEED, TICK_MS,
   InteractionRegistry, validateMapRegistry, type InteractionDefinition } from '@virtual-workspace/shared';
 import { standsOnSeat, movementFacing } from '@virtual-workspace/shared';
 
@@ -36,11 +36,61 @@ test('movement normalizes diagonals, clamps ticks, slides along walls and blocks
   assert.ok(Math.abs(Math.hypot(diagonal.x - spawn.x, diagonal.y - spawn.y) - PLAYER_SPEED * TICK_MS / 1000) < 0.0001);
   const slide = stepMovement(world, { x: 310, y: 250 }, { x: 1, y: 1 }, TICK_MS);
   assert.equal(slide.x, 310); assert.ok(slide.y > 250);
-  assert.equal(canStand(world, 311, 183), false);
-  assert.equal(canStand(world, 310, 182), true);
-  assert.equal(stepMovement(world, { x: 10, y: 40 }, { x: -1, y: 0 }, TICK_MS).x, 10);
+  assert.deepEqual(PLAYER_FOOTPRINT, { width: 12, height: 8 });
+  assert.ok(PLAYER_SPEED * TICK_MS / 1000 < Math.min(PLAYER_FOOTPRINT.width, PLAYER_FOOTPRINT.height));
   assert.deepEqual(stepMovement(world, spawn, { x: 0, y: 0 }, 50), spawn);
   assert.deepEqual(stepMovement(world, spawn, { x: 1, y: 1 }, -50), spawn);
+});
+
+test('ground footprint permits edge contact, blocks wall entry and respects map bounds', () => {
+  const map = { ...world, width: 64, height: 64,
+    collisions: [{ x: 16, y: 16, width: 16, height: 16 }] };
+  // The footprint is [x-6, x+6] by [y-8, y]; touching the top or bottom is allowed.
+  assert.equal(canStand(map, 24, 16), true);
+  assert.equal(canStand(map, 24, 16.01), false);
+  assert.equal(canStand(map, 24, 40), true);
+  assert.equal(canStand(map, 24, 39.99), false);
+  assert.equal(canStand(map, 10, 24), true);
+  assert.equal(canStand(map, 10.01, 24), false);
+  assert.equal(canStand(map, 38, 24), true);
+  assert.equal(canStand(map, 37.99, 24), false);
+  assert.equal(canStand(map, 6, 32), true);
+  assert.equal(canStand(map, 5.99, 32), false);
+  assert.equal(canStand(map, 58, 32), true);
+  assert.equal(canStand(map, 58.01, 32), false);
+  assert.equal(canStand({ ...map, collisions: [] }, 32, 8), true);
+  assert.equal(canStand({ ...map, collisions: [] }, 32, 7.99), false);
+  assert.equal(canStand({ ...map, collisions: [] }, 32, 64), true);
+  assert.equal(canStand({ ...map, collisions: [] }, 32, 64.01), false);
+});
+
+test('movement cannot cross a thin wall and fits through a 16px clear passage', () => {
+  const thinWall = { ...world, width: 128, height: 64,
+    collisions: [{ x: 48, y: 0, width: 1, height: 64 }] };
+  let position = { x: 35, y: 32 };
+  for (let i = 0; i < 8; i += 1) position = stepMovement(thinWall, position, { x: 1, y: 0 }, TICK_MS);
+  assert.ok(position.x <= 42);
+  assert.equal(canStand(thinWall, 42, 32), true);
+  assert.equal(canStand(thinWall, 42.01, 32), false);
+
+  const thinHorizontalWall = { ...world, width: 128, height: 64,
+    collisions: [{ x: 0, y: 32, width: 128, height: 1 }] };
+  let verticalPosition = { x: 64, y: 20 };
+  for (let i = 0; i < 8; i += 1) verticalPosition = stepMovement(thinHorizontalWall, verticalPosition, { x: 0, y: 1 }, TICK_MS);
+  assert.ok(verticalPosition.y <= 32);
+  assert.equal(canStand(thinHorizontalWall, 64, 32), true);
+  assert.equal(canStand(thinHorizontalWall, 64, 32.01), false);
+
+  const passage = { ...world, width: 64, height: 64,
+    collisions: [{ x: 0, y: 0, width: 24, height: 64 }, { x: 40, y: 0, width: 24, height: 64 }] };
+  assert.equal(canStand(passage, 32, 32), true);
+  let passagePosition = { x: 32, y: 24 };
+  for (let i = 0; i < 3; i += 1) passagePosition = stepMovement(passage, passagePosition, { x: 0, y: -1 }, TICK_MS);
+  assert.ok(passagePosition.y < 24);
+  const upperY = passagePosition.y;
+  for (let i = 0; i < 5; i += 1) passagePosition = stepMovement(passage, passagePosition, { x: 0, y: 1 }, TICK_MS);
+  assert.ok(passagePosition.y > upperY);
+  assert.equal(passagePosition.x, 32);
 });
 
 test('seat points expose authored anchor/facing and only the foot tile can activate them', () => {

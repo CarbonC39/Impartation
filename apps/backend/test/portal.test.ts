@@ -97,7 +97,7 @@ test('Portal uses authenticated server position and named destination, preserves
   assert.equal(await received, 'same room after transition');
   alice.send('input', { x: 1, y: 0 });
   await new Promise(resolve => setTimeout(resolve, 200));
-  assert.ok(player.x <= 38, 'movement must collide with the destination map wall');
+  assert.ok(player.x <= 42, 'movement must collide with the destination map wall');
   assert.equal((await alice.request('boardPost', { resourceId: 'message-wall', text: 'not on this map' })).ok, false);
 });
 

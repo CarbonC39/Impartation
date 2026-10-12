@@ -4,7 +4,8 @@ import type { MovementInput } from './index.js';
 import { facingSchema, type Facing } from './character.js';
 
 export const TILE_SIZE = 16;
-export const PLAYER_RADIUS = 10;
+// Ground footprint ends at the foot anchor; sprite dimensions never affect physics.
+export const PLAYER_FOOTPRINT = { width: 12, height: 8 } as const;
 export const PLAYER_SPEED = 150;
 export const TICK_MS = 50;
 export type Point = { x: number; y: number };
@@ -157,10 +158,11 @@ export function standsOnSeat(seat: Seat, position: Point): boolean {
     Math.floor(seat.y / TILE_SIZE) === Math.floor(position.y / TILE_SIZE);
 }
 export function canStand(map: WorldMap, x: number, y: number): boolean {
-  const r = PLAYER_RADIUS;
-  return x >= r && y >= r && x <= map.width - r && y <= map.height - r &&
-    !map.collisions.some(rect => x + r > rect.x && x - r < rect.x + rect.width &&
-      y + r > rect.y && y - r < rect.y + rect.height);
+  const halfWidth = PLAYER_FOOTPRINT.width / 2;
+  const top = y - PLAYER_FOOTPRINT.height;
+  return x >= halfWidth && top >= 0 && x <= map.width - halfWidth && y <= map.height &&
+    !map.collisions.some(rect => x + halfWidth > rect.x && x - halfWidth < rect.x + rect.width &&
+      y > rect.y && top < rect.y + rect.height);
 }
 export function stepMovement(map: WorldMap, position: Point, input: MovementInput, deltaMs: number): Point {
   const length = Math.hypot(input.x, input.y) || 1;

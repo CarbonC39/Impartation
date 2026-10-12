@@ -167,11 +167,11 @@ Player 包含 `userId`、昵称、地图角色外观预设 ID、权限 role、`m
 
 `SpaceRoom` 校验输入和身份后，保存该连接的最近方向及接收时间。每 50ms 更新一次权威移动，state patch 间隔也是 50ms；输入超过 250ms 未更新或玩家已断线时停止推进。
 
-[stepMovement](../packages/shared/src/world.ts) 将斜向输入归一化，以 150 像素/秒移动；单步 delta 限制在 0–50ms，依次尝试 X、Y 方向，允许沿墙滑动。玩家坐标表示地面脚点，碰撞检测使用脚点周围半径 10 的轴对齐方形，独立于角色精灵的视觉尺寸。边界及 collision 矩形都由当前 mapId 对应的 `WorldMap` 决定。移动后，服务端重新计算 zoneId。
+[stepMovement](../packages/shared/src/world.ts) 将斜向输入归一化，以 150 像素/秒移动；单步 delta 限制在 0–50ms，依次尝试 X、Y 方向，允许沿墙滑动。玩家坐标表示地面脚点，碰撞使用固定 12×8 像素的轴对齐地面矩形：横向从脚点 x−6 到 x+6，纵向从 y−8 到脚点 y。该尺寸独立于地图 tile 和角色图片；边界及 collision 矩形都由当前 mapId 对应的 `WorldMap` 决定。移动后，服务端重新计算 zoneId。
 
 客户端对服务端位置做线性插值，无本地预测或重演。全屏画布使用 RESIZE，镜头在地图范围内跟随当前玩家；键盘和屏幕方向按钮提交相同的 input，松开、页面隐藏或失焦会停止输入。`facing` 由方向输入更新，`motion` 表示 idle/walk；激活座位时服务端同步吸附位置及 Tiled 朝向。非零移动释放座位，临时断线会保留占用，Portal 和最终离开会清除占用。没有单独的站起动作。场景中的区域通知使用服务端 zoneId；界面提示和按钮状态不会替代服务端位置校验。
 
-[characters.ts](../apps/frontend/src/characters.ts) 描述 64×96 的角色图集：四列、四行，每格源帧 16×24，方向按 down/left/right/up 排列，每个方向有四个行走帧，索引依次为 0–15。每行首帧用于该方向的 idle。帧宽与帧高独立于地图 tile 尺寸；既有 avatar ID 对应同一角色图的配色。精灵以底部中心锚定脚点，动画帧由客户端本地时间选择，不进入 Schema。当前没有单独坐姿素材，sit 使用该朝向的 idle 帧和坐下文字标记。
+[characters.ts](../apps/frontend/src/characters.ts) 描述 64×96 的角色图集：四列、四行，每格源帧 16×24，方向按 down/left/right/up 排列，每个方向有四个行走帧，索引依次为 0–15。每行首帧用于该方向的 idle。帧宽、帧高和 `{ x: 0.5, y: 1 }` 底部中心锚点由角色定义提供，独立于地图 tile 尺寸；既有 avatar ID 对应同一角色图的配色。替换 `assets/characters/walk.png` 时，保持 64×96、4×4 排列和方向顺序即可沿用配置，无需修改代码；mint、amber、violet 目前使用同一图集并应用不同 tint。动画帧由客户端本地时间选择，不进入 Schema。当前没有单独坐姿素材，sit 使用该朝向的 idle 帧和坐下文字标记。
 
 `Tiled 对象 → interaction → worldObjects 状态 → 视觉表示` 是对象呈现的数据路径。[worldObjectVisuals.ts](../apps/frontend/src/worldObjectVisuals.ts) 按 authored ID 管理叠加精灵，按 kind/variant 选择视觉定义；当前座位的 empty/occupied 使用不同配色。视觉尺寸由定义控制，不使用 tile 尺寸。未来饮料、灯等可增加叠加图及 variant，门或地形也可由渲染层实现 tile 替换；业务 handler 只修改对象状态，不写 GID 或调用 putTileAt。
 

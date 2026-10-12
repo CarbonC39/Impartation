@@ -80,7 +80,8 @@ export class SpaceScene extends Phaser.Scene {
       let sprite = this.sprites.get(id);
       if (!sprite) {
         const avatar = avatarDefinition(player.avatar);
-        const character = this.add.sprite(player.x, player.y, avatar.texture).setName(id).setOrigin(0.5, 1);
+        const character = this.add.sprite(player.x, player.y, avatar.texture).setName(id)
+          .setOrigin(avatar.anchor.x, avatar.anchor.y);
         if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
         const label = this.add.text(player.x, player.y - avatar.frameHeight - 4, player.name,
           { fontSize: '12px', color: id === this.room.sessionId ? '#fff2a3' : '#ffffff' })

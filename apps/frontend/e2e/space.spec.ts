@@ -574,7 +574,7 @@ test('embed presentation provides an explicit external fallback and clears both 
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
-test('Portal switches rendered maps, loads multiple tilesets and returns to the named spawn', async ({ page }) => {
+test('Portal switches rendered maps, loads multiple tilesets and preserves the connection when returning', async ({ page }) => {
   test.setTimeout(30000);
   const errors: string[] = [];
   const assets = new Set<string>();
@@ -583,15 +583,6 @@ test('Portal switches rendered maps, loads multiple tilesets and returns to the 
   await enter(page, 'E2ETraveler');
   const observer = await observe();
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
-  let previousMap = 'workspace';
-  const arrivals = new Map<string, { x: number; y: number }>();
-  const recordArrival = () => {
-    const player = observer.state.players.get(sessionId);
-    if (!player || player.mapId === previousMap) return;
-    previousMap = player.mapId;
-    arrivals.set(player.mapId, { x: player.x, y: player.y });
-  };
-  observer.onStateChange(recordArrival);
   try {
     await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'workspace');
     await page.locator('#game canvas').focus();
@@ -604,7 +595,7 @@ test('Portal switches rendered maps, loads multiple tilesets and returns to the 
     await expect(page.locator('#game canvas')).toHaveCount(1);
     await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'studio');
     await expect.poll(() => assets.size).toBe(2);
-    expect(arrivals.get('studio')).toEqual({ x: 96, y: 96 });
+    // Held input may move again before the next patch; portal.test.ts checks exact server spawns.
     await page.waitForTimeout(550); // Respect the shared server interaction cooldown.
     await page.locator('#game canvas').focus();
     await page.keyboard.down('a');
@@ -612,11 +603,9 @@ test('Portal switches rendered maps, loads multiple tilesets and returns to the 
     finally { await page.keyboard.up('a'); }
     await expect(page.locator('#game canvas')).toHaveCount(1);
     await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'workspace');
-    expect(arrivals.get('workspace')).toEqual({ x: 352, y: 384 });
     await expect(page.locator('#game canvas')).toHaveCount(1);
     expect(errors).toEqual([]);
   } finally {
-    observer.onStateChange.remove(recordArrival);
     if (observer.connection.isOpen) await observer.leave();
   }
 });
