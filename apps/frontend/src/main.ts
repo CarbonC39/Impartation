@@ -21,6 +21,7 @@ const send = element<HTMLButtonElement>('send');
 const messageInput = element<HTMLInputElement>('message');
 const messages = element<HTMLOListElement>('messages');
 const zone = element('zone');
+let game: Phaser.Game | undefined;
 const themePicker = element<HTMLSelectElement>('theme');
 const themes = ['meadow', 'ocean', 'sunset', 'lavender'] as const;
 type Theme = typeof themes[number];
@@ -40,7 +41,6 @@ themePicker.addEventListener('change', () => {
 });
 const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.origin);
 let room: Room<SpaceProtocol> | undefined;
-let game: Phaser.Game | undefined;
 let connected = false;
 let interactions: InteractionDispatcher | undefined;
 let worldRegistry: WorldRegistry | undefined;
