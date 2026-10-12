@@ -80,10 +80,9 @@ export class SpaceScene extends Phaser.Scene {
       let sprite = this.sprites.get(id);
       if (!sprite) {
         const avatar = avatarDefinition(player.avatar);
-        const character = this.add.sprite(player.x, player.y, avatar.texture).setName(id)
-          .setOrigin(avatar.anchor.x, avatar.anchor.y);
+        const character = this.add.sprite(player.x, player.y, avatar.texture).setName(id);
         if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
-        const label = this.add.text(player.x, player.y - avatar.frameHeight - 4, player.name,
+        const label = this.add.text(player.x, player.y - avatar.groundAnchor.y - 4, player.name,
           { fontSize: '12px', color: id === this.room.sessionId ? '#fff2a3' : '#ffffff' })
           .setOrigin(0.5, 1).setScale(1 / this.cameras.main.zoom);
         sprite = { sprite: character, label, animation: '', elapsed: 0 };
@@ -101,10 +100,11 @@ export class SpaceScene extends Phaser.Scene {
       sprite.elapsed = animation === sprite.animation ? sprite.elapsed + delta : 0;
       sprite.animation = animation;
       sprite.sprite.setTexture(avatar.texture, characterFrame(player.avatar, facing, motion, action, sprite.elapsed))
+        .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight)
         .setTint(avatar.tint).setAlpha(player.connected ? 1 : 0.35).setDepth(sprite.sprite.y);
       const name = action === 'sit' ? `${player.name} · 坐` : player.name;
       if (sprite.label.text !== name) sprite.label.setText(name);
-      sprite.label.setPosition(sprite.sprite.x, sprite.sprite.y - avatar.frameHeight - 4).setDepth(this.mapEntry.world.height + 1);
+      sprite.label.setPosition(sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 4).setDepth(this.mapEntry.world.height + 1);
     }
     for (const [id, sprite] of this.sprites) {
       if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) { sprite.sprite.destroy(); sprite.label.destroy(); this.sprites.delete(id); }

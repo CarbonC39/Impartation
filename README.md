@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，完成界面引导，选择昵称和角色外观后进入空间。当前登录页和世界选择是前端原型：表单不执行账号密码认证，世界名称只影响界面标签，后端仍使用持久匿名身份和地图 registry。使用 WASD、方向键或屏幕方向按钮移动；走到地图座位所在格后按 E 或点击“坐下”按钮，移动即可起身。输入文字时暂停键盘移动。标准地图 tile 的显示参考尺寸为 48px（见 [SpaceScene.ts](apps/frontend/src/SpaceScene.ts) 的 `DISPLAY_TILE_SIZE`）；默认 16px 地图 tile 经 3 倍整数相机缩放显示为 48px，角色尺寸按独立精灵素材绘制。角色素材位于 `assets/characters/walk.png`；替换素材可沿用当前 64×96、4×4、16×24 图格布局，现有外观预设会对同一图集应用不同配色。后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
+打开 <http://localhost:5173>，完成界面引导，选择昵称和角色外观后进入空间。当前登录页和世界选择是前端原型：表单不执行账号密码认证，世界名称只影响界面标签，后端仍使用持久匿名身份和地图 registry。使用 WASD、方向键或屏幕方向按钮移动；走到地图座位所在格后按 E 或点击“坐下”按钮，移动即可起身。输入文字时暂停键盘移动。标准地图 tile 的显示参考尺寸为 48px（见 [SpaceScene.ts](apps/frontend/src/SpaceScene.ts) 的 `DISPLAY_TILE_SIZE`）；默认 16px 地图 tile 经 3 倍整数相机缩放显示为 48px，角色尺寸按独立精灵素材绘制。角色素材位于 `assets/characters/walk.png`；角色帧尺寸和帧内脚点由配置独立定义。替换为相同帧尺寸和脚点位置的素材可直接覆盖该文件；若素材尺寸或透明留白改变，需同步调整 `characters.ts` 中的帧宽、帧高和 `groundAnchor`。现有外观预设对同一图集应用不同配色。后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
 
 ## 常用命令
 

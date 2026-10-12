@@ -3,6 +3,7 @@ import { Client, type Room } from '@colyseus/sdk';
 import type { WebTool, SpaceProtocol } from '@virtual-workspace/shared';
 import type Phaser from 'phaser';
 import type { SpaceScene } from '../src/SpaceScene';
+import { avatars } from '../src/characters';
 
 async function enter(page: Page, name: string, avatar = 'mint', prepare?: () => Promise<void>) {
   await page.goto('/');
@@ -40,12 +41,26 @@ test('corrected atlas renders complete directional frames at integer world zoom'
     if (!sprite) return;
     const zoom = scene.cameras.main.zoom;
     const bounds = sprite.getBounds();
+    const frame = sprite.frame;
+    const source = sprite.texture.getSourceImage();
+    if (!(source instanceof HTMLImageElement || source instanceof HTMLCanvasElement)) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = frame.cutWidth; canvas.height = frame.cutHeight;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(source, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+      0, 0, frame.cutWidth, frame.cutHeight);
+    const pixels = context.getImageData(0, 0, frame.cutWidth, frame.cutHeight).data;
+    let visibleBottom = 0;
+    for (let y = 0; y < frame.cutHeight; y++) for (let x = 0; x < frame.cutWidth; x++) {
+      if (pixels[(y * frame.cutWidth + x) * 4 + 3]) visibleBottom = y + 1;
+    }
     return {
       zoom, frame: Number(sprite.frame.name),
       origin: [sprite.originX, sprite.originY],
+      groundAnchor: [sprite.displayOriginX, sprite.displayOriginY],
       worldSize: [sprite.displayWidth, sprite.displayHeight],
       screenSize: [sprite.displayWidth * zoom, sprite.displayHeight * zoom],
-      groundAnchored: bounds.bottom === sprite.y,
+      visibleFootOffset: bounds.top + visibleBottom - sprite.y,
       frames: Array.from({ length: 16 }, (_, index) => {
         const frame = sprite.texture.get(index);
         return [frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight];
@@ -54,12 +69,16 @@ test('corrected atlas renders complete directional frames at integer world zoom'
   }, sessionId);
   await expect.poll(async () => (await renderState())?.frame).toBe(0);
   const initial = (await renderState())!;
+  const avatar = avatars.mint;
   expect(initial.zoom).toBe(3);
-  expect(initial.origin).toEqual([0.5, 1]);
-  expect(initial.worldSize).toEqual([16, 24]);
-  expect(initial.screenSize).toEqual([48, 72]);
-  expect(initial.groundAnchored).toBe(true);
-  expect(initial.frames).toEqual(Array.from({ length: 16 }, (_, index) => [index % 4 * 16, Math.floor(index / 4) * 24, 16, 24]));
+  expect(initial.origin).toEqual([avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight]);
+  expect(initial.groundAnchor).toEqual([avatar.groundAnchor.x, avatar.groundAnchor.y]);
+  expect(initial.worldSize).toEqual([avatar.frameWidth, avatar.frameHeight]);
+  expect(initial.screenSize).toEqual([avatar.frameWidth * 3, avatar.frameHeight * 3]);
+  // The current idle art's visible feet, rather than its transparent frame edge, meet the ground.
+  expect(initial.visibleFootOffset).toBeCloseTo(0);
+  expect(initial.frames).toEqual(Array.from({ length: 16 }, (_, index) => [index % 4 * avatar.frameWidth,
+    Math.floor(index / 4) * avatar.frameHeight, avatar.frameWidth, avatar.frameHeight]));
   await page.locator('#game canvas').focus();
   await page.keyboard.down('d');
   try {
@@ -68,7 +87,7 @@ test('corrected atlas renders complete directional frames at integer world zoom'
   } finally { await page.keyboard.up('d'); }
   await expect.poll(async () => (await renderState())?.frame).toBe(8);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(async () => (await renderState())?.screenSize).toEqual([48, 72]);
+  await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * 3, avatar.frameHeight * 3]);
   await page.screenshot({ path: testInfo.outputPath('character-zoom-mobile.png'), fullPage: true });
   await page.locator('#leave').click();
 });

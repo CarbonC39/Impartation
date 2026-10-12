@@ -5,7 +5,8 @@ import { FACINGS, type Facing, type Motion, type CharacterAction } from '@virtua
 const character = {
   texture: 'character-walk', url: '/characters/walk.png',
   frameWidth: 16, frameHeight: 24,
-  anchor: { x: 0.5, y: 1 },
+  // Frame-local foot point; transparent padding does not define the ground anchor.
+  groundAnchor: { x: 8, y: 23 },
   walk: { down: [0, 1, 2, 3], left: [4, 5, 6, 7], right: [8, 9, 10, 11], up: [12, 13, 14, 15] },
   idle: { down: 0, left: 4, right: 8, up: 12 },
   frameMs: 120,

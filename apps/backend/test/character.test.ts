@@ -7,16 +7,17 @@ import { avatars, avatarDefinition, characterFrame } from '../../frontend/src/ch
 test('configured character frames fit the supplied sheet and are independent from map tiles', () => {
   const image = readFileSync(new URL('../../../assets/characters/walk.png', import.meta.url));
   const width = image.readUInt32BE(16), height = image.readUInt32BE(20);
-  assert.deepEqual([width, height], [64, 96]);
   for (const avatar of Object.values(avatars)) {
-    assert.equal(avatar.frameWidth, 16); assert.equal(avatar.frameHeight, 24);
+    assert.ok(avatar.frameWidth > 0); assert.ok(avatar.frameHeight > 0);
     assert.equal(width % avatar.frameWidth, 0); assert.equal(height % avatar.frameHeight, 0);
     const count = width / avatar.frameWidth * height / avatar.frameHeight;
-    assert.equal(count, 16);
-    for (const [row, facing] of FACINGS.entries()) {
+    const walkingFrames = FACINGS.flatMap(facing => avatar.walk[facing]);
+    assert.equal(walkingFrames.length, 16);
+    assert.equal(new Set(walkingFrames).size, walkingFrames.length);
+    assert.ok(Number.isFinite(avatar.groundAnchor.x) && avatar.groundAnchor.x >= 0 && avatar.groundAnchor.x <= avatar.frameWidth);
+    assert.ok(Number.isFinite(avatar.groundAnchor.y) && avatar.groundAnchor.y >= 0 && avatar.groundAnchor.y <= avatar.frameHeight);
+    for (const facing of FACINGS) {
       assert.equal(avatar.walk[facing].length, 4);
-      assert.deepEqual(avatar.walk[facing], [row * 4, row * 4 + 1, row * 4 + 2, row * 4 + 3]);
-      assert.equal(avatar.idle[facing], row * 4);
       for (const frame of [...avatar.walk[facing], avatar.idle[facing]]) assert.ok(frame >= 0 && frame < count);
     }
   }
