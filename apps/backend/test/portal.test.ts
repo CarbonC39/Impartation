@@ -26,8 +26,10 @@ const makeMap = (spawnName: string, zones: unknown[], collisions: unknown[] = []
   ],
 });
 writeFileSync(join(directory, 'atlas.tsj'), JSON.stringify({ name: 'atlas', image: fileURLToPath(new URL('../../../assets/maps/tiles.png', import.meta.url)), tilewidth: 16, tileheight: 16, columns: 6, tilecount: 12 }));
-writeFileSync(join(directory, 'home.tmj'), JSON.stringify(makeMap('entry', [portal('door', 'studio', 'arrival')])));
-writeFileSync(join(directory, 'studio.tmj'), JSON.stringify(makeMap('arrival', [portal('return', 'home', 'entry')], [{ x: 48, y: 16, width: 16, height: 48 }])));
+const seat = { name: 'same-seat', class: 'seat', point: true, x: 88, y: 40,
+  properties: [{ name: 'facing', value: 'left' }] };
+writeFileSync(join(directory, 'home.tmj'), JSON.stringify(makeMap('entry', [portal('door', 'studio', 'arrival'), seat])));
+writeFileSync(join(directory, 'studio.tmj'), JSON.stringify(makeMap('arrival', [portal('return', 'home', 'entry'), seat], [{ x: 48, y: 16, width: 16, height: 48 }])));
 writeFileSync(join(directory, 'registry.json'), JSON.stringify({ initialMap: 'home', maps: [
   { id: 'home', file: 'home.tmj', defaultSpawn: 'entry' }, { id: 'studio', file: 'studio.tmj', defaultSpawn: 'arrival' },
 ] }));
@@ -97,6 +99,23 @@ test('Portal uses authenticated server position and named destination, preserves
   await new Promise(resolve => setTimeout(resolve, 200));
   assert.ok(player.x <= 38, 'movement must collide with the destination map wall');
   assert.equal((await alice.request('boardPost', { resourceId: 'message-wall', text: 'not on this map' })).ok, false);
+});
+
+test('object ids are scoped by map and a Portal releases the old seat and action', async () => {
+  const alice = await connect('SeatedTraveler');
+  const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+  const player = authoritative.state.players.get(alice.sessionId)!;
+  player.x = 88; player.y = 40;
+  assert.equal((await alice.request('activate', { objectId: 'same-seat' })).ok, true);
+  const homeSeat = authoritative.state.worldObjects.get('home')!.objects.get('same-seat')!;
+  const studioSeat = authoritative.state.worldObjects.get('studio')!.objects.get('same-seat')!;
+  assert.equal(homeSeat.occupiedBy, alice.sessionId); assert.equal(studioSeat.occupiedBy, '');
+  await new Promise(resolve => setTimeout(resolve, 550));
+  assert.equal((await alice.request('portal', { zoneId: 'door' })).ok, true);
+  assert.equal(player.mapId, 'studio'); assert.equal(player.action, 'none');
+  assert.equal(player.actionTargetId, ''); assert.equal(player.motion, 'idle');
+  assert.equal(homeSeat.occupiedBy, ''); assert.equal(homeSeat.variant, 'empty');
+  assert.equal(studioSeat.occupiedBy, '');
 });
 
 test('registry loader rejects unresolved destinations before exposing maps', () => {

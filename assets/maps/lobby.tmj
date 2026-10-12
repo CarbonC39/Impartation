@@ -10,7 +10,7 @@
   "tilewidth": 16,
   "tileheight": 16,
   "nextlayerid": 5,
-  "nextobjectid": 9,
+  "nextobjectid": 11,
   "layers": [
     {
       "id": 1,
@@ -1718,6 +1718,44 @@
               "name": "resourceId",
               "type": "string",
               "value": "shared-document"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "name": "lobby-seat-1",
+          "class": "seat",
+          "point": true,
+          "x": 408,
+          "y": 392,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "facing",
+              "type": "string",
+              "value": "up"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "name": "lobby-seat-2",
+          "class": "seat",
+          "point": true,
+          "x": 440,
+          "y": 392,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "facing",
+              "type": "string",
+              "value": "down"
             }
           ]
         }

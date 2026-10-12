@@ -13,10 +13,10 @@ type Payload<T> = T extends { format: z.ZodType<infer P> } ? P : T extends (...a
 type Result<T> = T extends { handler: (...args: never[]) => infer R } ? Awaited<R> : T extends (...args: never[]) => infer R ? Awaited<R> : never;
 type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 const protocolMatches: { [K in keyof SpaceProtocol['messages']]: Same<Payload<SpaceProtocol['messages'][K]>, Payload<SpaceRoom['messages'][K]>> } = {
-  input: true, chat: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true,
+  input: true, chat: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activate: true,
 };
-const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
-  boardPost: true, boardDelete: true, pomodoro: true, portal: true,
+const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activate']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
+  boardPost: true, boardDelete: true, pomodoro: true, portal: true, activate: true,
 };
 
 test('shared protocol agrees with the server and frontend depends only on shared contracts', () => {

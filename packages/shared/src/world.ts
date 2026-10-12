@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { InteractionRegistry } from './interactions.js';
 import type { MovementInput } from './index.js';
+import { facingSchema, type Facing } from './character.js';
 
 export const TILE_SIZE = 16;
 export const PLAYER_RADIUS = 10;
@@ -12,10 +13,12 @@ export type Zone = Rect & {
   id: string; kind: string; resourceId: string;
   properties: Record<string, unknown>;
 };
+export type Seat = Point & { id: string; kind: 'seat'; facing: Facing };
 export type WorldMap = {
   width: number; height: number;
   spawns: Record<string, Point>;
   collisions: Rect[]; zones: Zone[];
+  seats: Seat[];
 };
 
 // Only project semantic objects are constrained. Decorative objects stay opaque.
@@ -88,23 +91,38 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
     return { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
   });
   const ids = new Set<string>();
-  const zones = objects('interactions').map(obj => {
+  const zones: Zone[] = [];
+  const seats: Seat[] = [];
+  for (const obj of objects('interactions')) {
     const id = identifier.parse(obj.name);
     const kind = identifier.parse(obj.class || obj.type);
-    if (obj.point || ids.has(id)) throw new Error('Interactions must be uniquely named rectangles');
+    if (ids.has(id)) throw new Error('Interactions must have unique authored IDs');
     ids.add(id);
     const properties = Object.fromEntries(obj.properties.map(prop => [prop.name, prop.value]));
+    if (kind === 'seat') {
+      if (!obj.point || obj.width || obj.height) throw new Error('Seats must be named points');
+      seats.push({ id, kind, x: obj.x, y: obj.y, facing: facingSchema.parse(properties.facing) });
+      continue;
+    }
+    if (obj.point) throw new Error('Zone interactions must be rectangles');
     const zone: Zone = { id, kind, resourceId: typeof properties.resourceId === 'string' ? properties.resourceId.trim() : '',
       properties, x: obj.x, y: obj.y, width: obj.width, height: obj.height };
     definitions.get(kind)?.validate(zone);
-    return zone;
-  });
-  const world: WorldMap = { width: map.width * TILE_SIZE, height: map.height * TILE_SIZE, spawns, collisions, zones };
+    zones.push(zone);
+  }
+  const world: WorldMap = { width: map.width * TILE_SIZE, height: map.height * TILE_SIZE, spawns, collisions, zones, seats };
   for (const obj of [...collisions, ...zones]) {
     if (obj.width <= 0 || obj.height <= 0 || obj.x < 0 || obj.y < 0 ||
       obj.x + obj.width > world.width || obj.y + obj.height > world.height) throw new Error('Semantic rectangle must have positive size and stay inside map bounds');
   }
   for (const spawn of Object.values(spawns)) if (!canStand(world, spawn.x, spawn.y)) throw new Error('Spawn is outside walkable area');
+  const seatTiles = new Set<string>();
+  for (const seat of seats) {
+    if (!canStand(world, seat.x, seat.y)) throw new Error('Seat anchor is outside walkable area');
+    const tile = `${Math.floor(seat.x / TILE_SIZE)},${Math.floor(seat.y / TILE_SIZE)}`;
+    if (seatTiles.has(tile)) throw new Error('Only one seat anchor per grid tile is supported');
+    seatTiles.add(tile);
+  }
   return world;
 }
 
@@ -133,6 +151,11 @@ export function validateMapRegistry(registry: WorldRegistry): WorldRegistry {
 export function contains(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
+/** Positional activation uses the foot's grid tile, never a surrounding radius. */
+export function standsOnSeat(seat: Seat, position: Point): boolean {
+  return Math.floor(seat.x / TILE_SIZE) === Math.floor(position.x / TILE_SIZE) &&
+    Math.floor(seat.y / TILE_SIZE) === Math.floor(position.y / TILE_SIZE);
+}
 export function canStand(map: WorldMap, x: number, y: number): boolean {
   const r = PLAYER_RADIUS;
   return x >= r && y >= r && x <= map.width - r && y <= map.height - r &&
@@ -160,6 +183,7 @@ export const worldRegistryResponseSchema = z.object({
       width: z.number().positive(), height: z.number().positive(), spawns: z.record(identifier, pointSchema),
       collisions: z.array(rectSchema),
       zones: z.array(rectSchema.extend({ id: identifier, kind: identifier, resourceId: z.string(), properties: z.record(z.string(), z.unknown()) })),
+      seats: z.array(pointSchema.extend({ id: identifier, kind: z.literal('seat'), facing: facingSchema })),
     }),
   })).min(1),
 });

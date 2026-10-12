@@ -90,14 +90,85 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const x = player.x;
     alice.send('input', { x: 1, y: 0 });
     await until(() => player.x > x);
+    assert.equal(player.facing, 'right'); assert.equal(player.motion, 'walk');
     await delay(350);
     const stopped = player.x;
     await delay(150);
     assert.equal(player.x, stopped);
+    assert.equal(player.motion, 'idle'); assert.equal(player.facing, 'right');
     player.x = 310; player.y = 250;
     alice.send('input', { x: 1, y: 0 });
     await delay(150);
     assert.equal(player.x, 310);
+    assert.equal(player.motion, 'idle');
+  });
+  test('seat activation validates real position and identity, snaps to authored anchor and synchronizes object state', async () => {
+    const alice = await join('SeatedAlice');
+    const bob = await join('SeatedBob');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    const other = authoritative.state.players.get(bob.sessionId)!;
+    assert.equal((await alice.request('activate', { objectId: 'lobby-seat-1' })).ok, false);
+    player.x = 399.99; player.y = 392;
+    assert.equal((await alice.request('activate', { objectId: 'lobby-seat-1' })).ok, false);
+    player.x = 402; player.y = 386;
+    assert.equal((await alice.request('activate', { objectId: 'unknown-seat' })).ok, false);
+    const forged = { objectId: 'lobby-seat-1', sessionId: bob.sessionId, facing: 'down', x: 1, y: 1 };
+    assert.equal((await alice.request('activate', forged)).ok, true);
+    assert.deepEqual([player.x, player.y, player.facing, player.motion, player.action, player.actionTargetId],
+      [408, 392, 'up', 'idle', 'sit', 'lobby-seat-1']);
+    assert.equal(other.action, 'none');
+    const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
+    assert.equal(object.occupiedBy, alice.sessionId); assert.equal(object.variant, 'occupied');
+    await until(() => bob.state.players.get(alice.sessionId)?.action === 'sit');
+    assert.equal(bob.state.worldObjects.get('lobby')?.objects.get('lobby-seat-1')?.occupiedBy, alice.sessionId);
+    other.x = 408; other.y = 392;
+    assert.equal((await bob.request('activate', { objectId: 'lobby-seat-1' })).ok, false);
+    alice.send('input', { x: 0, y: 0 });
+    await delay(150);
+    assert.equal(player.action, 'sit'); assert.equal(player.x, 408);
+    alice.send('input', { x: -1, y: 0 });
+    await until(() => player.action === 'none');
+    assert.equal(player.actionTargetId, ''); assert.equal(player.facing, 'left');
+    assert.equal(object.occupiedBy, ''); assert.equal(object.variant, 'empty');
+    await until(() => player.motion === 'walk');
+    assert.equal((await bob.request('activate', { objectId: 'lobby-seat-1' })).ok, true);
+    assert.equal(object.occupiedBy, bob.sessionId);
+    await bob.leave();
+    await until(() => object.occupiedBy === '');
+    assert.equal(object.variant, 'empty');
+  });
+  test('a dropped seated player retains occupancy during reconnection and releases it on final leave', async () => {
+    const alice = await join('SeatedReconnect');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    player.x = 408; player.y = 392;
+    assert.equal((await alice.request('activate', { objectId: 'lobby-seat-1' })).ok, true);
+    const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
+    const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    authoritative.clients.find(client => client.sessionId === alice.sessionId)!.leave(1001);
+    await until(() => !player.connected);
+    assert.equal(player.action, 'sit'); assert.equal(player.motion, 'idle');
+    assert.equal(object.occupiedBy, alice.sessionId);
+    await reconnected;
+    await until(() => player.connected);
+    assert.equal(player.action, 'sit'); assert.equal(object.occupiedBy, alice.sessionId);
+    await alice.leave();
+    await until(() => object.occupiedBy === '');
+  });
+  test('revoked identities cannot activate an authored seat even at its anchor', async () => {
+    const cookie = await createIdentity();
+    const alice = await join('RevokedSeat', 'mint', cookie);
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    player.x = 408; player.y = 392;
+    const left = new Promise<number>(resolve => alice.onLeave.once(resolve));
+    await fetch(endpoint + '/api/auth/sign-out', { method: 'POST', headers: { Cookie: cookie, Origin: endpoint,
+      'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal((await alice.request('activate', { objectId: 'lobby-seat-1' })).ok, false);
+    assert.equal(player.action, 'none');
+    assert.equal(authoritative.state.worldObjects.get('lobby')?.objects.get('lobby-seat-1')?.occupiedBy, '');
+    assert.equal(await left, 4003);
   });
   test('chat is broadcast as text with server identity, bounded length, and rate limiting', async () => {
     const alice = await join('Alice');
@@ -477,6 +548,10 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const alice = await join('Alice');
     const bob = await join('Bob');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    player.x = 408; player.y = 392;
+    assert.equal((await alice.request('activate', { objectId: 'lobby-seat-1' })).ok, true);
+    const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
     authoritative.reconnectionSeconds = 0.1;
     alice.reconnection.enabled = false;
     const token = alice.reconnectionToken;
@@ -485,6 +560,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await until(() => bob.state.players.size === 1);
     await assert.rejects(harness.sdk.reconnect(token));
     assert.equal(authoritative.clients.length, 1);
+    assert.equal(object.occupiedBy, ''); assert.equal(object.variant, 'empty');
   });
   for (const [name, type, payload] of [
     ['invalid direction', 'input', { x: 2, y: 0 }],

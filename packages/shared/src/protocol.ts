@@ -1,4 +1,5 @@
 import type {
+  ActivateInput,
   BoardDeleteInput,
   BoardPostInput,
   ChatMessage,
@@ -26,5 +27,6 @@ export type SpaceProtocol = {
     boardDelete: (client: unknown, input: BoardDeleteInput) => InteractionResult;
     pomodoro: (client: unknown, input: PomodoroActionInput) => InteractionResult;
     portal: (client: unknown, input: { zoneId: string }) => InteractionResult;
+    activate: (client: unknown, input: ActivateInput) => InteractionResult;
   };
 };

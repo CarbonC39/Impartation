@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AVATARS, joinSchema, inputSchema, chatSchema, boardPostSchema,
-  boardDeleteSchema, pomodoroActionSchema } from '@virtual-workspace/shared';
+  boardDeleteSchema, pomodoroActionSchema, activateSchema } from '@virtual-workspace/shared';
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {
   assert.deepEqual(joinSchema.parse({ name: ' Alice ' }), { name: 'Alice', avatar: 'mint' });
@@ -17,6 +17,14 @@ for (const [name, value] of [
 test('all nine direction inputs are allowed and extra fields cannot set authoritative identity or position', () => {
   for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) assert.deepEqual(inputSchema.parse({ x, y }), { x, y });
   assert.deepEqual(inputSchema.parse({ x: 0, y: 1, sessionId: 'other-player', position: { x: 9000 } }), { x: 0, y: 1 });
+});
+
+test('positional activation accepts only an authored object id and strips client authority', () => {
+  assert.deepEqual(activateSchema.parse({ objectId: ' seat-1 ', sessionId: 'other', x: 100, y: 200,
+    action: 'sit', facing: 'up', variant: 'occupied' }), { objectId: 'seat-1' });
+  for (const value of [{}, null, { objectId: '' }, { objectId: ' ' }, { objectId: 'a'.repeat(129) }, { objectId: 1 }]) {
+    assert.equal(activateSchema.safeParse(value).success, false);
+  }
 });
 for (const [name, value] of [
   ['out of range', { x: 2, y: 0 }], ['negative out of range', { x: 0, y: -2 }],

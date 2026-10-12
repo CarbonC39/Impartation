@@ -47,10 +47,20 @@ export const Player = schema({
   name: t.string(), avatar: t.string(), x: t.number(), y: t.number(),
   userId: t.string(), role: t.string().default('member'),
   mapId: t.string(), connected: t.boolean().default(true), zoneId: t.string().default(''),
+  facing: t.string().default('down'), motion: t.string().default('idle'),
+  action: t.string().default('none'), actionTargetId: t.string().default(''),
 }, 'Player');
 export type Player = SchemaType<typeof Player>;
+// Authored object IDs are scoped by map. Visual variants contain no tile indices.
+export const WorldObjectState = schema({
+  variant: t.string().default(''), occupiedBy: t.string().default(''),
+}, 'WorldObjectState');
+export type WorldObjectState = SchemaType<typeof WorldObjectState>;
+export const MapObjectState = schema({ objects: t.map(WorldObjectState) }, 'MapObjectState');
+export type MapObjectState = SchemaType<typeof MapObjectState>;
 export const SpaceState = schema({
   players: t.map(Player), notes: t.map(BoardNote), pomodoros: t.map(Pomodoro), serverTime: t.number(),
+  worldObjects: t.map(MapObjectState),
 }, 'SpaceState');
 export type SpaceState = SchemaType<typeof SpaceState>;
 
@@ -73,4 +83,5 @@ export type WebTool = z.infer<typeof webToolSchema>;
 
 export * from './world.js';
 export * from './interactions.js';
+export * from './character.js';
 export type { SpaceProtocol } from './protocol.js';

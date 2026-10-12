@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { z } from 'zod';
 import { parseWorldMap, stepMovement, canStand, contains, PLAYER_SPEED, TICK_MS,
   InteractionRegistry, validateMapRegistry, type InteractionDefinition } from '@virtual-workspace/shared';
+import { standsOnSeat, movementFacing } from '@virtual-workspace/shared';
 
 const raw: unknown = JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8'));
 const world = parseWorldMap(raw);
@@ -40,6 +41,45 @@ test('movement normalizes diagonals, clamps ticks, slides along walls and blocks
   assert.equal(stepMovement(world, { x: 10, y: 40 }, { x: -1, y: 0 }, TICK_MS).x, 10);
   assert.deepEqual(stepMovement(world, spawn, { x: 0, y: 0 }, 50), spawn);
   assert.deepEqual(stepMovement(world, spawn, { x: 1, y: 1 }, -50), spawn);
+});
+
+test('seat points expose authored anchor/facing and only the foot tile can activate them', () => {
+  const seat = world.seats[0];
+  assert.deepEqual(seat, { id: 'lobby-seat-1', kind: 'seat', x: 408, y: 392, facing: 'up' });
+  assert.equal(standsOnSeat(seat, { x: 400, y: 384 }), true);
+  assert.equal(standsOnSeat(seat, { x: 415.99, y: 399.99 }), true);
+  // Adjacent tiles cannot activate, even if very close to the same anchor.
+  assert.equal(standsOnSeat(seat, { x: 399.99, y: 392 }), false);
+  assert.equal(standsOnSeat(seat, { x: 416, y: 392 }), false);
+  assert.equal(standsOnSeat(seat, { x: 408, y: 400 }), false);
+  const offset = parseWorldMap(mutate((map, layers) => {
+    map.layers = [layers[0], { type: 'group', offsetx: 16, offsety: 16, layers: layers.slice(1) }];
+  }));
+  assert.deepEqual(offset.seats[0], { ...seat, x: 424, y: 408 });
+});
+
+test('movement facing retains zero direction and resolves cardinal and diagonal input', () => {
+  assert.equal(movementFacing({ x: 0, y: 0 }, 'left'), 'left');
+  assert.equal(movementFacing({ x: 1, y: 0 }, 'down'), 'right');
+  assert.equal(movementFacing({ x: -1, y: 0 }, 'down'), 'left');
+  assert.equal(movementFacing({ x: 0, y: -1 }, 'right'), 'up');
+  assert.equal(movementFacing({ x: 1, y: 1 }, 'up'), 'down');
+});
+
+for (const [name, changes] of Object.entries({
+  rectangle: { point: false, width: 16, height: 16 },
+  'missing facing': { properties: [] },
+  'invalid facing': { properties: [{ name: 'facing', value: 'north' }] },
+  'blocked anchor': { x: 350, y: 250 },
+  'out of bounds': { x: -1 },
+  'duplicate authored id': { name: 'message-wall' },
+  'overlapping seat tile': { x: 440, y: 392 },
+})) test(`seat authoring rejects ${name}`, () => {
+  assert.throws(() => parseWorldMap(mutate((_map, layers) => {
+    const list = objects(layers[3]);
+    Object.assign(list.find(object => object.name === 'lobby-seat-1')!, changes);
+    layers[3].objects = list;
+  })));
 });
 
 test('semantic validation accepts independent visual layers, multiple/external tilesets and decorative shapes', () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { contains, portalPropertiesSchema, type InteractionResult, type RegisteredMap } from '@virtual-workspace/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
+import { releaseSeat } from '../seat/handler.js';
 
 export function createPortalInteraction(context: InteractionContext & {
   maps: ReadonlyMap<string, RegisteredMap>;
@@ -18,6 +19,8 @@ export function createPortalInteraction(context: InteractionContext & {
         const target = portalPropertiesSchema.parse(zone.properties);
         const destination = context.maps.get(target.targetMap)!;
         const spawn = destination.world.spawns[target.targetSpawn];
+        releaseSeat(context, player, client.sessionId);
+        player.motion = 'idle';
         player.mapId = destination.id; player.x = spawn.x; player.y = spawn.y;
         player.zoneId = destination.world.zones.find(zone => contains(zone, player.x, player.y))?.id ?? '';
         context.resetMovement(client);

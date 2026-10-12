@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
 import { SpaceState, Player, joinSchema, inputSchema, chatSchema, stepMovement, contains,
-  TICK_MS, type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
+  TICK_MS, movementFacing, facingSchema, type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
 import { worldRegistry, worlds } from '../world.js';
 import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
 import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
 import { config } from '../config.js';
+import { releaseSeat } from '../interactions/seat/handler.js';
 
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> {
   state = new SpaceState();
@@ -20,11 +21,19 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     state: this.state, maps: worlds, worlds: worldRegistry.maps.map(map => map.world),
     authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkInteraction(client, kind, resource),
     resetMovement: client => this.movementInputs.delete(client.sessionId),
+    throttle: client => this.throttleInteraction(client),
   });
 
   messages = {
     input: validate(inputSchema, async (client: SpaceClient, input: MovementInput) => {
       if (!await this.authorize(client)) return;
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      if (input.x || input.y) {
+        releaseSeat({ state: this.state }, player, client.sessionId);
+        player.facing = movementFacing(input, facingSchema.parse(player.facing));
+      }
+      if (!input.x && !input.y) player.motion = 'idle';
       this.movementInputs.set(client.sessionId, { ...input, receivedAt: Date.now() });
     }),
     chat: validate(chatSchema, async (client: SpaceClient, { text }: { text: string }) => {
@@ -52,6 +61,10 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     const player = this.state.players.get(client.sessionId);
     const current = player && worlds.get(player.mapId)?.world.zones.find(zone => contains(zone, player.x, player.y));
     if (!player?.connected || current?.kind !== kind || current.resourceId !== resourceId) return '请先走进对应功能区';
+    return this.throttleInteraction(client);
+  }
+
+  private throttleInteraction(client: SpaceClient): string | undefined {
     const now = Date.now();
     if (now - (this.lastInteraction.get(client.sessionId) ?? 0) < 500) return '操作过快，请稍后重试';
     this.lastInteraction.set(client.sessionId, now);
@@ -69,9 +82,10 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.setTimestep(delta => {
       for (const [id, player] of this.state.players) {
         const input = this.movementInputs.get(id);
-        if (!input || !player.connected || Date.now() - input.receivedAt > 250) continue;
+        if (!input || !player.connected || Date.now() - input.receivedAt > 250) { player.motion = 'idle'; continue; }
         const world = worlds.get(player.mapId)!.world;
         const next = stepMovement(world, player, input, delta);
+        player.motion = next.x !== player.x || next.y !== player.y ? 'walk' : 'idle';
         player.x = next.x;
         player.y = next.y;
         player.zoneId = world.zones.find(zone => contains(zone, next.x, next.y))?.id ?? '';
@@ -102,7 +116,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   }
   onDrop(client: SpaceClient, code: number) {
     const player = this.state.players.get(client.sessionId);
-    if (player) player.connected = false;
+    if (player) { player.connected = false; player.motion = 'idle'; }
     this.movementInputs.delete(client.sessionId);
     // Match SDK retryable close codes. Validation failures must release their seats.
     if ([CloseCode.NO_STATUS_RECEIVED, CloseCode.ABNORMAL_CLOSURE,
@@ -117,6 +131,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     if (player) player.connected = true;
   }
   onLeave(client: SpaceClient) {
+    const player = this.state.players.get(client.sessionId);
+    if (player) releaseSeat({ state: this.state }, player, client.sessionId);
     this.identities.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
