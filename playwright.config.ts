@@ -21,6 +21,7 @@ export default defineConfig({
     url: 'http://127.0.0.1:5174/health',
     reuseExistingServer: false,
     env: {
+      VITE_CAMERA_ZOOM: process.env.VITE_CAMERA_ZOOM ?? '2',
       PORT: '2569', DATABASE_PATH: ':memory:', MAP_REGISTRY_PATH: createWorldFixture(),
       IDENTITY_BASE_URL: 'http://127.0.0.1:5174',
       IDENTITY_TRUSTED_ORIGINS: 'http://127.0.0.1:5174,http://127.0.0.1:2569',

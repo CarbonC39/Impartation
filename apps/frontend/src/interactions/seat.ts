@@ -2,8 +2,8 @@ import type { Room } from '@colyseus/sdk';
 import { standsOnSeat, type RegisteredMap, type Seat, type SpaceProtocol } from '@virtual-workspace/shared';
 import { element } from './panel';
 
-/** Handles point based map objects separately from rectangular interaction zones. */
-export class PositionalInteractions {
+/** Handles seat activation separately from rectangular interaction zones. */
+export class SeatInteractions {
   private world?: RegisteredMap;
   private pending = false;
   private disposed = false;
@@ -80,8 +80,8 @@ export class PositionalInteractions {
   }
 }
 
-export function createPositionalInteractions(room: Room<SpaceProtocol>) {
-  return new PositionalInteractions(
+export function createSeatInteractions(room: Room<SpaceProtocol>) {
+  return new SeatInteractions(
     room,
     element<HTMLButtonElement>('activate-object'),
     element('object-feedback'),

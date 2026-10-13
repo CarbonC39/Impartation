@@ -37,7 +37,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | SQLite | v1-v3 迁移、旧留言保留、持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
 | 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
 | HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开配置 API；座位位置/身份验证、坐姿同步、排他占用、零输入保持及移动/最终离开释放、断线保留与超时释放 | [space.test.ts](../apps/backend/test/space.test.ts) |
-| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载，完整 16 帧纹理切片、脚点锚定、整数相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏按钮与 E 键坐下，移动起身及对象状态同步；多地图 Portal 与多图层/tileset；embed、embed 的手动 external fallback、external 和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载，完整 16 帧纹理切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏按钮与 E 键坐下，移动起身及对象状态同步；多地图 Portal 与多图层/tileset；embed、embed 的手动 external fallback、external 和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。浏览器座位用例保存截图供视觉检查，不做像素快照比较。坐姿素材当前使用 directional idle 回退，专用坐姿美术仍待提供。
 

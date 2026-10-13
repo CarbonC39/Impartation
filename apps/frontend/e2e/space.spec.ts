@@ -19,7 +19,11 @@ async function enter(page: Page, name: string, avatar = 'mint', prepare?: () => 
 
 type RenderingWindow = Window & { sceneUnderTest?: SpaceScene };
 
-test('corrected atlas renders complete directional frames at integer world zoom', async ({ page }, testInfo) => {
+test('character atlas uses configured camera zoom and seat anchors have no default furniture', async ({ page }, testInfo) => {
+  const seatVisualRequests: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/objects/seat.svg') seatVisualRequests.push(request.url());
+  });
   await enter(page, 'E2ERender', 'mint', async () => {
     // Observe the real scene through a test-only prototype hook; no app debug API is exposed.
     await page.evaluate(async scenePath => {
@@ -56,6 +60,7 @@ test('corrected atlas renders complete directional frames at integer world zoom'
     }
     return {
       zoom, frame: Number(sprite.frame.name),
+      objectImages: scene.children.list.filter(child => child.type === 'Image').length,
       origin: [sprite.originX, sprite.originY],
       groundAnchor: [sprite.displayOriginX, sprite.displayOriginY],
       worldSize: [sprite.displayWidth, sprite.displayHeight],
@@ -70,11 +75,14 @@ test('corrected atlas renders complete directional frames at integer world zoom'
   await expect.poll(async () => (await renderState())?.frame).toBe(0);
   const initial = (await renderState())!;
   const avatar = avatars.mint;
-  expect(initial.zoom).toBe(3);
+  const cameraZoom = Number(process.env.VITE_CAMERA_ZOOM ?? 2);
+  expect(initial.zoom).toBe(cameraZoom);
+  expect(initial.objectImages).toBe(0);
+  expect(seatVisualRequests).toEqual([]);
   expect(initial.origin).toEqual([avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight]);
   expect(initial.groundAnchor).toEqual([avatar.groundAnchor.x, avatar.groundAnchor.y]);
   expect(initial.worldSize).toEqual([avatar.frameWidth, avatar.frameHeight]);
-  expect(initial.screenSize).toEqual([avatar.frameWidth * 3, avatar.frameHeight * 3]);
+  expect(initial.screenSize).toEqual([avatar.frameWidth * cameraZoom, avatar.frameHeight * cameraZoom]);
   // The current idle art's visible feet, rather than its transparent frame edge, meet the ground.
   expect(initial.visibleFootOffset).toBeCloseTo(0);
   expect(initial.frames).toEqual(Array.from({ length: 16 }, (_, index) => [index % 4 * avatar.frameWidth,
@@ -87,7 +95,7 @@ test('corrected atlas renders complete directional frames at integer world zoom'
   } finally { await page.keyboard.up('d'); }
   await expect.poll(async () => (await renderState())?.frame).toBe(8);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * 3, avatar.frameHeight * 3]);
+  await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * cameraZoom, avatar.frameHeight * cameraZoom]);
   await page.screenshot({ path: testInfo.outputPath('character-zoom-mobile.png'), fullPage: true });
   await page.locator('#leave').click();
 });

@@ -7,13 +7,8 @@ type OverlayDefinition = {
 };
 // Rendering choices are separate from Tiled semantics and synchronized object state.
 // More overlay kinds/variants can be added here without changing interaction rules.
-const overlays: Record<string, OverlayDefinition> = {
-  seat: { width: 20, height: 24,
-    variants: {
-      empty: { texture: 'object-seat', url: '/objects/seat.svg', tint: 0xb4c5bd },
-      occupied: { texture: 'object-seat', url: '/objects/seat.svg', tint: 0xe8c878 },
-    } },
-};
+// Seat points are invisible anchors. Furniture belongs to authored map visuals.
+const overlays: Record<string, OverlayDefinition> = {};
 
 export function preloadObjectVisuals(scene: Phaser.Scene) {
   const loaded = new Set<string>();

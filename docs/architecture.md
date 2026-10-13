@@ -129,7 +129,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 
 当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和 tile object 没有相应的客户端绘制实现。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
 
-地图逻辑尺寸来自 registry 中的 world。浏览器以 48px 屏幕显示尺寸作为 tile 参考值，针对源地图 `tilewidth` 计算整数缩放：`max(1, round(48 / tilewidth))`；16px tile 默认放大 3 倍。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
+地图逻辑尺寸来自 registry 中的 world。浏览器相机缩放由 `VITE_CAMERA_ZOOM` 单独配置，默认值为 2；仅接受有限且大于零的数字，其它值回退到 2。该值不依赖地图 tile 尺寸。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
 
 ## 4. 实时状态、移动与地图切换
 
@@ -173,7 +173,7 @@ Player 包含 `userId`、昵称、地图角色外观预设 ID、权限 role、`m
 
 [characters.ts](../apps/frontend/src/characters.ts) 配置角色图集的帧尺寸与帧内地面脚点；这些值独立于地图 tile 与碰撞尺寸。当前图集为 64×96，分成 4×4 的 16×24 帧，方向按 down/left/right/up 排列，每个方向有四个行走帧，索引为 0–15，每行首帧用于 idle。当前素材的脚点接近帧内底部中心，但这不是其它素材的约束：`groundAnchor` 使用帧内源像素坐标定义各素材脚点。相同帧尺寸和脚点位置的素材可直接替换 `assets/characters/walk.png`；若帧尺寸或透明留白发生变化，需在角色定义同步调整 `frameWidth`、`frameHeight` 和 `groundAnchor`。mint、amber、violet 目前使用同一图集并应用不同 tint。动画帧由客户端本地时间选择，不进入 Schema。当前没有单独坐姿素材，sit 使用该朝向的 idle 帧和坐下文字标记。
 
-`Tiled 对象 → interaction → worldObjects 状态 → 视觉表示` 是对象呈现的数据路径。[worldObjectVisuals.ts](../apps/frontend/src/worldObjectVisuals.ts) 按 authored ID 管理叠加精灵，按 kind/variant 选择视觉定义；当前座位的 empty/occupied 使用不同配色。视觉尺寸由定义控制，不使用 tile 尺寸。未来饮料、灯等可增加叠加图及 variant，门或地形也可由渲染层实现 tile 替换；业务 handler 只修改对象状态，不写 GID 或调用 putTileAt。
+`Tiled 对象 → interaction → worldObjects 状态 → 视觉表示` 是对象呈现的数据路径。座位 Tiled point 只提供交互锚点与朝向，不绘制家具；地图作者在 Tiled 视觉层独立放置家具图案。`worldObjectVisuals.ts` 保留按 authored ID 和 kind/variant 绘制叠加图的能力，目前没有注册座位叠加视觉。叠加视觉尺寸单独定义，不依赖 tile 尺寸；业务 handler 只修改对象状态，不写 GID 或调用 putTileAt。
 
 ### 4.3 Portal 的完整路径
 
@@ -206,7 +206,7 @@ Portal 保留同一房间、连接、身份和聊天。加入房间使用 initia
 
 客户端 [InteractionDispatcher](../apps/frontend/src/interactions/dispatcher.ts) 只认识 `setZone`、`setConnected`、`dispose`。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
 
-board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/interactions/board/handler.ts)、[PomodoroInteraction](../apps/frontend/src/interactions/pomodoro/handler.ts)，共用 [panel.ts](../apps/frontend/src/interactions/panel.ts) 的连接、pending、反馈和订阅清理机制。它们在 interactions/index.ts 直接注册，其现有 UI 不通过 WebTool 配置选择模式。Portal 使用 [portal/handler.ts](../apps/frontend/src/interactions/portal/handler.ts) 独立注册。`web/handler.ts` 读取 `/api/tools`，按资源匹配配置。点位对象交互由 [positional.ts](../apps/frontend/src/interactions/positional.ts) 独立处理：从当前地图和服务端位置寻找座位，同步按钮可用性，单独提交 `activate`；它不参加矩形 zone 的 handler 分发。
+board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/interactions/board/handler.ts)、[PomodoroInteraction](../apps/frontend/src/interactions/pomodoro/handler.ts)，共用 [panel.ts](../apps/frontend/src/interactions/panel.ts) 的连接、pending、反馈和订阅清理机制。它们在 interactions/index.ts 直接注册，其现有 UI 不通过 WebTool 配置选择模式。Portal 使用 [portal/handler.ts](../apps/frontend/src/interactions/portal/handler.ts) 独立注册。`web/handler.ts` 读取 `/api/tools`，按资源匹配配置。座位交互由 [seat.ts](../apps/frontend/src/interactions/seat.ts) 独立处理：从当前地图和服务端位置寻找座位，同步按钮可用性，单独提交 `activate`；它不参加矩形 zone 的 handler 分发。
 
 服务端 [registerServerInteractions](../apps/backend/src/interactions/registry.ts) 合并 handlers 的消息字典，保留具体消息类型，拒绝重复消息名。kind 注册只关联生命周期；实际请求按消息名进入对应 handler。通用容器不会自动执行身份或位置检查。区域 handler 调用上下文中的 `authorize` 和 `check`；seat handler 使用同一身份复验和操作限流，再单独检查同格位置及占用状态。
 

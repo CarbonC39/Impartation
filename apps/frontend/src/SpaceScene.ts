@@ -6,7 +6,6 @@ import { avatarDefinition, avatars, characterFacing, characterFrame } from './ch
 import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
 
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; animation: string; elapsed: number };
-const DISPLAY_TILE_SIZE = 48;
 
 export class SpaceScene extends Phaser.Scene {
   private sprites = new Map<string, PlayerVisual>();
@@ -33,8 +32,9 @@ export class SpaceScene extends Phaser.Scene {
   }
   create() {
     const map = this.make.tilemap({ key: 'world' });
-    // Scale the whole world in the camera, independently of simulation units and sprite dimensions.
-    const zoom = Math.max(1, Math.round(DISPLAY_TILE_SIZE / map.tileWidth));
+    // A display preference, independent of tile dimensions and simulation units.
+    const configuredZoom = Number(import.meta.env.VITE_CAMERA_ZOOM ?? 2);
+    const zoom = Number.isFinite(configuredZoom) && configuredZoom > 0 ? configuredZoom : 2;
     this.cameras.main.setZoom(zoom);
     const tiles = this.renderMap.tilesets.flatMap((tileset, index) => {
       if (!tileset.image) return [];

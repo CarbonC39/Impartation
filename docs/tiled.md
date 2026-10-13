@@ -31,6 +31,8 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 
 在 `interactions` 对象层放置一个命名 point object，将 `class`（或旧版 `type`）设为 `seat`，并用 string property `facing` 指定 `up`、`down`、`left` 或 `right`。对象 `name` 是此座位在当前地图内稳定且唯一的 ID；座位没有 `resourceId`，运行时状态按地图 ID 和 authored ID 归属。
 
+这个 point 只定义交互锚点和朝向；它本身不绘制椅子或其它家具，项目也不提供默认座椅图。需要显示家具时，在 Tiled 视觉层独立摆放对应图块；视觉位置与交互点可按地图构图分别调整。
+
 ```json
 {
   "name": "window-seat",
