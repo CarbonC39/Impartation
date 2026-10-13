@@ -29,7 +29,7 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 
 ### 角色动作锚点
 
-在 `interactions` 对象层放置命名 point object，`class` 设为 `action`，并用 string property `action` 指定动作名称。`seat` class 仍作为载入别名，会规范化为 `action: "sit"`。对象 `name` 是当前地图内唯一的 authored ID；动作锚点没有 `resourceId`。
+在 `interactions` 对象层放置命名 point object，`class` 设为 `action`，并用 string property `action` 指定动作名称。对象 `name` 是当前地图内唯一的 authored ID；动作锚点没有 `resourceId`。
 
 可选 string property `facing` 覆盖角色朝向（`up`、`down`、`left` 或 `right`）；省略时保留当前朝向。`offsetX`、`offsetY` 是以世界像素计的有限数值偏移，默认均为 0。可选 `linkedObjectId` 为地图对象保留关联 ID，供后续对象变体扩展使用。
 

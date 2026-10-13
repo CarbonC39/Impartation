@@ -197,16 +197,14 @@ test('different actions may share a tile but duplicate same-action tile anchors 
   assert.throws(() => parseWorldMap(sharedTile('sit')));
 });
 
-test('legacy seat points normalize to sit actions', () => {
-  const parsed = parseWorldMap(mutate((_map, layers) => {
+test('point interactions require the explicit action class', () => {
+  assert.throws(() => parseWorldMap(mutate((_map, layers) => {
     const list = objects(layers[3]);
     const object = list.find(item => item.name === 'lobby-seat-1')!;
     object.class = 'seat';
     object.properties = array(object.properties).map(record).filter(property => property.name !== 'action');
     layers[3].objects = list;
-  }));
-  assert.equal(parsed.actions[0].kind, 'action');
-  assert.equal(parsed.actions[0].action, 'sit');
+  })), /Zone interactions must be rectangles/);
 });
 
 test('semantic validation accepts independent visual layers, multiple/external tilesets and decorative shapes', () => {

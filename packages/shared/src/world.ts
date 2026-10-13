@@ -108,10 +108,9 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
     if (ids.has(id)) throw new Error('Interactions must have unique authored IDs');
     ids.add(id);
     const properties = Object.fromEntries(obj.properties.map(prop => [prop.name, prop.value]));
-    if (kind === 'action' || kind === 'seat') {
+    if (kind === 'action') {
       if (!obj.point || obj.width || obj.height) throw new Error('Action anchors must be named points');
-      // Existing seat objects remain usable as sit anchors during map authoring.
-      const actionProperties = actionPropertiesSchema.parse(kind === 'seat' ? { ...properties, action: 'sit' } : properties);
+      const actionProperties = actionPropertiesSchema.parse(properties);
       actions.push({ id, kind: 'action', x: obj.x, y: obj.y, ...actionProperties });
       continue;
     }

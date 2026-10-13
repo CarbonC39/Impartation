@@ -26,8 +26,8 @@ const makeMap = (spawnName: string, zones: unknown[], collisions: unknown[] = []
   ],
 });
 writeFileSync(join(directory, 'atlas.tsj'), JSON.stringify({ name: 'atlas', image: fileURLToPath(new URL('../../../assets/maps/tiles.png', import.meta.url)), tilewidth: 16, tileheight: 16, columns: 6, tilecount: 12 }));
-const seat = { name: 'same-seat', class: 'seat', point: true, x: 88, y: 40,
-  properties: [{ name: 'facing', value: 'left' }] };
+const seat = { name: 'same-seat', class: 'action', point: true, x: 88, y: 40,
+  properties: [{ name: 'action', value: 'sit' }, { name: 'facing', value: 'left' }] };
 writeFileSync(join(directory, 'home.tmj'), JSON.stringify(makeMap('entry', [portal('door', 'studio', 'arrival'), seat])));
 writeFileSync(join(directory, 'studio.tmj'), JSON.stringify(makeMap('arrival', [portal('return', 'home', 'entry'), seat], [{ x: 48, y: 16, width: 16, height: 48 }])));
 writeFileSync(join(directory, 'registry.json'), JSON.stringify({ initialMap: 'home', maps: [

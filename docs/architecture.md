@@ -111,7 +111,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 | `collisions` | 地图内的非旋转、正面积轴对齐矩形；可为空 |
 | `interactions` | 区域为地图内的非旋转、正面积轴对齐矩形；动作锚点为可站立的点；可为空；对象 `name` 是该地图内唯一的交互对象 ID |
 
-`interactions` 层也可包含动作锚点：`class` 为 `action` 的对象必须是命名 point，string property `action` 指定动作名称；旧 `seat` class 载入时规范化为 `sit`。可选 `facing` 覆盖朝向，`offsetX`/`offsetY` 指定世界像素偏移，`linkedObjectId` 保留地图对象关联。有效锚点必须可站立；每个动作名称在每个 16×16 格最多一个锚点，不同动作可共格。动作只按角色脚点所在格查找，不使用距离半径；命中后服务端吸附到偏移后的锚点并采用可选朝向，未命中则原地执行并保留朝向。ID 在地图间可重复，运行时状态通过 map ID 隔离。
+`interactions` 层也可包含动作锚点：`class` 为 `action` 的对象必须是命名 point，string property `action` 指定动作名称。可选 `facing` 覆盖朝向，`offsetX`/`offsetY` 指定世界像素偏移，`linkedObjectId` 保留地图对象关联。有效锚点必须可站立；每个动作名称在每个 16×16 格最多一个锚点，不同动作可共格。动作只按角色脚点所在格查找，不使用距离半径；命中后服务端吸附到偏移后的锚点并采用可选朝向，未命中则原地执行并保留朝向。ID 在地图间可重复，运行时状态通过 map ID 隔离。
 
 交互 kind 取对象 `class`，没有 class 时使用 `type`；properties 保存为 `Record<string, unknown>`。`resourceId` 是从 properties 提取的共享资源标识，与 zone ID 不同：多个区域或地图可以引用同一资源。Portal 使用 `targetMap` 和 `targetSpawn`。
 
