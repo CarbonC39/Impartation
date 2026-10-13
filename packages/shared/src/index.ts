@@ -48,7 +48,7 @@ export const Player = schema({
   userId: t.string(), role: t.string().default('member'),
   mapId: t.string(), connected: t.boolean().default(true), zoneId: t.string().default(''),
   facing: t.string().default('down'), motion: t.string().default('idle'),
-  action: t.string().default('none'), actionTargetId: t.string().default(''),
+  action: t.string().default('none'), actionAnimated: t.boolean().default(false), actionTargetId: t.string().default(''),
 }, 'Player');
 export type Player = SchemaType<typeof Player>;
 // Authored object IDs are scoped by map. Visual variants contain no tile indices.

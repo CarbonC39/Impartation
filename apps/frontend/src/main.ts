@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { zoneLabels } from './interactions/labels';
 import { loadProfile, saveProfile, generateBinding, importBinding, type Profile } from './identity';
 import './style.css';
-import { createSeatInteractions, type SeatInteractions } from './interactions/seat';
+import { createCharacterActions, type CharacterActions } from './interactions/actions';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -44,7 +44,7 @@ const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.ori
 let room: Room<SpaceProtocol> | undefined;
 let connected = false;
 let interactions: InteractionDispatcher | undefined;
-let seats: SeatInteractions | undefined;
+let actions: CharacterActions | undefined;
 let worldRegistry: WorldRegistry | undefined;
 let renderedMap = '';
 let renderingMap = '';
@@ -149,7 +149,7 @@ function setConnected(value: boolean) {
   send.disabled = !value;
   messageInput.disabled = !value;
   interactions?.setConnected(value);
-  seats?.refresh();
+  actions?.refresh();
 }
 function cleanup() {
   virtualDirections.clear();
@@ -157,8 +157,8 @@ function cleanup() {
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
   interactions?.dispose();
   interactions = undefined;
-  seats?.dispose();
-  seats = undefined;
+  actions?.dispose();
+  actions = undefined;
   element('object-feedback').textContent = '';
   game?.destroy(true);
   game = undefined;
@@ -187,7 +187,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     room.reconnection.minUptime = 0;
     if (!room.state?.players) await new Promise<void>(resolve => room!.onStateChange.once(() => resolve()));
     interactions = createInteractions(room);
-    seats = createSeatInteractions(room);
+    actions = createCharacterActions(room);
     messages.replaceChildren();
     room.onMessage('chat', message => {
       const li = document.createElement('li');
@@ -226,14 +226,12 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   const generation = ++renderGeneration;
   renderingMap = mapId;
   interactions?.setZone(undefined);
-  seats?.setWorld(undefined);
   try {
     const response = await fetch(entry.url);
     if (!response.ok) throw new Error('地图加载失败');
     const renderMap = renderMapSchema.parse(await response.json());
     if (generation !== renderGeneration || room !== activeRoom) return;
     game?.destroy(true);
-    seats?.setWorld(entry);
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: entry.world.width, height: entry.world.height,
       backgroundColor: '#2b423e',
@@ -244,7 +242,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
         const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
         interactions?.setZone(current);
-      }, () => { void seats?.activate(); }, readVirtualInput),
+      }, () => { void actions?.activate(); }, readVirtualInput),
     });
     renderedMap = mapId;
   } finally { if (generation === renderGeneration) renderingMap = ''; }

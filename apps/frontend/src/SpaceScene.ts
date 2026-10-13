@@ -89,17 +89,20 @@ export class SpaceScene extends Phaser.Scene {
         this.sprites.set(id, sprite);
       }
       const blend = Math.min(1, delta / TICK_MS);
-      // Sitting snaps to the authored foot anchor; walking interpolates patch positions.
-      sprite.sprite.x = player.action === 'sit' ? player.x : Phaser.Math.Linear(sprite.sprite.x, player.x, blend);
-      sprite.sprite.y = player.action === 'sit' ? player.y : Phaser.Math.Linear(sprite.sprite.y, player.y, blend);
+      // Active actions snap to their ground anchor; walking interpolates patch positions.
+      sprite.sprite.x = player.action !== 'none' ? player.x : Phaser.Math.Linear(sprite.sprite.x, player.x, blend);
+      sprite.sprite.y = player.action !== 'none' ? player.y : Phaser.Math.Linear(sprite.sprite.y, player.y, blend);
       const avatar = avatarDefinition(player.avatar);
       const facing = characterFacing(player.facing);
       const motion = player.motion === 'walk' ? 'walk' : 'idle';
-      const action = player.action === 'sit' ? 'sit' : 'none';
-      const animation = `${player.avatar}:${facing}:${motion}:${action}`;
+      const action = player.action;
+      const animation = `${player.avatar}:${facing}:${motion}:${action}:${player.actionAnimated}`;
       sprite.elapsed = animation === sprite.animation ? sprite.elapsed + delta : 0;
       sprite.animation = animation;
-      sprite.sprite.setTexture(avatar.texture, characterFrame(player.avatar, facing, motion, action, sprite.elapsed))
+      const frame = characterFrame(player.avatar, facing, motion, action, player.actionAnimated, sprite.elapsed);
+      // Walk-only sheets can be replaced by the full action sheet without changing this renderer.
+      const renderedFrame = this.textures.get(avatar.texture).has(String(frame)) ? frame : avatar.idle[facing];
+      sprite.sprite.setTexture(avatar.texture, renderedFrame)
         .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight)
         .setTint(avatar.tint).setAlpha(player.connected ? 1 : 0.35).setDepth(sprite.sprite.y);
       const name = action === 'sit' ? `${player.name} · 坐` : player.name;
@@ -115,7 +118,8 @@ export class SpaceScene extends Phaser.Scene {
     // Never queue movement during automatic reconnection.
     if (!ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) { this.lastInput = ''; return; }
     const typing = document.activeElement instanceof HTMLElement &&
-      ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) &&
+      !(document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'checkbox');
     const touchInput = document.hidden ? { x: 0, y: 0 } : this.virtualInput();
     const active = !document.hidden && ((document.hasFocus() && !typing) || touchInput.x !== 0 || touchInput.y !== 0);
     if (active && !typing && activatePressed) this.activate();

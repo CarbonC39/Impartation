@@ -14,6 +14,7 @@ test('configured character frames fit the supplied sheet and are independent fro
     const walkingFrames = FACINGS.flatMap(facing => avatar.walk[facing]);
     assert.equal(walkingFrames.length, 16);
     assert.equal(new Set(walkingFrames).size, walkingFrames.length);
+    assert.ok(Math.max(...walkingFrames) < count);
     assert.ok(Number.isFinite(avatar.groundAnchor.x) && avatar.groundAnchor.x >= 0 && avatar.groundAnchor.x <= avatar.frameWidth);
     assert.ok(Number.isFinite(avatar.groundAnchor.y) && avatar.groundAnchor.y >= 0 && avatar.groundAnchor.y <= avatar.frameHeight);
     for (const facing of FACINGS) {
@@ -24,13 +25,37 @@ test('configured character frames fit the supplied sheet and are independent fro
   assert.equal(avatarDefinition('missing'), avatars.mint);
 });
 
-test('clients choose walking frames locally and freeze directional idle/sit poses', () => {
+test('walk frames loop locally and idle stays on the directional first frame', () => {
   for (const facing of FACINGS) {
     const avatar = avatars.mint;
-    assert.equal(characterFrame('mint', facing, 'walk', 'none', 0), avatar.walk[facing][0]);
-    assert.equal(characterFrame('mint', facing, 'walk', 'none', 120), avatar.walk[facing][1]);
-    assert.equal(characterFrame('mint', facing, 'walk', 'none', 480), avatar.walk[facing][0]);
-    assert.equal(characterFrame('mint', facing, 'idle', 'none', 9999), avatar.idle[facing]);
-    assert.equal(characterFrame('mint', facing, 'walk', 'sit', 9999), avatar.idle[facing]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 0), avatar.walk[facing][0]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 120), avatar.walk[facing][1]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 360), avatar.walk[facing][3]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 480), avatar.walk[facing][0]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'none', false, 9999), avatar.idle[facing]);
+  }
+});
+
+test('configured actions use four directional rows with static and animated columns', () => {
+  const avatar = avatars.mint;
+  for (const [row, facing] of FACINGS.entries()) {
+    const first = 16 + row * 4;
+    assert.equal(avatar.actions.sit[facing], first);
+    assert.equal(characterFrame('mint', facing, 'walk', 'sit', false, 9999), first);
+    // An animated action takes precedence over motion and cycles columns 1–3 only.
+    assert.equal(characterFrame('mint', facing, 'idle', 'sit', true, 0), first + 1);
+    assert.equal(characterFrame('mint', facing, 'walk', 'sit', true, 120), first + 2);
+    assert.equal(characterFrame('mint', facing, 'walk', 'sit', true, 240), first + 3);
+    assert.equal(characterFrame('mint', facing, 'walk', 'sit', true, 360), first + 1);
+    assert.equal(characterFrame('mint', facing, 'walk', 'sit', true, -1), first + 1);
+  }
+  // The supplied PNG currently contains walk rows only; the configured sit row awaits matching art.
+});
+
+test('unknown actions fall back to directional walk idle regardless of motion', () => {
+  for (const facing of FACINGS) {
+    const idle = avatars.mint.idle[facing];
+    assert.equal(characterFrame('mint', facing, 'walk', 'wave', true, 120), idle);
+    assert.equal(characterFrame('mint', facing, 'idle', 'wave', false, 0), idle);
   }
 });

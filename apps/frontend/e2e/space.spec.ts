@@ -19,24 +19,26 @@ async function enter(page: Page, name: string, avatar = 'mint', prepare?: () => 
 
 type RenderingWindow = Window & { sceneUnderTest?: SpaceScene };
 
+async function captureRenderedScene(page: Page) {
+  // Observe the real scene without adding a production debug API.
+  await page.evaluate(async scenePath => {
+    const loadedPath = performance.getEntriesByType('resource').map(entry => entry.name)
+      .find(path => new URL(path).pathname === scenePath) ?? scenePath;
+    const { SpaceScene } = await import(loadedPath) as { SpaceScene: typeof import('../src/SpaceScene').SpaceScene };
+    const update = SpaceScene.prototype.update;
+    SpaceScene.prototype.update = function (this: SpaceScene, time: number, delta: number) {
+      update.call(this, time, delta);
+      (window as RenderingWindow).sceneUnderTest = this;
+    };
+  }, '/src/SpaceScene.ts');
+}
+
 test('character atlas uses configured camera zoom and seat anchors have no default furniture', async ({ page }, testInfo) => {
   const seatVisualRequests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname === '/objects/seat.svg') seatVisualRequests.push(request.url());
   });
-  await enter(page, 'E2ERender', 'mint', async () => {
-    // Observe the real scene through a test-only prototype hook; no app debug API is exposed.
-    await page.evaluate(async scenePath => {
-      const loadedPath = performance.getEntriesByType('resource').map(entry => entry.name)
-        .find(path => new URL(path).pathname === scenePath) ?? scenePath;
-      const { SpaceScene } = await import(loadedPath) as { SpaceScene: typeof import('../src/SpaceScene').SpaceScene };
-      const update = SpaceScene.prototype.update;
-      SpaceScene.prototype.update = function (this: SpaceScene, time: number, delta: number) {
-        update.call(this, time, delta);
-        (window as RenderingWindow).sceneUnderTest = this;
-      };
-    }, '/src/SpaceScene.ts');
-  });
+  await enter(page, 'E2ERender', 'mint', () => captureRenderedScene(page));
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
   const renderState = () => page.evaluate(id => {
     const scene = (window as RenderingWindow).sceneUnderTest;
@@ -98,6 +100,69 @@ test('character atlas uses configured camera zoom and seat anchors have no defau
   await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * cameraZoom, avatar.frameHeight * cameraZoom]);
   await page.screenshot({ path: testInfo.outputPath('character-zoom-mobile.png'), fullPage: true });
   await page.locator('#leave').click();
+});
+
+test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
+  // Synthetic test pixels exercise all eight rows while the supplied artwork is walk-only.
+  const sheet = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 192;
+    const context = canvas.getContext('2d')!;
+    for (let row = 0; row < 8; row++) for (let column = 0; column < 4; column++) {
+      context.fillStyle = `hsl(${row * 40 + column * 10}, 70%, 65%)`;
+      context.fillRect(column * 16 + 2, row * 24 + 1, 12, 22);
+    }
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.route('**/characters/walk.png', route => route.fulfill({
+    contentType: 'image/png', body: Buffer.from(sheet, 'base64'),
+  }));
+  await enter(page, 'E2EActions', 'mint', () => captureRenderedScene(page));
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const observer = await observe();
+  const player = () => observer.state.players.get(sessionId)!;
+  const frame = () => page.evaluate(id => {
+    const scene = (window as RenderingWindow).sceneUnderTest;
+    const sprite = scene?.children.getByName(id) as Phaser.GameObjects.Sprite | undefined;
+    return sprite && Number(sprite.frame.name);
+  }, sessionId);
+  try {
+    await expect.poll(() => player()?.name).toBe('E2EActions');
+    const position = { x: player().x, y: player().y };
+    await page.locator('#activate-object').click();
+    await expect.poll(() => player().action).toBe('sit');
+    expect(player().actionAnimated).toBe(false);
+    expect(player().actionTargetId).toBe('');
+    expect(player().motion).toBe('idle');
+    expect({ x: player().x, y: player().y }).toEqual(position);
+    await expect.poll(frame).toBe(16);
+    await page.waitForTimeout(550); // A static pose stays fixed beyond a full animation cycle and the request cooldown.
+    expect(await frame()).toBe(16);
+    await page.locator('#action-animated').check();
+    await page.keyboard.down('e');
+    try { await expect.poll(() => player().actionAnimated).toBe(true); }
+    finally { await page.keyboard.up('e'); }
+    await expect.poll(frame, { intervals: [10] }).toBe(17);
+    const frames = new Set<number>();
+    await expect.poll(async () => {
+      const value = await frame();
+      if (value !== undefined) frames.add(value);
+      return frames.has(17) && frames.has(18) && frames.has(19);
+    }, { intervals: [10] }).toBe(true);
+    expect([...frames].every(value => value >= 17 && value <= 19)).toBe(true);
+    expect({ x: player().x, y: player().y }).toEqual(position);
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(() => player().action).toBe('none');
+      expect(player().actionAnimated).toBe(false);
+      expect(player().actionTargetId).toBe('');
+      await expect.poll(() => player().motion).toBe('walk');
+    } finally { await page.keyboard.up('d'); }
+    await expect.poll(() => player().motion).toBe('idle');
+    await expect.poll(frame).toBe(8);
+    await page.locator('#leave').click();
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
 async function openAvatarScreen(page: Page) {
@@ -323,7 +388,7 @@ test('mobile seat activation renders the character and releases occupancy when w
   const seat = () => observer.state.worldObjects.get(player().mapId)?.objects.get('lobby-seat-1');
   try {
     await expect.poll(() => player()?.name).toBe('E2ESeat');
-    await expect(button).toBeDisabled();
+    await expect(button).toBeEnabled();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await canvas.scrollIntoViewIfNeeded();
     await canvas.focus();
@@ -341,6 +406,7 @@ test('mobile seat activation renders the character and releases occupancy when w
     expect(player().facing).toBe('up');
     expect(player().motion).toBe('idle');
     expect(player().actionTargetId).toBe('lobby-seat-1');
+    expect(player().actionAnimated).toBe(false);
     expect(seat()?.variant).toBe('occupied');
     expect(seat()?.occupiedBy).toBe(sessionId);
     await expect(button).toBeDisabled();
@@ -353,6 +419,7 @@ test('mobile seat activation renders the character and releases occupancy when w
       await expect.poll(() => player().x, { intervals: [10] }).toBeGreaterThanOrEqual(424);
       await expect.poll(() => player().action).toBe('none');
       expect(player().actionTargetId).toBe('');
+      expect(player().actionAnimated).toBe(false);
       expect(seat()?.variant).toBe('empty');
       expect(seat()?.occupiedBy).toBe('');
       await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');

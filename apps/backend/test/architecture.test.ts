@@ -9,14 +9,14 @@ import { PresentationRegistry } from '../../frontend/src/interactions/web/presen
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 // Compile-time check: moving the public contract must not let wire payloads drift.
-type Payload<T> = T extends { format: z.ZodType<infer P> } ? P : T extends (...args: infer A) => unknown ? A[1] : never;
+type Payload<T> = T extends { format: infer F extends z.ZodType } ? z.input<F> : T extends (...args: infer A) => unknown ? A[1] : never;
 type Result<T> = T extends { handler: (...args: never[]) => infer R } ? Awaited<R> : T extends (...args: never[]) => infer R ? Awaited<R> : never;
 type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 const protocolMatches: { [K in keyof SpaceProtocol['messages']]: Same<Payload<SpaceProtocol['messages'][K]>, Payload<SpaceRoom['messages'][K]>> } = {
-  input: true, chat: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activate: true,
+  input: true, chat: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
 };
-const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activate']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
-  boardPost: true, boardDelete: true, pomodoro: true, portal: true, activate: true,
+const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activateAction']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
+  boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
 };
 
 test('shared protocol agrees with the server and frontend depends only on shared contracts', () => {

@@ -24,27 +24,35 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 ### 出生点与碰撞
 
 - `spawns` 中放置一个或多个唯一命名的 Tiled point object。名称是出生点 ID；无需名为 `default` 的固定对象。registry 的 `defaultSpawn` 必须匹配该地图存在的名称。
-- 出生点应位于可通行区域。服务端使用玩家半径 10px 的碰撞体校验边界和障碍。
+- 出生点应位于可通行区域。服务端使用脚点上方的 12×8 地面碰撞矩形校验边界和障碍，尺寸独立于角色图片。
 - `collisions` 中每个矩形对象都是服务器端障碍。地面瓦片图案不会自动产生碰撞。
 
-### 座位
+### 角色动作锚点
 
-在 `interactions` 对象层放置一个命名 point object，将 `class`（或旧版 `type`）设为 `seat`，并用 string property `facing` 指定 `up`、`down`、`left` 或 `right`。对象 `name` 是此座位在当前地图内稳定且唯一的 ID；座位没有 `resourceId`，运行时状态按地图 ID 和 authored ID 归属。
+在 `interactions` 对象层放置命名 point object，`class` 设为 `action`，并用 string property `action` 指定动作名称。`seat` class 仍作为载入别名，会规范化为 `action: "sit"`。对象 `name` 是当前地图内唯一的 authored ID；动作锚点没有 `resourceId`。
 
-这个 point 只定义交互锚点和朝向；它本身不绘制椅子或其它家具，项目也不提供默认座椅图。需要显示家具时，在 Tiled 视觉层独立摆放对应图块；视觉位置与交互点可按地图构图分别调整。
+可选 string property `facing` 覆盖角色朝向（`up`、`down`、`left` 或 `right`）；省略时保留当前朝向。`offsetX`、`offsetY` 是以世界像素计的有限数值偏移，默认均为 0。可选 `linkedObjectId` 为地图对象保留关联 ID，供后续对象变体扩展使用。
 
 ```json
 {
   "name": "window-seat",
-  "class": "seat",
+  "class": "action",
   "x": 176,
   "y": 224,
   "point": true,
-  "properties": [{ "name": "facing", "type": "string", "value": "down" }]
+  "properties": [
+    { "name": "action", "type": "string", "value": "sit" },
+    { "name": "facing", "type": "string", "value": "down" },
+    { "name": "offsetX", "type": "float", "value": 0 },
+    { "name": "offsetY", "type": "float", "value": 2 },
+    { "name": "linkedObjectId", "type": "string", "value": "window-desk" }
+  ]
 }
 ```
 
-角色脚底坐标落在座位锚点所在的同一个 16×16 网格格子时，才能激活座位；判定不使用距离半径。每格最多一个座位锚点，锚点必须通过地面碰撞校验。激活由服务端检查，随后将角色坐标精确对齐到锚点并采用其 `facing`。同一座位同时只允许一名玩家占用。非零移动、Portal 转换或最终离开会释放占用；临时断线重连期间保留占用。当前没有单独的站起操作，任意非零移动输入即可起身。
+激活动作时，服务端只在角色脚底所在的同一 16×16 网格格子中查找同名动作锚点；不使用距离半径。相同动作名称在每格最多一个锚点，不同动作可共用一格。匹配时服务端将角色吸附到锚点加偏移的位置，并应用可选朝向；没有匹配锚点时仍执行动作，保留位置和朝向。有效锚点必须位于可通行区域。非零移动会取消动作、目标对象和动作动画标记。
+
+客户端通过 `activateAction({ action, animated })` 请求动作；`animated` 可省略且默认为 `false`。请求不携带对象 ID 或客户端坐标。地图对象的 `WorldObjectState` 会保留锚点及其关联对象 ID，当前不执行脚本，也不改变桌面等对象行为。
 
 ### 交互区与 Portal
 
@@ -79,4 +87,4 @@ Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 
 ## 校验与发布
 
-服务启动时会解析 registry 中所有地图，检查 16px tile 尺寸、命名出生点、语义几何、座位锚点和 Portal 目标。验证地图契约后，还需在浏览器检查地图渲染、资源路径、出生点、碰撞、区域进入/退出、座位定位与朝向及跨地图到达行为。更换 registry 或地图文件后重启后端。
+服务启动时会解析 registry 中所有地图，检查 16px tile 尺寸、命名出生点、语义几何、动作锚点和 Portal 目标。验证地图契约后，还需在浏览器检查地图渲染、资源路径、出生点、碰撞、区域进入/退出、动作锚点定位与朝向及跨地图到达行为。更换 registry 或地图文件后重启后端。

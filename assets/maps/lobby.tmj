@@ -292,12 +292,17 @@
                  "point":true,
                  "properties":[
                         {
+                         "name":"action",
+                         "type":"string",
+                         "value":"sit"
+                        },
+                        {
                          "name":"facing",
                          "type":"string",
                          "value":"down"
                         }],
                  "rotation":0,
-                 "type":"seat",
+                 "type":"action",
                  "visible":true,
                  "width":0,
                  "x":328.363636363636,
@@ -311,12 +316,17 @@
                  "point":true,
                  "properties":[
                         {
+                         "name":"action",
+                         "type":"string",
+                         "value":"sit"
+                        },
+                        {
                          "name":"facing",
                          "type":"string",
                          "value":"down"
                         }],
                  "rotation":0,
-                 "type":"seat",
+                 "type":"action",
                  "visible":true,
                  "width":0,
                  "x":390.5,

@@ -7,7 +7,7 @@ type OverlayDefinition = {
 };
 // Rendering choices are separate from Tiled semantics and synchronized object state.
 // More overlay kinds/variants can be added here without changing interaction rules.
-// Seat points are invisible anchors. Furniture belongs to authored map visuals.
+// Action points are invisible anchors. Furniture belongs to authored map visuals.
 const overlays: Record<string, OverlayDefinition> = {};
 
 export function preloadObjectVisuals(scene: Phaser.Scene) {
@@ -25,7 +25,7 @@ export class WorldObjectVisuals {
   constructor(private scene: Phaser.Scene, private world: WorldMap) {}
 
   update(state: MapObjectState | undefined) {
-    for (const object of [...this.world.zones, ...this.world.seats]) {
+    for (const object of [...this.world.zones, ...this.world.actions]) {
       const definition = overlays[object.kind];
       const visual = definition?.variants[state?.objects.get(object.id)?.variant ?? ''];
       let sprite = this.sprites.get(object.id);

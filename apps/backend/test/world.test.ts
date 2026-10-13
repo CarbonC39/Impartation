@@ -2,15 +2,24 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
+import { createTestMap } from '../../../packages/shared/test-fixtures/world.js';
 import { parseWorldMap, stepMovement, canStand, contains, PLAYER_FOOTPRINT, PLAYER_SPEED, TICK_MS,
   InteractionRegistry, validateMapRegistry, type InteractionDefinition } from '@virtual-workspace/shared';
-import { standsOnSeat, movementFacing } from '@virtual-workspace/shared';
+import { standsOnAction, movementFacing } from '@virtual-workspace/shared';
 
-const raw: unknown = JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8'));
+const raw: unknown = createTestMap();
+const authoredRaw: unknown = JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8'));
 const world = parseWorldMap(raw);
 const spawn = world.spawns.default;
 const record = (value: unknown) => z.record(z.string(), z.unknown()).parse(value);
 const array = (value: unknown) => z.array(z.unknown()).parse(value);
+function setProperty(object: Record<string, unknown>, name: string, value: unknown) {
+  const properties = array(object.properties).map(record);
+  const index = properties.findIndex(property => property.name === name);
+  if (index < 0) properties.push({ name, value });
+  else properties[index] = { ...properties[index], value };
+  object.properties = properties;
+}
 function mutate(change: (map: Record<string, unknown>, layers: Record<string, unknown>[]) => void) {
   const map = record(structuredClone(raw));
   const layers = array(map.layers).map(record);
@@ -20,8 +29,15 @@ function mutate(change: (map: Record<string, unknown>, layers: Record<string, un
 }
 const objects = (layer: Record<string, unknown>) => array(layer.objects).map(record);
 
-// Keep pixel geometry stable during the 32px -> 16px authoring migration.
-test('Tiled source supplies named spawn, collision geometry and interaction resources at 16px', () => {
+test('authored Tiled source supplies map geometry and action anchors', () => {
+  const authoredWorld = parseWorldMap(authoredRaw);
+  for (const point of Object.values(authoredWorld.spawns)) assert.equal(canStand(authoredWorld, point.x, point.y), true);
+  for (const anchor of authoredWorld.actions) {
+    assert.equal(canStand(authoredWorld, anchor.x + anchor.offsetX, anchor.y + anchor.offsetY), true);
+  }
+});
+
+test('deterministic fixture supplies named spawns, collision geometry and interaction resources', () => {
   assert.deepEqual(spawn, { x: 352, y: 384 });
   assert.deepEqual([world.width, world.height], [768, 512]);
   assert.equal(world.collisions.length, 1);
@@ -93,19 +109,36 @@ test('movement cannot cross a thin wall and fits through a 16px clear passage', 
   assert.equal(passagePosition.x, 32);
 });
 
-test('seat points expose authored anchor/facing and only the foot tile can activate them', () => {
-  const seat = world.seats[0];
-  assert.deepEqual(seat, { id: 'lobby-seat-1', kind: 'seat', x: 408, y: 392, facing: 'up' });
-  assert.equal(standsOnSeat(seat, { x: 400, y: 384 }), true);
-  assert.equal(standsOnSeat(seat, { x: 415.99, y: 399.99 }), true);
-  // Adjacent tiles cannot activate, even if very close to the same anchor.
-  assert.equal(standsOnSeat(seat, { x: 399.99, y: 392 }), false);
-  assert.equal(standsOnSeat(seat, { x: 416, y: 392 }), false);
-  assert.equal(standsOnSeat(seat, { x: 408, y: 400 }), false);
+test('action anchors normalize to action objects with optional facing, offsets and linkage', () => {
+  const action = world.actions[0];
+  assert.deepEqual(action, { id: 'lobby-seat-1', kind: 'action', action: 'sit', x: 408, y: 392,
+    facing: 'up', offsetX: 0, offsetY: 0, linkedObjectId: 'desk-1' });
+  assert.equal(standsOnAction(action, { x: 400, y: 384 }), true);
+  assert.equal(standsOnAction(action, { x: 415.99, y: 399.99 }), true);
+  assert.equal(standsOnAction(action, { x: 399.99, y: 392 }), false);
+  assert.equal(standsOnAction(action, { x: 416, y: 392 }), false);
+  assert.equal(standsOnAction(action, { x: 408, y: 400 }), false);
+
+  const noFacing = parseWorldMap(mutate((_map, layers) => {
+    const list = objects(layers[3]);
+    const object = list.find(item => item.name === 'lobby-seat-1')!;
+    object.properties = array(object.properties).map(record).filter(property => property.name !== 'facing');
+    layers[3].objects = list;
+  }));
+  assert.equal(noFacing.actions[0].facing, undefined);
+
+  const offsets = parseWorldMap(mutate((_map, layers) => {
+    const list = objects(layers[3]);
+    const object = list.find(item => item.name === 'lobby-seat-1')!;
+    setProperty(object, 'offsetX', -4);
+    setProperty(object, 'offsetY', 6);
+    layers[3].objects = list;
+  }));
+  assert.deepEqual([offsets.actions[0].offsetX, offsets.actions[0].offsetY], [-4, 6]);
   const offset = parseWorldMap(mutate((map, layers) => {
     map.layers = [layers[0], { type: 'group', offsetx: 16, offsety: 16, layers: layers.slice(1) }];
   }));
-  assert.deepEqual(offset.seats[0], { ...seat, x: 424, y: 408 });
+  assert.deepEqual([offset.actions[0].x, offset.actions[0].y], [424, 408]);
 });
 
 test('movement facing retains zero direction and resolves cardinal and diagonal input', () => {
@@ -118,18 +151,62 @@ test('movement facing retains zero direction and resolves cardinal and diagonal 
 
 for (const [name, changes] of Object.entries({
   rectangle: { point: false, width: 16, height: 16 },
-  'missing facing': { properties: [] },
-  'invalid facing': { properties: [{ name: 'facing', value: 'north' }] },
+  'missing action': { properties: [] },
+  'invalid facing': { properties: [{ name: 'action', value: 'sit' }, { name: 'facing', value: 'north' }] },
+  'invalid action': { properties: [{ name: 'action', value: 'Bad action' }] },
   'blocked anchor': { x: 350, y: 250 },
   'out of bounds': { x: -1 },
   'duplicate authored id': { name: 'message-wall' },
-  'overlapping seat tile': { x: 440, y: 392 },
-})) test(`seat authoring rejects ${name}`, () => {
+})) test(`action authoring rejects ${name}`, () => {
   assert.throws(() => parseWorldMap(mutate((_map, layers) => {
     const list = objects(layers[3]);
     Object.assign(list.find(object => object.name === 'lobby-seat-1')!, changes);
     layers[3].objects = list;
   })));
+});
+
+test('action offsets must be finite and end on walkable ground', () => {
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => parseWorldMap(mutate((_map, layers) => {
+      const list = objects(layers[3]);
+      const object = list.find(item => item.name === 'lobby-seat-1')!;
+      setProperty(object, 'offsetX', value);
+      layers[3].objects = list;
+    })));
+  }
+  for (const [offsetX, offsetY] of [[400, 0], [0, -100]]) {
+    assert.throws(() => parseWorldMap(mutate((_map, layers) => {
+      const list = objects(layers[3]);
+      const object = list.find(item => item.name === 'lobby-seat-1')!;
+      setProperty(object, 'offsetX', offsetX);
+      setProperty(object, 'offsetY', offsetY);
+      layers[3].objects = list;
+    })));
+  }
+});
+
+test('different actions may share a tile but duplicate same-action tile anchors are rejected', () => {
+  const sharedTile = (action: string) => mutate((_map, layers) => {
+    const list = objects(layers[3]);
+    const object = list.find(item => item.name === 'lobby-seat-2')!;
+    object.x = 410; object.y = 395;
+    setProperty(object, 'action', action);
+    layers[3].objects = list;
+  });
+  assert.equal(parseWorldMap(sharedTile('wave')).actions.length, 2);
+  assert.throws(() => parseWorldMap(sharedTile('sit')));
+});
+
+test('legacy seat points normalize to sit actions', () => {
+  const parsed = parseWorldMap(mutate((_map, layers) => {
+    const list = objects(layers[3]);
+    const object = list.find(item => item.name === 'lobby-seat-1')!;
+    object.class = 'seat';
+    object.properties = array(object.properties).map(record).filter(property => property.name !== 'action');
+    layers[3].objects = list;
+  }));
+  assert.equal(parsed.actions[0].kind, 'action');
+  assert.equal(parsed.actions[0].action, 'sit');
 });
 
 test('semantic validation accepts independent visual layers, multiple/external tilesets and decorative shapes', () => {

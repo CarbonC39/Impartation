@@ -231,6 +231,8 @@ button[data-key="START"]::before { border-radius:0; }
 #game canvas { image-rendering:pixelated; }
 .positional-controls { position:absolute; z-index:5; top:70px; right:16px; display:grid; justify-items:end; gap:8px; max-width:260px; }
 .positional-controls button { min-height:38px; padding:6px 12px; }
+.positional-controls label { display:flex; align-items:center; gap:4px; color:#fff; font-size:12px; text-shadow:0 1px 3px #14202dcc; }
+.positional-controls input[type="checkbox"] { width:auto; margin:0; box-shadow:none; }
 #object-feedback { color:#fff; font-size:12px; text-shadow:0 1px 3px #14202dcc; }
 .map-screen { padding:0; background:transparent; }
 .map-screen.active { display:block; }

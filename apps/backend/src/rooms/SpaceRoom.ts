@@ -7,7 +7,7 @@ import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
 import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
 import { config } from '../config.js';
-import { releaseSeat } from '../interactions/seat/handler.js';
+import { cancelAction } from '../interactions/action/handler.js';
 
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> {
   state = new SpaceState();
@@ -30,7 +30,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
       if (input.x || input.y) {
-        releaseSeat({ state: this.state }, player, client.sessionId);
+        cancelAction({ state: this.state }, player, client.sessionId);
         player.facing = movementFacing(input, facingSchema.parse(player.facing));
       }
       if (!input.x && !input.y) player.motion = 'idle';
@@ -81,6 +81,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     }, 1000);
     this.setTimestep(delta => {
       for (const [id, player] of this.state.players) {
+        if (player.action !== 'none') { player.motion = 'idle'; continue; }
         const input = this.movementInputs.get(id);
         if (!input || !player.connected || Date.now() - input.receivedAt > 250) { player.motion = 'idle'; continue; }
         const world = worlds.get(player.mapId)!.world;
@@ -132,7 +133,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   }
   onLeave(client: SpaceClient) {
     const player = this.state.players.get(client.sessionId);
-    if (player) releaseSeat({ state: this.state }, player, client.sessionId);
+    if (player) cancelAction({ state: this.state }, player, client.sessionId);
     this.identities.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);

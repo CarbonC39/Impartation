@@ -106,7 +106,7 @@ test('object ids are scoped by map and a Portal releases the old seat and action
   const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
   const player = authoritative.state.players.get(alice.sessionId)!;
   player.x = 88; player.y = 40;
-  assert.equal((await alice.request('activate', { objectId: 'same-seat' })).ok, true);
+  assert.equal((await alice.request('activateAction', { action: 'sit', animated: true })).ok, true);
   const homeSeat = authoritative.state.worldObjects.get('home')!.objects.get('same-seat')!;
   const studioSeat = authoritative.state.worldObjects.get('studio')!.objects.get('same-seat')!;
   assert.equal(homeSeat.occupiedBy, alice.sessionId); assert.equal(studioSeat.occupiedBy, '');
@@ -114,6 +114,7 @@ test('object ids are scoped by map and a Portal releases the old seat and action
   assert.equal((await alice.request('portal', { zoneId: 'door' })).ok, true);
   assert.equal(player.mapId, 'studio'); assert.equal(player.action, 'none');
   assert.equal(player.actionTargetId, ''); assert.equal(player.motion, 'idle');
+  assert.equal(player.actionAnimated, false);
   assert.equal(homeSeat.occupiedBy, ''); assert.equal(homeSeat.variant, 'empty');
   assert.equal(studioSeat.occupiedBy, '');
 });
