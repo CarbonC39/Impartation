@@ -1,8 +1,8 @@
 # Virtual Workspace
 
-基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
+基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。玩家外观从预设中选择，作为地图角色形象使用；它不是个人头像图片。
 
-地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。页面可用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
+地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。页面可用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD、方向键或屏幕方向按钮。
 
 ## 本地运行
 
@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
+打开 <http://localhost:5173>，完成界面引导，选择昵称和角色外观后进入空间。当前登录页和世界选择是前端原型：表单不执行账号密码认证，世界名称只影响界面标签，后端仍使用持久匿名身份和地图 registry。使用 WASD、方向键或屏幕方向按钮移动；在动作锚点所在格按 E 或点击“坐下”执行坐下动作，也可启用动画选项。移动会取消当前动作。输入文字时暂停键盘移动。相机缩放由 `VITE_CAMERA_ZOOM` 控制，默认值为 2，接受任意有限正数且独立于地图 tile 尺寸；修改 `.env` 后重启 Vite。动作锚点只定义角色位置、动作和可选朝向，不绘制家具；地图作者可在 Tiled 视觉层独立摆放家具。角色素材位于 `assets/characters/walk.png`；该文件目前只有行走帧，动作帧图集尚未提供，因此动作暂时显示方向 idle 帧。帧尺寸和帧内脚点由配置独立定义；更换素材时需同步检查角色定义中的帧尺寸与 `groundAnchor`。现有外观预设对同一图集应用不同配色。后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
 
 ## 常用命令
 
