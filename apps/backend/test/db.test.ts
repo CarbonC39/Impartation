@@ -15,7 +15,7 @@ test('SQLite migration is idempotent and data survives reopen', () => {
   const path = join(directory, 'world.sqlite');
   let database = openDatabase(path);
   try {
-    assert.equal(database.pragma('user_version', { simple: true }), 3);
+    assert.equal(database.pragma('user_version', { simple: true }), 4);
     assert.equal(database.pragma('journal_mode', { simple: true }), 'wal');
     assert.equal(database.pragma('foreign_keys', { simple: true }), 1);
     database.prepare('INSERT INTO profiles (user_id, avatar_id, updated_at) VALUES (?, ?, ?)').run('test-profile', 'violet', 123);
@@ -23,9 +23,9 @@ test('SQLite migration is idempotent and data survives reopen', () => {
     database.close();
     database = openDatabase(path);
     assert.deepEqual(database.prepare('SELECT * FROM profiles').get(), {
-      user_id: 'test-profile', avatar_id: 'violet', updated_at: 123, name: '', role: 'member',
+      user_id: 'test-profile', avatar_id: 'violet', updated_at: 123, name: '', role: 'member', appearance_json: '{}',
     });
-    assert.equal(database.pragma('user_version', { simple: true }), 3);
+    assert.equal(database.pragma('user_version', { simple: true }), 4);
     const notes = new BoardStore(database).list('message-wall');
     assert.equal(notes.length, 1);
     assert.equal(notes[0].text, '<b>saved</b>');
@@ -40,7 +40,7 @@ test('a database from a newer application is rejected', () => {
   const directory = mkdtempSync(join(tmpdir(), 'virtual-space-new-db-'));
   const path = join(directory, 'world.sqlite');
   const database = openDatabase(path);
-  database.pragma('user_version = 4');
+  database.pragma('user_version = 5');
   database.close();
   try { assert.throws(() => openDatabase(path), /newer/); }
   finally { rmSync(directory, { recursive: true, force: true }); }
@@ -58,7 +58,7 @@ test('version 1 databases migrate without losing existing profiles', () => {
     old.close();
     const upgraded = openDatabase(path);
     try {
-      assert.equal(upgraded.pragma('user_version', { simple: true }), 3);
+      assert.equal(upgraded.pragma('user_version', { simple: true }), 4);
       assert.deepEqual(upgraded.prepare('SELECT user_id FROM profiles').get(), { user_id: 'existing' });
       assert.equal(new BoardStore(upgraded).post('wall', 'guest', 'Guest', 'works'), true);
     } finally { upgraded.close(); }

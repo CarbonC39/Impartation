@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AVATARS, joinSchema, inputSchema, chatSchema, boardPostSchema,
+import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, boardPostSchema,
   boardDeleteSchema, pomodoroActionSchema, activateActionSchema } from '@virtual-workspace/shared';
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {
-  assert.deepEqual(joinSchema.parse({ name: ' Alice ' }), { name: 'Alice', avatar: 'mint' });
+  assert.deepEqual(joinSchema.parse({ name: ' Alice ' }), { name: 'Alice', avatar: 'mint', appearance: DEFAULT_APPEARANCE });
   for (const avatar of AVATARS) assert.equal(joinSchema.parse({ name: '访客', avatar }).avatar, avatar);
   assert.equal(joinSchema.parse({ name: 'x'.repeat(24) }).name.length, 24);
 });

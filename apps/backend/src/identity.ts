@@ -2,7 +2,7 @@ import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { getMigrations } from 'better-auth/db/migration';
 import { anonymous } from 'better-auth/plugins/anonymous';
 import { oneTimeToken } from 'better-auth/plugins/one-time-token';
-import { joinSchema, type JoinOptions } from '@virtual-workspace/shared';
+import { appearanceSchema, DEFAULT_APPEARANCE, joinSchema, type JoinOptions } from '@virtual-workspace/shared';
 import { config } from './config.js';
 import { db } from './db.js';
 
@@ -24,14 +24,18 @@ export const auth = betterAuth(identityOptions);
 await (await auth.$context).checkSchema?.();
 
 export type Identity = { userId: string; sessionId: string; token: string };
-export type Profile = { id: string; name: string; avatar: JoinOptions['avatar']; role: 'member' | 'admin' };
+export type Profile = { id: string; name: string; avatar: JoinOptions['avatar']; appearance: JoinOptions['appearance']; role: 'member' | 'admin' };
 
 export function profile(userId: string): Profile | undefined {
-  return db.prepare('SELECT user_id AS id, name, avatar_id AS avatar, role FROM profiles WHERE user_id = ?')
-    .get(userId) as Profile | undefined;
+  const row = db.prepare('SELECT user_id AS id, name, avatar_id AS avatar, appearance_json AS appearanceJson, role FROM profiles WHERE user_id = ?')
+    .get(userId) as { id: string; name: string; avatar: JoinOptions['avatar']; appearanceJson: string; role: Profile['role'] } | undefined;
+  if (!row) return;
+  let appearance: unknown = DEFAULT_APPEARANCE;
+  try { appearance = JSON.parse(row.appearanceJson); } catch { /* Invalid legacy data uses defaults. */ }
+  return { id: row.id, name: row.name, avatar: row.avatar, appearance: appearanceSchema.parse(appearance), role: row.role };
 }
 
-export function ensureProfile(userId: string, options: JoinOptions = { name: '访客', avatar: 'mint' }): Profile {
+export function ensureProfile(userId: string, options: JoinOptions = { name: '访客', avatar: 'mint', appearance: DEFAULT_APPEARANCE }): Profile {
   const value = joinSchema.parse(options);
   db.prepare(`INSERT INTO profiles (user_id, name, avatar_id, updated_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id) DO NOTHING`).run(userId, value.name, value.avatar, Date.now());
@@ -41,8 +45,8 @@ export function ensureProfile(userId: string, options: JoinOptions = { name: '�
 export function updateProfile(userId: string, options: JoinOptions): Profile {
   const value = joinSchema.parse(options);
   ensureProfile(userId, value);
-  db.prepare('UPDATE profiles SET name = ?, avatar_id = ?, updated_at = ? WHERE user_id = ?')
-    .run(value.name, value.avatar, Date.now(), userId);
+  db.prepare('UPDATE profiles SET name = ?, avatar_id = ?, appearance_json = ?, updated_at = ? WHERE user_id = ?')
+    .run(value.name, value.avatar, JSON.stringify(value.appearance), Date.now(), userId);
   return profile(userId)!;
 }
 

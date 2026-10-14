@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. Character presets select the in-world sprite appearance; they are not profile photos.
+A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. The character editor supports appearance choices, preview, random outfits, and saved profiles; layered character art will be integrated later. Until then, the map uses clothing color as a tint for the placeholder sprite.
 
 Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
@@ -18,11 +18,11 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>, follow the entry flow, choose a nickname and character appearance, then enter the space. The sign-in and world selection screens are frontend prototypes: the form does not authenticate with a password, and the world name only changes the UI label. The backend still uses persistent anonymous identity and its map registry.
+Open <http://localhost:5173>, follow the entry flow, choose a nickname and customize the character, then enter the space. Appearance choices can be previewed, randomized, and saved to the persistent profile. The sign-in and world selection screens are frontend prototypes: the form does not authenticate with a password, and the world name only changes the UI label. The backend still uses persistent anonymous identity and its map registry.
 
 Move with WASD, the arrow keys, or the on-screen direction pad. At an authored action anchor, press E or click **Sit** to sit; the animation option can be enabled as well. Movement cancels the current action, and typing pauses keyboard movement. The server validates action requests and resolves anchors from the player's authoritative position.
 
-Camera zoom is controlled by `VITE_CAMERA_ZOOM`, which defaults to `2` and accepts any finite positive number independently of tile size. Restart Vite after changing `.env`. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. `assets/characters/walk.png` currently contains walking frames only, so actions display the matching directional idle frame until action frames are provided. Frame size and the in-frame foot point are configured separately; update the character definition's frame size and `groundAnchor` when replacing the sheet. The current appearance presets apply different tints to the same sheet.
+Camera zoom is controlled by `VITE_CAMERA_ZOOM`, which defaults to `2` and accepts any finite positive number independently of tile size. Restart Vite after changing `.env`. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. `assets/characters/walk.png` currently contains walking frames only, so actions display the matching directional idle frame until action frames are provided. Frame size and the in-frame foot point are configured separately; update the character definition's frame size and `groundAnchor` when replacing the sheet.
 
 The backend health check is at <http://localhost:2567/health>. The development server proxies `/api`, `/health`, Colyseus matchmaking, and WebSocket traffic.
 

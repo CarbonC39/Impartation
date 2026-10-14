@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, joinSchema, chatSchema, worldRegistryResponseSchema, validateMapRegistry, type WorldRegistry, type SpaceProtocol, type MovementInput } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE, ROOM_NAME, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateMapRegistry, type WorldRegistry, type SpaceProtocol, type MovementInput, type JoinOptions } from '@virtual-workspace/shared';
 import { SpaceScene } from './SpaceScene';
 import { createInteractions } from './interactions';
 import type { InteractionDispatcher } from './interactions/dispatcher';
@@ -17,6 +17,7 @@ function element<T extends HTMLElement>(id: string): T {
 }
 const status = element('status');
 const join = element<HTMLButtonElement>('join');
+const joinFeedback = element('join-feedback');
 const leave = element<HTMLButtonElement>('leave');
 const send = element<HTMLButtonElement>('send');
 const messageInput = element<HTMLInputElement>('message');
@@ -60,6 +61,12 @@ function showScreen(id: string) {
   });
   document.body.classList.toggle('map-open', id === 'map-screen');
 }
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(value => { window.clearTimeout(timer); resolve(value); }, error => { window.clearTimeout(timer); reject(error); });
+  });
+}
 element<HTMLFormElement>('login-form').addEventListener('submit', event => {
   event.preventDefault();
   showScreen('world-screen');
@@ -83,13 +90,111 @@ document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
   button.addEventListener('click', () => showScreen(button.dataset.back ?? 'world-screen'));
 });
 const avatarChoices = [...document.querySelectorAll<HTMLInputElement>('input[name="avatar-choice"]')];
+type AppearancePart = keyof JoinOptions['appearance'];
+const appearanceChoices: Record<AppearancePart, readonly string[]> = {
+  skin: ['light', 'warm', 'deep'], hair: ['short', 'long', 'bun'],
+  hairColor: ['dark', 'brown', 'blonde', 'pink'], top: ['tee', 'sweater', 'overall'],
+  topColor: ['coral', 'sunshine', 'sky', 'leaf', 'lilac'], bottom: ['pants', 'skirt', 'shorts'],
+  bottomColor: ['denim', 'navy', 'plum', 'mint'], accessory: ['none', 'glasses', 'flower', 'hat'],
+};
+const appearanceLabels: Record<string, string> = {
+  light:'白皙', warm:'暖调', deep:'小麦', short:'短发', long:'长发', bun:'丸子头',
+  dark:'黑色', brown:'棕色', blonde:'金色', pink:'粉色', tee:'短袖', sweater:'毛衣', overall:'背带裤',
+  coral:'珊瑚红', sunshine:'向日黄', sky:'天空蓝', leaf:'嫩叶绿', lilac:'丁香紫',
+  pants:'长裤', skirt:'裙子', shorts:'短裤', denim:'牛仔蓝', navy:'海军蓝', plum:'梅子紫', mint:'薄荷绿',
+  none:'无', glasses:'眼镜', flower:'小花', hat:'帽子',
+};
+const appearanceColors = {
+  skin: { light:'#f7d6bd', warm:'#d99a70', deep:'#a9684c' },
+  hairColor: { dark:'#343344', brown:'#704b3c', blonde:'#efc75e', pink:'#dc7196' },
+  topColor: { coral:'#f07872', sunshine:'#f2c552', sky:'#64a9df', leaf:'#67ae80', lilac:'#aa82cf' },
+  bottomColor: { denim:'#587eaa', navy:'#354d71', plum:'#805a91', mint:'#6aa989' },
+} as const;
+let currentAppearance: JoinOptions['appearance'] = { ...DEFAULT_APPEARANCE };
+let activeAppearancePart: AppearancePart = 'skin';
+function renderAppearancePreview() {
+  const skin = appearanceColors.skin[currentAppearance.skin];
+  const hair = appearanceColors.hairColor[currentAppearance.hairColor];
+  const top = appearanceColors.topColor[currentAppearance.topColor];
+  const bottom = appearanceColors.bottomColor[currentAppearance.bottomColor];
+  const hairShape = currentAppearance.hair === 'long'
+    ? `<path fill="${hair}" d="M16 27V14h4V9h24v5h4v26h-6V23H20v17h-4z"/>`
+    : currentAppearance.hair === 'bun'
+      ? `<path fill="${hair}" d="M16 27V14h4V9h20v5h4v13H20v-4z"/><rect x="37" y="3" width="10" height="10" fill="${hair}"/>`
+      : `<path fill="${hair}" d="M16 27V14h4V9h24v5h4v13H20v-4z"/>`;
+  const garment = currentAppearance.top === 'overall'
+    ? `<path fill="${top}" d="M14 39h36v26H14zM19 34h7v17h-7zM38 34h7v17h-7z"/><path fill="#f5d675" d="M18 47h9v7h-9zM37 47h9v7h-9z"/>`
+    : `<path fill="${top}" d="M18 37h28l8 9-5 7-5-4v17H20V49l-5 4-5-7z"/><path fill="#ffffff55" d="M27 38h10v4H27z"/>`;
+  const lower = currentAppearance.bottom === 'skirt'
+    ? `<path fill="${bottom}" d="M19 63h26l7 17H12z"/>`
+    : currentAppearance.bottom === 'shorts'
+      ? `<path fill="${bottom}" d="M19 62h26v12H34v-6h-4v6H19z"/>`
+      : `<path fill="${bottom}" d="M19 62h26v18H32V68h-4v12H16z"/>`;
+  const accessory = currentAppearance.accessory === 'glasses'
+    ? '<path fill="none" stroke="#343344" stroke-width="3" d="M20 27h9v7h-9zM35 27h9v7h-9zM29 29h6" />'
+    : currentAppearance.accessory === 'flower'
+      ? '<path fill="#f486a1" d="M42 12h4v4h4v4h-4v4h-4v-4h-4v-4h4z"/><rect x="43" y="16" width="3" height="3" fill="#ffd86a"/>'
+      : currentAppearance.accessory === 'hat'
+        ? '<path fill="#f2c552" d="M13 13h38v5H13zM20 6h24v8H20z"/>' : '';
+  element('avatar-preview').innerHTML = `<svg class="avatar-diy-sprite pixel-svg" viewBox="0 0 64 84" aria-hidden="true"><ellipse cx="32" cy="80" rx="20" ry="3" fill="#23324733"/><path fill="${bottom}" d="M25 72h6v9h-6zM36 72h6v9h-6z"/>${lower}${garment}<path fill="${skin}" d="M12 42h7v16h-7zM45 42h7v16h-7zM22 16h20v24H22z"/>${hairShape}<path fill="#343344" d="M26 27h3v4h-3zM36 27h3v4h-3z"/><path fill="#aa5260" d="M29 35h7v2h-7z"/>${accessory}</svg>`;
+  renderAppearanceOptions();
+}
+function renderAppearanceOptions() {
+  const values = appearanceChoices[activeAppearancePart];
+  const container = element('appearance-choices');
+  container.replaceChildren(...values.map(value => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'appearance-option';
+    button.dataset.appearanceValue = value;
+    button.setAttribute('aria-pressed', String(currentAppearance[activeAppearancePart] === value));
+    const swatch = document.createElement('span'); swatch.className = 'appearance-swatch';
+    if (activeAppearancePart in appearanceColors) {
+      const palette = appearanceColors[activeAppearancePart as keyof typeof appearanceColors] as Record<string, string>;
+      swatch.style.backgroundColor = palette[value];
+    } else swatch.textContent = activeAppearancePart === 'hair' ? '发' : activeAppearancePart === 'accessory' ? '饰' : '衣';
+    button.append(swatch, document.createTextNode(appearanceLabels[value] ?? value));
+    button.addEventListener('click', () => {
+      currentAppearance = appearanceSchema.parse({ ...currentAppearance, [activeAppearancePart]: value });
+      renderAppearancePreview();
+    });
+    return button;
+  }));
+}
+document.querySelectorAll<HTMLButtonElement>('[data-appearance-category]').forEach(button => {
+  button.addEventListener('click', () => {
+    const part = button.dataset.appearanceCategory as AppearancePart | undefined;
+    if (!part || !(part in appearanceChoices)) return;
+    activeAppearancePart = part;
+    document.querySelectorAll('[data-appearance-category]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
+    renderAppearanceOptions();
+  });
+});
+element<HTMLButtonElement>('randomize-appearance').addEventListener('click', () => {
+  const random = <T extends readonly string[]>(values: T): T[number] => values[Math.floor(Math.random() * values.length)]!;
+  currentAppearance = appearanceSchema.parse(Object.fromEntries(Object.entries(appearanceChoices).map(([part, values]) => [part, random(values)])));
+  renderAppearancePreview();
+});
+element<HTMLButtonElement>('save-appearance').addEventListener('click', async event => {
+  const button = event.currentTarget as HTMLButtonElement;
+  button.disabled = true;
+  joinFeedback.textContent = '';
+  try {
+    await identityReady;
+    const options = joinSchema.parse({ name: element<HTMLInputElement>('name').value,
+      avatar: element<HTMLSelectElement>('avatar').value, appearance: currentAppearance });
+    showIdentity(await saveProfile(options));
+    joinFeedback.textContent = '造型已保存';
+  } catch (error) {
+    joinFeedback.textContent = `保存失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally { button.disabled = false; }
+});
 function updateAvatarPreview() {
   const selected = avatarChoices.find(input => input.checked);
-  const sprite = selected?.closest('.avatar-choice')?.querySelector('.avatar-face svg');
   if (selected) element<HTMLSelectElement>('avatar').value = selected.value;
-  if (sprite) element('avatar-preview').replaceChildren(sprite.cloneNode(true));
+  renderAppearancePreview();
 }
 avatarChoices.forEach(input => input.addEventListener('change', updateAvatarPreview));
+updateAvatarPreview();
 const virtualDirections = new Set<string>();
 window.addEventListener('blur', () => virtualDirections.clear());
 document.addEventListener('visibilitychange', () => { if (document.hidden) virtualDirections.clear(); });
@@ -114,6 +219,7 @@ function showIdentity(value: Profile) {
   element('identity-status').textContent = `身份：${value.id} · ${value.role === 'admin' ? '管理员' : '成员'}`;
   element<HTMLInputElement>('name').value = value.name;
   element<HTMLSelectElement>('avatar').value = value.avatar;
+  currentAppearance = appearanceSchema.parse(value.appearance);
   const choice = avatarChoices.find(input => input.value === value.avatar);
   if (choice) { choice.checked = true; updateAvatarPreview(); }
   element<HTMLButtonElement>('identity-export').disabled = false;
@@ -173,19 +279,23 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
   event.preventDefault();
   showScreen('map-screen');
   join.disabled = true;
+  joinFeedback.textContent = '';
   status.textContent = '连接中…';
   try {
     await identityReady;
     const options = joinSchema.parse({ name: element<HTMLInputElement>('name').value,
-      avatar: element<HTMLSelectElement>('avatar').value });
+      avatar: element<HTMLSelectElement>('avatar').value, appearance: currentAppearance });
     showIdentity(await saveProfile(options));
     element<HTMLButtonElement>('identity-import').disabled = true;
-    const response = await fetch('/api/world');
+    const response = await fetch('/api/world', { signal: AbortSignal.timeout(12_000) });
     if (!response.ok) throw new Error('地图目录加载失败');
     worldRegistry = validateMapRegistry(worldRegistryResponseSchema.parse(await response.json()));
-    room = await client.joinOrCreate<SpaceProtocol>(ROOM_NAME, options);
+    const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, options);
+    try { room = await withTimeout(pendingRoom, 15_000, '连接空间超时，请检查服务是否启动后重试'); }
+    catch (error) { void pendingRoom.then(lateRoom => lateRoom.leave()).catch(() => {}); throw error; }
     room.reconnection.minUptime = 0;
-    if (!room.state?.players) await new Promise<void>(resolve => room!.onStateChange.once(() => resolve()));
+    if (!room.state?.players) await withTimeout(new Promise<void>(resolve => room!.onStateChange.once(() => resolve())),
+      10_000, '空间已连接，但没有收到地图角色数据');
     interactions = createInteractions(room);
     actions = createCharacterActions(room);
     messages.replaceChildren();
@@ -214,9 +324,10 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     status.textContent = `已进入空间 · ${room.sessionId}`;
     join.blur();
   } catch (error) {
-    await room?.leave();
+    void room?.leave().catch(() => {});
     cleanup();
-    status.textContent = `连接失败：${error instanceof Error ? error.message : String(error)}`;
+    showScreen('avatar-screen');
+    joinFeedback.textContent = `进入失败：${error instanceof Error ? error.message : String(error)}`;
   }
 });
 const renderMapSchema = z.object({ tilesets: z.array(z.object({ name: z.string(), image: z.string().optional() }).passthrough()).default([]) }).passthrough();
@@ -227,7 +338,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   renderingMap = mapId;
   interactions?.setZone(undefined);
   try {
-    const response = await fetch(entry.url);
+    const response = await fetch(entry.url, { signal: AbortSignal.timeout(12_000) });
     if (!response.ok) throw new Error('地图加载失败');
     const renderMap = renderMapSchema.parse(await response.json());
     if (generation !== renderGeneration || room !== activeRoom) return;

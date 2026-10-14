@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
-import type { WebTool, SpaceProtocol } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE, type WebTool, type SpaceProtocol } from '@virtual-workspace/shared';
 import type Phaser from 'phaser';
 import type { SpaceScene } from '../src/SpaceScene';
 import { avatars } from '../src/characters';
@@ -188,7 +188,8 @@ async function observe(): Promise<Room<SpaceProtocol>> {
   const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name: 'E2EObserver', avatar: 'mint' });
+  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
+    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;

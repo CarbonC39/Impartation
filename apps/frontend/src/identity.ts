@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { avatarSchema, type JoinOptions } from '@virtual-workspace/shared';
+import { appearanceSchema, avatarSchema, type JoinOptions } from '@virtual-workspace/shared';
 
-const profileSchema = z.object({ id: z.string(), name: z.string(), avatar: avatarSchema, role: z.enum(['member', 'admin']) });
+const profileSchema = z.object({ id: z.string(), name: z.string(), avatar: avatarSchema, appearance: appearanceSchema, role: z.enum(['member', 'admin']) });
 export type Profile = z.infer<typeof profileSchema>;
 async function request(path: string, method = 'GET', body?: unknown) {
   const response = await fetch(path, { method, credentials: 'include',

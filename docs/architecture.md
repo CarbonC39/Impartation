@@ -145,7 +145,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 | `serverTime` | 服务端时间戳 | 番茄钟显示使用的时间基准 |
 | `worldObjects` | map ID → `MapObjectState`（authored object ID → `{ variant, occupiedBy }`） | 房间内各地图对象的共享视觉变体和占用状态；动作锚点、区域及关联对象 ID 均预留状态 |
 
-Player 包含 `userId`、昵称、地图角色外观预设 ID、权限 role、`mapId`、坐标、`connected`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。avatar 选择映射到角色形象的配色预设，不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
+Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。appearance 由共享 `appearanceSchema` 校验，包括肤色、发型、发色、上衣、上衣颜色、下装、下装颜色和配饰；动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。角色图层素材待导入；地图当前使用上衣颜色 tint 现有占位精灵。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
 
 消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal 和 activateAction，后者返回 `{ ok, message }`。activateAction 只接收动作名和可选动画标记；地图与玩家位置由服务端权威读取。服务端 chat 是实时广播；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
 
@@ -249,13 +249,13 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 `SpaceRoom.onAuth` 从 HTTP headers/cookie 验证身份并检查提供的 Origin，不接受客户端声明的 userId 或 role。入房时保存服务端验证得到的认证 session 引用；每条受保护消息及每秒巡检通过 Better Auth adapter 复验有效性，再读取最新 profile。资料和角色因此可在线更新；失效连接会被关闭。前端检查只改善交互反馈。
 
-区域交互检查按玩家真实 mapId/位置确认 kind 和 resourceId；动作锚点由服务端按角色实际位置所在格与动作名匹配。两者共享每连接至少 500ms 的操作间隔。聊天另有每连接 500ms 间隔。管理员不会绕过身份、位置或限流。`avatar` 是已有地图角色精灵的预设 ID，与权限 `role` 分离。
+区域交互检查按玩家真实 mapId/位置确认 kind 和 resourceId；动作锚点由服务端按角色实际位置所在格与动作名匹配。两者共享每连接至少 500ms 的操作间隔。聊天另有每连接 500ms 间隔。管理员不会绕过身份、位置或限流。`avatar` 是角色原型 ID；`appearance` 是单独校验并共享的换装配置。两者都与权限 `role` 分离。
 
 | 数据 | 持久化和共享范围 | 实现 |
 | --- | --- | --- |
 | auth user/session/verification 等 | SQLite；跨浏览器绑定共享身份 | Better Auth |
-| 昵称、avatar ID、member/admin role | SQLite profiles；按持久 userId | identity.ts；role 通过本地 CLI 更新 |
-| 玩家脚点、mapId、zoneId、connected、facing、motion、action/actionAnimated/actionTargetId | 房间内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
+| 昵称、avatar ID、appearance、member/admin role | SQLite profiles；按持久 userId | identity.ts；换装选项由共享 Schema 校验；role 通过本地 CLI 更新 |
+| 玩家脚点、mapId、appearance、zoneId、connected、facing、motion、action/actionAnimated/actionTargetId | 房间内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
 | 对象 variant/occupiedBy | 房间内存；按地图与 authored ID 共享，房间销毁后重置 | SpaceState.worldObjects / action handler |
 | 聊天 | 房间广播；没有服务端历史 | SpaceRoom |
 | 留言 | SQLite board_notes；同一进程所有房间按 resourceId 共享 | [BoardStore](../apps/backend/src/interactions/board/store.ts) |
@@ -267,7 +267,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 番茄钟以服务端 endsAt 为准，handler 每秒更新 serverTime 和完成状态。前端用收到的服务端时间加本地单调时间推算显示，每 250ms 刷新；这只影响显示，暂停/继续/重置都由服务端决定。同一房间中跨地图引用同一 resourceId 的区域共用计时器。
 
-项目表由 `PRAGMA user_version` 的 v1–v3 迁移管理；Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
+项目表由 `PRAGMA user_version` 的 v1–v4 迁移管理；v4 为 profiles 增加 `appearance_json`；Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
 
 ## 7. HTTP 接口和部署边界
 
@@ -280,7 +280,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
 | `GET /api/tools` | 公开工具 resourceId、mode、URL 和 fallback；不能放凭据 |
 | `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
-| `PATCH /api/me` | JSON 更新昵称/avatar，校验提供的 Origin，不接受 role 更新 |
+| `PATCH /api/me` | JSON 更新昵称/avatar/appearance，校验提供的 Origin，不接受 role 更新 |
 | `/api/auth/*` | 只开放匿名登录、session 查询、退出和绑定码生成/兑换的指定方法，其余返回 404 |
 | `GET /health` | 执行 SQLite `SELECT 1` 后返回状态 |
 

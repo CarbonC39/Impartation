@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { before, after, test } from 'node:test';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
-import { worldRegistryResponseSchema, type SpaceProtocol } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type SpaceProtocol } from '@virtual-workspace/shared';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'workspace-maps-'));
@@ -51,7 +51,8 @@ async function connect(name: string) {
   const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(response.status, 200);
   const cookie = response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; ');
-  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name, avatar: 'mint' });
+  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
+    { name, avatar: 'mint', appearance: DEFAULT_APPEARANCE });
   room.onMessage('chat', () => {});
   await room.waitForInitialState(); connections.push(room);
   return room;

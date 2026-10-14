@@ -26,7 +26,7 @@ function sdk(cookie: string) { return new Client<typeof server>(endpoint, { head
 async function me(cookie: string) {
   const response = await fetch(endpoint + '/api/me', { headers: { Cookie: cookie } });
   assert.equal(response.status, 200);
-  return await response.json() as { id: string; name: string; avatar: string; role: 'member' | 'admin' };
+  return await response.json() as { id: string; name: string; avatar: string; appearance: object; role: 'member' | 'admin' };
 }
 
 async function until(predicate: () => boolean, timeout = 3000) {

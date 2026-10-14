@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
 import { TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
 import { zoneLabels } from './interactions/labels';
-import { avatarDefinition, avatars, characterFacing, characterFrame } from './characters';
+import { appearanceTint, avatarDefinition, avatars, characterFacing, characterFrame } from './characters';
 import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
 
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; animation: string; elapsed: number };
@@ -104,7 +104,7 @@ export class SpaceScene extends Phaser.Scene {
       const renderedFrame = this.textures.get(avatar.texture).has(String(frame)) ? frame : avatar.idle[facing];
       sprite.sprite.setTexture(avatar.texture, renderedFrame)
         .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight)
-        .setTint(avatar.tint).setAlpha(player.connected ? 1 : 0.35).setDepth(sprite.sprite.y);
+        .setTint(appearanceTint(player.avatar, player.appearance)).setAlpha(player.connected ? 1 : 0.35).setDepth(sprite.sprite.y);
       const name = action === 'sit' ? `${player.name} · 坐` : player.name;
       if (sprite.label.text !== name) sprite.label.setText(name);
       sprite.label.setPosition(sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 4).setDepth(this.mapEntry.world.height + 1);

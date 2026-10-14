@@ -97,6 +97,17 @@ button:disabled { cursor: default; background: var(--panel-low); color: var(--mu
 .avatar-choice input:checked + .avatar-face { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-light); }.avatar-choice:has(input:checked) { transform:translateY(2px); box-shadow:0 2px 0 var(--border); }
 .avatar-choice:focus-within .avatar-face { outline:3px solid var(--accent); outline-offset:3px; }
 .avatar-actions { grid-column:1/-1; display:flex; justify-content:space-between; gap:12px; margin-top:8px; }
+.join-feedback { grid-column:1/-1; min-height:18px; margin:0; color:var(--accent-deep); font-size:12px; font-weight:800; }
+.avatar-diy-sprite { width:78%; height:88%; image-rendering:pixelated; shape-rendering:crispEdges; }
+.appearance-actions { grid-column:1; display:grid; gap:7px; }
+.wardrobe { grid-column:1/-1; min-width:0; }
+.wardrobe-tabs { display:flex; gap:6px; padding:4px 2px 9px; overflow-x:auto; }
+.wardrobe-tabs [role="tab"] { flex:none; padding:7px 10px; border:2px solid var(--border); background:var(--card-alt); color:var(--ink); box-shadow:2px 2px 0 var(--border); font-size:11px; }
+.wardrobe-tabs [aria-selected="true"] { background:var(--accent); color:var(--accent-ink); transform:translateY(2px); box-shadow:none; }
+.appearance-choices { min-height:64px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:9px; border:2px solid var(--border); background:var(--panel-hi); }
+.appearance-option { min-width:68px; display:grid; justify-items:center; gap:5px; padding:6px; border:2px solid transparent; background:var(--card-alt); color:var(--ink); font-size:10px; }
+.appearance-option[aria-pressed="true"] { border-color:var(--accent-deep); box-shadow:2px 2px 0 var(--border); }
+.appearance-swatch { width:26px; height:26px; display:grid; place-items:center; border:2px solid var(--border); color:var(--ink); font-weight:900; image-rendering:pixelated; }
 body.map-open { overflow:hidden; }
 body.map-open #app-shell > .masthead { display:none; }
 body.map-open main { max-width:none; margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:transparent; }
@@ -132,14 +143,20 @@ button[data-key="START"]::before { width:auto; min-width:46px; padding:0 5px; bo
   .world-art { grid-row:span 3; height:78px; font-size:40px; }
   .world-title { margin-top:3px; font-size:15px; }.world-meta { align-self:start; }.world-join { padding-top:4px; }
   .avatar-card,.avatar-form { width:100%; min-width:0; }
-  .avatar-form { grid-template-columns:minmax(0,1fr); justify-items:center; }
+  .avatar-form { grid-template-columns:minmax(0,1fr); justify-items:stretch; }
   .avatar-preview { grid-row:auto; width:110px; font-size:58px; }
+  .appearance-actions { grid-column:1; display:flex; justify-content:center; }
   .name-field,.avatar-options { grid-column:1; width:100%; min-width:0; }
   .name-field input { width:100%; min-width:0; }
   .avatar-options { justify-content:space-between; gap:6px; }
   .avatar-choice { flex:1 1 0; min-width:0; padding:5px 2px; }
   .avatar-face { width:min(100%,58px); border-radius:15px; }
   .avatar-actions { grid-column:1; width:100%; flex-direction:column-reverse; }
+  .join-feedback { grid-column:1; }
+  .wardrobe { grid-column:1; width:100%; }
+  .wardrobe-tabs { gap:5px; }.wardrobe-tabs [role="tab"] { padding:7px 8px; }
+  .appearance-choices { justify-content:center; gap:6px; padding:7px; }
+  .appearance-option { min-width:60px; }
   .map-screen { padding:8px; }
   .map-topbar { min-height:48px; margin-bottom:8px; padding:5px 8px; gap:6px; }
   .map-topbar > div { flex-direction:column; align-items:flex-start; gap:2px; }

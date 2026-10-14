@@ -53,7 +53,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     const value = identity && await activeProfile(identity);
     const player = this.state.players.get(client.sessionId);
     if (!value || !player?.connected) return;
-    player.name = value.name; player.avatar = value.avatar; player.role = value.role;
+    player.name = value.name; player.avatar = value.avatar; player.appearance = JSON.stringify(value.appearance); player.role = value.role;
     return value;
   }
 
@@ -107,11 +107,11 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   onJoin(client: SpaceClient, _options: JoinOptions, auth: Identity) {
     for (const handler of this.interactions.registry.values()) handler.tick?.();
     this.identities.set(client.sessionId, auth);
-    const { name, avatar, role } = ensureProfile(auth.userId);
+    const { name, avatar, appearance, role } = ensureProfile(auth.userId);
     const map = worlds.get(worldRegistry.initialMap)!;
     const world = map.world;
     const spawn = world.spawns[map.defaultSpawn];
-    const player = new Player({ name, avatar, role, userId: auth.userId, mapId: map.id, x: spawn.x, y: spawn.y });
+    const player = new Player({ name, avatar, appearance: JSON.stringify(appearance), role, userId: auth.userId, mapId: map.id, x: spawn.x, y: spawn.y });
     player.zoneId = world.zones.find(zone => contains(zone, player.x, player.y))?.id ?? '';
     this.state.players.set(client.sessionId, player);
   }

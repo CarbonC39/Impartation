@@ -4,9 +4,21 @@ import { z } from 'zod';
 export const ROOM_NAME = 'space';
 export const AVATARS = ['mint', 'amber', 'violet'] as const;
 export const avatarSchema = z.enum(AVATARS);
+export const appearanceSchema = z.object({
+  skin: z.enum(['light', 'warm', 'deep']).default('warm'),
+  hair: z.enum(['short', 'long', 'bun']).default('short'),
+  hairColor: z.enum(['dark', 'brown', 'blonde', 'pink']).default('brown'),
+  top: z.enum(['tee', 'sweater', 'overall']).default('tee'),
+  topColor: z.enum(['coral', 'sunshine', 'sky', 'leaf', 'lilac']).default('sky'),
+  bottom: z.enum(['pants', 'skirt', 'shorts']).default('pants'),
+  bottomColor: z.enum(['denim', 'navy', 'plum', 'mint']).default('denim'),
+  accessory: z.enum(['none', 'glasses', 'flower', 'hat']).default('none'),
+}).strict();
+export const DEFAULT_APPEARANCE = appearanceSchema.parse({});
 export const joinSchema = z.object({
   name: z.string().trim().min(1).max(24),
   avatar: avatarSchema.default('mint'),
+  appearance: appearanceSchema.default(DEFAULT_APPEARANCE),
 });
 export const inputSchema = z.object({
   x: z.number().int().min(-1).max(1),
@@ -44,7 +56,7 @@ export const Pomodoro = schema({
 export type Pomodoro = SchemaType<typeof Pomodoro>;
 
 export const Player = schema({
-  name: t.string(), avatar: t.string(), x: t.number(), y: t.number(),
+  name: t.string(), avatar: t.string(), appearance: t.string().default('{}'), x: t.number(), y: t.number(),
   userId: t.string(), role: t.string().default('member'),
   mapId: t.string(), connected: t.boolean().default(true), zoneId: t.string().default(''),
   facing: t.string().default('down'), motion: t.string().default('idle'),

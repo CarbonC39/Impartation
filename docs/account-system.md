@@ -11,15 +11,15 @@ Better Auth 管理匿名用户、session cookie 和一次性令牌。Better Auth
 
 ## 资料与跨设备绑定
 
-个人资料包含昵称 `name` 和角色形象 ID `avatar`。角色形象用于地图中的角色精灵图，从已有形象列表中选择；资料保存 ID，不保存头像图片、上传文件或任意素材 URL。当前允许的 ID 由共享协议中的 `AVATARS` 定义，为 `mint`、`amber`、`violet`，服务端校验选择值。客户端将这些 ID 映射到角色精灵的配色预设；角色帧和渲染配置见 [characters.ts](../apps/frontend/src/characters.ts)。
+个人资料包含昵称 `name`、角色原型 ID `avatar` 和 `appearance` 换装配置。配置包括肤色、发型、发色、上衣版型与颜色、下装版型与颜色、配饰；选项由共享协议的 `appearanceSchema` 校验。`appearance` 以 JSON 存在 `profiles.appearance_json`，并随 Colyseus Player 状态同步。角色图层素材尚待导入；当前地图用上衣颜色作为整张占位精灵图的临时 tint，其余部件先保存到外观配置中，供后续素材渲染接入。
 
-`GET /api/me` 读取当前用户资料，`PATCH /api/me` 更新昵称和所选角色形象；`role` 是独立的权限角色（`member`/`admin`），随资料返回供界面显示，更新接口不接受角色修改。角色只能由本地 CLI 设置。绑定码兑换会把当前浏览器切换到原身份；不会合并当前浏览器原身份的资料或留言。cookie 丢失或会话过期且没有其它有效 session 时，目前没有账号恢复方式。
+`GET /api/me` 读取当前用户资料，`PATCH /api/me` 更新昵称、角色原型和换装配置；`role` 是独立的权限角色（`member`/`admin`），随资料返回供界面显示，更新接口不接受角色修改。角色只能由本地 CLI 设置。绑定码兑换会把当前浏览器切换到原身份；不会合并当前浏览器原身份的资料或留言。cookie 丢失或会话过期且没有其它有效 session 时，目前没有账号恢复方式。
 
 在已绑定的设备中生成绑定码会调用 `GET /api/auth/one-time-token/generate`。在新设备的身份区域输入绑定码会调用 `POST /api/auth/one-time-token/verify`，兑换后新设备获得同一 session cookie 和同一资料。绑定码使用哈希存储，3 分钟后过期且只能成功兑换一次。它等同于短时 session 凭据：通过 HTTPS 传输，不要放入日志、聊天或截图；获得绑定码的人会取得该身份及其权限。应在交换完成后清除显示的绑定码。前端身份 API 始终请求当前站点同源 `/api`；`VITE_SERVER_URL` 只控制 Colyseus 连接地址。
 
 认证端点由 Better Auth 执行可信来源/CSRF 检查。`PATCH /api/me` 要求 JSON，并在提供 `Origin` 时校验它属于 `IDENTITY_TRUSTED_ORIGINS`；Colyseus 入房也检查提供的 Origin。原生客户端须携带当前 session cookie，并按所用接口的要求发送可信 Origin。
 
-在“跨设备身份”区域生成或输入绑定码；绑定前需要先离开空间。进入空间前会载入已有昵称和所选角色形象。
+在“跨设备身份”区域生成或输入绑定码；绑定前需要先离开空间。进入空间前会载入已有昵称、角色原型和换装配置。
 
 ## 权限角色
 

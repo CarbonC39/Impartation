@@ -1,4 +1,4 @@
-import { FACINGS, type Facing, type Motion } from '@virtual-workspace/shared';
+import { appearanceSchema, FACINGS, type Facing, type Motion } from '@virtual-workspace/shared';
 
 // Source frame dimensions belong to the character, independently of map tile dimensions.
 // Four columns per direction, in down/left/right/up row order.
@@ -20,6 +20,18 @@ export const avatars = {
 } as const;
 export function avatarDefinition(id: string) {
   return avatars[id as keyof typeof avatars] ?? avatars.mint;
+}
+const appearanceTints = { coral:0xf07872, sunshine:0xf2c552, sky:0x64a9df, leaf:0x67ae80, lilac:0xaa82cf } as const;
+const tintCache = new Map<string, number>();
+export function appearanceTint(avatarId: string, serializedAppearance: string): number {
+  const cached = tintCache.get(serializedAppearance);
+  if (cached !== undefined) return cached;
+  try {
+    const appearance = appearanceSchema.parse(JSON.parse(serializedAppearance));
+    const tint = appearanceTints[appearance.topColor];
+    tintCache.set(serializedAppearance, tint);
+    return tint;
+  } catch { return avatarDefinition(avatarId).tint; }
 }
 
 /** Local time selects walk or configured action frames; unconfigured actions fall back to directional idle. */

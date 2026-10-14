@@ -11,7 +11,7 @@ export function openDatabase(path: string) {
     database.pragma('foreign_keys = ON');
     database.pragma('busy_timeout = 5000');
     const version = database.pragma('user_version', { simple: true }) as number;
-    if (version > 3) throw new Error('Database is newer than this application');
+    if (version > 4) throw new Error('Database is newer than this application');
     if (version < 1) database.transaction(() => {
       database.exec(`CREATE TABLE profiles (
         user_id TEXT PRIMARY KEY,
@@ -37,6 +37,10 @@ export function openDatabase(path: string) {
         ALTER TABLE profiles ADD COLUMN role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin'));
         ALTER TABLE board_notes ADD COLUMN author_user_id TEXT;`);
       database.pragma('user_version = 3');
+    })();
+    if (version < 4) database.transaction(() => {
+      database.exec("ALTER TABLE profiles ADD COLUMN appearance_json TEXT NOT NULL DEFAULT '{}';");
+      database.pragma('user_version = 4');
     })();
     return database;
   } catch (error) {
