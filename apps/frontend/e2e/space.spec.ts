@@ -1,21 +1,194 @@
 import { test, expect, type Page } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
 import type { WebTool, SpaceProtocol } from '@virtual-workspace/shared';
+import type Phaser from 'phaser';
+import type { SpaceScene } from '../src/SpaceScene';
+import { avatars } from '../src/characters';
 
-async function enter(page: Page, name: string, avatar = 'mint') {
+async function enter(page: Page, name: string, avatar = 'mint', prepare?: () => Promise<void>) {
   await page.goto('/');
   await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await prepare?.();
+  await openAvatarScreen(page);
   await page.locator('#name').fill(name);
-  await page.locator('#avatar').selectOption(avatar);
+  await page.locator(`input[name="avatar-choice"][value="${avatar}"]`).check();
+  await page.locator('#join').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#game canvas')).toBeVisible();
+}
+
+type RenderingWindow = Window & { sceneUnderTest?: SpaceScene };
+
+async function captureRenderedScene(page: Page) {
+  // Observe the real scene without adding a production debug API.
+  await page.evaluate(async scenePath => {
+    const loadedPath = performance.getEntriesByType('resource').map(entry => entry.name)
+      .find(path => new URL(path).pathname === scenePath) ?? scenePath;
+    const { SpaceScene } = await import(loadedPath) as { SpaceScene: typeof import('../src/SpaceScene').SpaceScene };
+    const update = SpaceScene.prototype.update;
+    SpaceScene.prototype.update = function (this: SpaceScene, time: number, delta: number) {
+      update.call(this, time, delta);
+      (window as RenderingWindow).sceneUnderTest = this;
+    };
+  }, '/src/SpaceScene.ts');
+}
+
+test('character atlas uses configured camera zoom and seat anchors have no default furniture', async ({ page }, testInfo) => {
+  const seatVisualRequests: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/objects/seat.svg') seatVisualRequests.push(request.url());
+  });
+  await enter(page, 'E2ERender', 'mint', () => captureRenderedScene(page));
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const renderState = () => page.evaluate(id => {
+    const scene = (window as RenderingWindow).sceneUnderTest;
+    if (!scene) return;
+    const sprite = scene.children.getByName(id) as Phaser.GameObjects.Sprite | null;
+    if (!sprite) return;
+    const zoom = scene.cameras.main.zoom;
+    const bounds = sprite.getBounds();
+    const frame = sprite.frame;
+    const source = sprite.texture.getSourceImage();
+    if (!(source instanceof HTMLImageElement || source instanceof HTMLCanvasElement)) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = frame.cutWidth; canvas.height = frame.cutHeight;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(source, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+      0, 0, frame.cutWidth, frame.cutHeight);
+    const pixels = context.getImageData(0, 0, frame.cutWidth, frame.cutHeight).data;
+    let visibleBottom = 0;
+    for (let y = 0; y < frame.cutHeight; y++) for (let x = 0; x < frame.cutWidth; x++) {
+      if (pixels[(y * frame.cutWidth + x) * 4 + 3]) visibleBottom = y + 1;
+    }
+    return {
+      zoom, frame: Number(sprite.frame.name),
+      objectImages: scene.children.list.filter(child => child.type === 'Image').length,
+      origin: [sprite.originX, sprite.originY],
+      groundAnchor: [sprite.displayOriginX, sprite.displayOriginY],
+      worldSize: [sprite.displayWidth, sprite.displayHeight],
+      screenSize: [sprite.displayWidth * zoom, sprite.displayHeight * zoom],
+      visibleFootOffset: bounds.top + visibleBottom - sprite.y,
+      frames: Array.from({ length: 16 }, (_, index) => {
+        const frame = sprite.texture.get(index);
+        return [frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight];
+      }),
+    };
+  }, sessionId);
+  await expect.poll(async () => (await renderState())?.frame).toBe(0);
+  const initial = (await renderState())!;
+  const avatar = avatars.mint;
+  const cameraZoom = Number(process.env.VITE_CAMERA_ZOOM ?? 2);
+  expect(initial.zoom).toBe(cameraZoom);
+  expect(initial.objectImages).toBe(0);
+  expect(seatVisualRequests).toEqual([]);
+  expect(initial.origin).toEqual([avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight]);
+  expect(initial.groundAnchor).toEqual([avatar.groundAnchor.x, avatar.groundAnchor.y]);
+  expect(initial.worldSize).toEqual([avatar.frameWidth, avatar.frameHeight]);
+  expect(initial.screenSize).toEqual([avatar.frameWidth * cameraZoom, avatar.frameHeight * cameraZoom]);
+  // The current idle art's visible feet, rather than its transparent frame edge, meet the ground.
+  expect(initial.visibleFootOffset).toBeCloseTo(0);
+  expect(initial.frames).toEqual(Array.from({ length: 16 }, (_, index) => [index % 4 * avatar.frameWidth,
+    Math.floor(index / 4) * avatar.frameHeight, avatar.frameWidth, avatar.frameHeight]));
+  await page.locator('#game canvas').focus();
+  await page.keyboard.down('d');
+  try {
+    await expect.poll(async () => (await renderState())?.frame, { intervals: [10] }).toBe(8);
+    await expect.poll(async () => (await renderState())?.frame, { intervals: [10] }).toBe(9);
+  } finally { await page.keyboard.up('d'); }
+  await expect.poll(async () => (await renderState())?.frame).toBe(8);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * cameraZoom, avatar.frameHeight * cameraZoom]);
+  await page.screenshot({ path: testInfo.outputPath('character-zoom-mobile.png'), fullPage: true });
+  await page.locator('#leave').click();
+});
+
+test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
+  // Synthetic test pixels exercise all eight rows while the supplied artwork is walk-only.
+  const sheet = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 192;
+    const context = canvas.getContext('2d')!;
+    for (let row = 0; row < 8; row++) for (let column = 0; column < 4; column++) {
+      context.fillStyle = `hsl(${row * 40 + column * 10}, 70%, 65%)`;
+      context.fillRect(column * 16 + 2, row * 24 + 1, 12, 22);
+    }
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.route('**/characters/walk.png', route => route.fulfill({
+    contentType: 'image/png', body: Buffer.from(sheet, 'base64'),
+  }));
+  await enter(page, 'E2EActions', 'mint', () => captureRenderedScene(page));
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const observer = await observe();
+  const player = () => observer.state.players.get(sessionId)!;
+  const frame = () => page.evaluate(id => {
+    const scene = (window as RenderingWindow).sceneUnderTest;
+    const sprite = scene?.children.getByName(id) as Phaser.GameObjects.Sprite | undefined;
+    return sprite && Number(sprite.frame.name);
+  }, sessionId);
+  try {
+    await expect.poll(() => player()?.name).toBe('E2EActions');
+    const position = { x: player().x, y: player().y };
+    await page.locator('#activate-object').click();
+    await expect.poll(() => player().action).toBe('sit');
+    expect(player().actionAnimated).toBe(false);
+    expect(player().actionTargetId).toBe('');
+    expect(player().motion).toBe('idle');
+    expect({ x: player().x, y: player().y }).toEqual(position);
+    await expect.poll(frame).toBe(16);
+    await page.waitForTimeout(550); // A static pose stays fixed beyond a full animation cycle and the request cooldown.
+    expect(await frame()).toBe(16);
+    await page.locator('#action-animated').check();
+    await page.keyboard.down('e');
+    try { await expect.poll(() => player().actionAnimated).toBe(true); }
+    finally { await page.keyboard.up('e'); }
+    await expect.poll(frame, { intervals: [10] }).toBe(17);
+    const frames = new Set<number>();
+    await expect.poll(async () => {
+      const value = await frame();
+      if (value !== undefined) frames.add(value);
+      return frames.has(17) && frames.has(18) && frames.has(19);
+    }, { intervals: [10] }).toBe(true);
+    expect([...frames].every(value => value >= 17 && value <= 19)).toBe(true);
+    expect({ x: player().x, y: player().y }).toEqual(position);
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(() => player().action).toBe('none');
+      expect(player().actionAnimated).toBe(false);
+      expect(player().actionTargetId).toBe('');
+      await expect.poll(() => player().motion).toBe('walk');
+    } finally { await page.keyboard.up('d'); }
+    await expect.poll(() => player().motion).toBe('idle');
+    await expect.poll(frame).toBe(8);
+    await page.locator('#leave').click();
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+async function openAvatarScreen(page: Page) {
+  if (await page.locator('#login-screen').isVisible()) {
+    await page.locator('#account').fill('e2e-guest');
+    await page.locator('#password').fill('e2e-password');
+    await page.locator('#login-form button[type="submit"]').click();
+  }
+  if (await page.locator('#world-screen').isVisible()) {
+    await page.locator('#world-list [data-world="sunny-lobby"]').click();
+  }
+  await expect(page.locator('#avatar-screen')).toBeVisible();
+}
+
+async function joinSavedProfile(page: Page) {
+  await openAvatarScreen(page);
   await page.locator('#join').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
 async function observe(): Promise<Room<SpaceProtocol>> {
-  const response = await fetch('http://127.0.0.1:5173/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const endpoint = test.info().project.use.baseURL!;
+  const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  const room = await new Client('http://127.0.0.1:5173', { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name: 'E2EObserver', avatar: 'mint' });
+  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name: 'E2EObserver', avatar: 'mint' });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;
@@ -148,8 +321,7 @@ test('map board panel publishes safe text, synchronizes browsers and keeps notes
     await expect(page.locator('#feature-status')).toContainText('留言已发布');
     await page.locator('#leave').click();
     await expect(page.locator('#board-panel')).toBeHidden();
-    await page.locator('#join').click();
-    await expect(page.locator('#status')).toContainText('已进入空间');
+    await joinSavedProfile(page);
     await walkTo(page, observer, 'E2EBoardAlice', 'board');
     const retained = page.locator('#board-notes li').filter({ hasText: note });
     await expect(retained).toBeVisible();
@@ -157,8 +329,7 @@ test('map board panel publishes safe text, synchronizes browsers and keeps notes
     await page.reload();
     await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
     await expect(page.locator('#name')).toHaveValue('E2EBoardAlice');
-    await page.locator('#join').click();
-    await expect(page.locator('#status')).toContainText('已进入空间');
+    await joinSavedProfile(page);
     await walkTo(page, observer, 'E2EBoardAlice', 'board');
     await page.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
     await expect(bob.locator('#board-notes')).not.toContainText(note);
@@ -196,6 +367,93 @@ test('shared pomodoro starts, pauses, resumes and resets from its map panel', as
     await expect.poll(() => bob.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await bob.screenshot({ path: testInfo.outputPath('pomodoro-mobile.png'), fullPage: true });
   } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
+});
+
+test('mobile seat activation renders the character and releases occupancy when walking', async ({ page }, testInfo) => {
+  test.setTimeout(30000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  const spriteResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === '/characters/walk.png' && response.ok();
+  });
+  await enter(page, 'E2ESeat');
+  await spriteResponse;
+  const observer = await observe();
+  const button = page.locator('#activate-object');
+  const canvas = page.locator('#game canvas');
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const player = () => observer.state.players.get(sessionId)!;
+  const seat = () => observer.state.worldObjects.get(player().mapId)?.objects.get('lobby-seat-1');
+  try {
+    await expect.poll(() => player()?.name).toBe('E2ESeat');
+    await expect(button).toBeEnabled();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await canvas.scrollIntoViewIfNeeded();
+    await canvas.focus();
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(async () => {
+        const value = player();
+        return await button.isEnabled() && Math.floor(value.x / 16) === 25 && Math.floor(value.y / 16) === 24;
+      }, { intervals: [10], timeout: 5000 }).toBe(true);
+    } finally { await page.keyboard.up('d'); }
+    await button.click();
+    await expect.poll(() => player().action).toBe('sit');
+    await expect.poll(() => player().x).toBe(408);
+    await expect.poll(() => player().y).toBe(392);
+    expect(player().facing).toBe('up');
+    expect(player().motion).toBe('idle');
+    expect(player().actionTargetId).toBe('lobby-seat-1');
+    expect(player().actionAnimated).toBe(false);
+    expect(seat()?.variant).toBe('occupied');
+    expect(seat()?.occupiedBy).toBe(sessionId);
+    await expect(button).toBeDisabled();
+    await page.screenshot({ path: testInfo.outputPath('seat-character-mobile.png'), fullPage: true });
+
+    await page.waitForTimeout(550); // Respect the server interaction cooldown before activating again.
+    await canvas.focus();
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(() => player().x, { intervals: [10] }).toBeGreaterThanOrEqual(424);
+      await expect.poll(() => player().action).toBe('none');
+      expect(player().actionTargetId).toBe('');
+      expect(player().actionAnimated).toBe(false);
+      expect(seat()?.variant).toBe('empty');
+      expect(seat()?.occupiedBy).toBe('');
+      await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
+    } finally { await page.keyboard.up('d'); }
+    await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+    expect(player().facing).toBe('right');
+
+    await canvas.focus();
+    await page.keyboard.down('a');
+    try {
+      await expect.poll(() => {
+        const value = player();
+        return Math.floor(value.x / 16) === 25 && Math.floor(value.y / 16) === 24;
+      }, { intervals: [10] }).toBe(true);
+    } finally { await page.keyboard.up('a'); }
+    await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+    await canvas.focus();
+    await page.keyboard.down('e');
+    try { await expect.poll(() => player().action).toBe('sit'); }
+    finally { await page.keyboard.up('e'); }
+    expect(player().x).toBe(408);
+    expect(player().y).toBe(392);
+    expect(player().facing).toBe('up');
+    expect(seat()?.variant).toBe('occupied');
+    expect(seat()?.occupiedBy).toBe(sessionId);
+    expect(errors).toEqual([]);
+
+    await page.locator('#leave').click();
+    await expect(page.locator('#status')).toContainText('已离开');
+    await expect(canvas).toHaveCount(0);
+    await expect(button).toBeDisabled();
+  } finally {
+    if (observer.connection.isOpen) await observer.leave();
+  }
 });
 
 test('two browser guests render their avatars and exchange plain-text chat through the Vite proxy', async ({ page, browser }) => {
@@ -250,9 +508,8 @@ test('leaving clears controls and canvas, and the same page can join again', asy
   await expect(page.locator('#status')).toContainText('已离开');
   await expect(page.locator('#game canvas')).toHaveCount(0);
   await expect(page.locator('#message')).toBeDisabled();
-  await expect(page.locator('#join')).toBeEnabled();
-  await page.locator('#join').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#world-screen [data-world="sunny-lobby"]')).toBeEnabled();
+  await joinSavedProfile(page);
   await expect(page.locator('#game canvas')).toHaveCount(1);
 });
 
@@ -263,6 +520,52 @@ test('a 390px screen fits the map and forms without horizontal overflow', async 
   const canvas = await page.locator('#game canvas').boundingBox();
   expect(canvas?.width).toBeLessThanOrEqual(390);
   expect(canvas?.width).toBeGreaterThan(100);
+});
+
+test('mobile direction controls move the authoritative player and release on pointerup', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enter(page, 'E2ETouchControls');
+  const observer = await observe();
+  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const player = () => observer.state.players.get(sessionId)!;
+  let pointerDown = false;
+  try {
+    await expect.poll(() => player()?.name).toBe('E2ETouchControls');
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    const right = await page.locator('[data-move="right"]').boundingBox();
+    expect(right).not.toBeNull();
+    const startX = player().x;
+    await page.mouse.move(right!.x + right!.width / 2, right!.y + right!.height / 2);
+    await page.mouse.down();
+    pointerDown = true;
+    await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
+    await expect.poll(() => player().x, { intervals: [10] }).toBeGreaterThan(startX);
+    expect(player().facing).toBe('right');
+    await page.mouse.up();
+    pointerDown = false;
+    await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+
+    const up = await page.locator('[data-move="up"]').boundingBox();
+    expect(up).not.toBeNull();
+    const startY = player().y;
+    await page.mouse.move(up!.x + up!.width / 2, up!.y + up!.height / 2);
+    await page.mouse.down();
+    pointerDown = true;
+    await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
+    await expect.poll(() => player().y, { intervals: [10] }).toBeLessThan(startY);
+    expect(player().facing).toBe('up');
+    await page.mouse.up();
+    pointerDown = false;
+    await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+
+    await page.locator('#leave').click();
+    await expect(page.locator('#status')).toContainText('已离开');
+    await expect(page.locator('#game canvas')).toHaveCount(0);
+  } finally {
+    if (pointerDown) await page.mouse.up();
+    if (observer.connection.isOpen) await observer.leave();
+  }
 });
 
 // The browser tests deliberately use the same-origin endpoint, including its WS query string.
@@ -292,24 +595,25 @@ test('binding a second browser restores the same identity, profile and note perm
     await page.locator('#board-text').fill(note);
     await page.locator('#board-post').click();
     await expect(page.locator('#feature-status')).toContainText('留言已发布');
-    await page.locator('summary').click();
+    await page.locator('#leave').click();
+    await expect(page.locator('#status')).toContainText('已离开');
+    await page.locator('#world-screen [data-back="login-screen"]').click();
+    await page.locator('#login-screen summary').click();
     await page.locator('#identity-export').click();
     await expect(page.locator('#identity-code')).toHaveValue(/.{32}/);
     const code = await page.locator('#identity-code').inputValue();
     const identity = await page.locator('#identity-status').textContent();
-    await page.locator('#leave').click();
-    await expect(page.locator('#status')).toContainText('已离开');
+
     await target.goto('/');
     await expect(target.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
-    await target.locator('summary').click();
+    await target.locator('#login-screen summary').click();
     await target.locator('#identity-code').fill(code);
     await target.locator('#identity-import').click();
     await expect(target.locator('#identity-feedback')).toHaveText('已绑定同一身份');
     await expect(target.locator('#identity-status')).toHaveText(identity!);
     await expect(target.locator('#name')).toHaveValue('E2EBound');
     await expect(target.locator('#avatar')).toHaveValue('violet');
-    await target.locator('#join').click();
-    await expect(target.locator('#status')).toContainText('已进入空间');
+    await joinSavedProfile(target);
     await walkTo(target, observer, 'E2EBound', 'board');
     await target.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
     await expect(target.locator('#feature-status')).toContainText('留言已删除');
@@ -364,7 +668,7 @@ test('embed presentation provides an explicit external fallback and clears both 
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
-test('Portal switches rendered maps, loads multiple tilesets and returns to the named spawn', async ({ page }) => {
+test('Portal switches rendered maps, loads multiple tilesets and preserves the connection when returning', async ({ page }) => {
   test.setTimeout(30000);
   const errors: string[] = [];
   const assets = new Set<string>();
@@ -380,21 +684,22 @@ test('Portal switches rendered maps, loads multiple tilesets and returns to the 
     try { await expect.poll(() => observer.state.players.get(sessionId)!.y, { intervals: [50] }).toBeGreaterThan(458); }
     finally { await page.keyboard.up('s'); }
     await page.keyboard.down('d');
-    try { await expect.poll(() => observer.state.players.get(sessionId)!.mapId).toBe('studio'); }
+    try { await expect.poll(() => observer.state.players.get(sessionId)!.mapId, { intervals: [10] }).toBe('studio'); }
     finally { await page.keyboard.up('d'); }
+    await expect(page.locator('#game canvas')).toHaveCount(1);
     await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'studio');
     await expect.poll(() => assets.size).toBe(2);
-    expect(observer.state.players.get(sessionId)!.x).toBe(96);
-    expect(observer.state.players.get(sessionId)!.y).toBe(96);
+    // Held input may move again before the next patch; portal.test.ts checks exact server spawns.
     await page.waitForTimeout(550); // Respect the shared server interaction cooldown.
     await page.locator('#game canvas').focus();
     await page.keyboard.down('a');
-    try { await expect.poll(() => observer.state.players.get(sessionId)!.mapId).toBe('workspace'); }
+    try { await expect.poll(() => observer.state.players.get(sessionId)!.mapId, { intervals: [10] }).toBe('workspace'); }
     finally { await page.keyboard.up('a'); }
+    await expect(page.locator('#game canvas')).toHaveCount(1);
     await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'workspace');
-    expect(observer.state.players.get(sessionId)!.x).toBe(352);
-    expect(observer.state.players.get(sessionId)!.y).toBe(384);
     await expect(page.locator('#game canvas')).toHaveCount(1);
     expect(errors).toEqual([]);
-  } finally { if (observer.connection.isOpen) await observer.leave(); }
+  } finally {
+    if (observer.connection.isOpen) await observer.leave();
+  }
 });

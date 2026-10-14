@@ -11,7 +11,7 @@ Better Auth 管理匿名用户、session cookie 和一次性令牌。Better Auth
 
 ## 资料与跨设备绑定
 
-个人资料包含昵称 `name` 和角色形象 ID `avatar`。角色形象用于地图中的角色精灵图，从已有形象列表中选择；资料保存 ID，不保存头像图片、上传文件或任意素材 URL。当前允许的 ID 由共享协议中的 `AVATARS` 定义，为 `mint`、`amber`、`violet`，服务端校验选择值。客户端目前用彩色圆形占位，角色精灵图素材和动画尚未提供。
+个人资料包含昵称 `name` 和角色形象 ID `avatar`。角色形象用于地图中的角色精灵图，从已有形象列表中选择；资料保存 ID，不保存头像图片、上传文件或任意素材 URL。当前允许的 ID 由共享协议中的 `AVATARS` 定义，为 `mint`、`amber`、`violet`，服务端校验选择值。客户端将这些 ID 映射到角色精灵的配色预设；角色帧和渲染配置见 [characters.ts](../apps/frontend/src/characters.ts)。
 
 `GET /api/me` 读取当前用户资料，`PATCH /api/me` 更新昵称和所选角色形象；`role` 是独立的权限角色（`member`/`admin`），随资料返回供界面显示，更新接口不接受角色修改。角色只能由本地 CLI 设置。绑定码兑换会把当前浏览器切换到原身份；不会合并当前浏览器原身份的资料或留言。cookie 丢失或会话过期且没有其它有效 session 时，目前没有账号恢复方式。
 

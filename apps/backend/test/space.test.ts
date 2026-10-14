@@ -4,8 +4,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
+import { rmSync } from 'node:fs';
+import { createRoomWorldFixture } from './world-fixture.js';
 
 process.env.DATABASE_PATH = ':memory:';
+const fixture = createRoomWorldFixture();
+process.env.MAP_REGISTRY_PATH = fixture.registryPath;
 process.env.EXTERNAL_TOOLS = JSON.stringify({
   'shared-canvas': { url: 'https://board.example/boards/workspace' },
 });
@@ -46,6 +50,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await Promise.all(connections.splice(0).filter(room => room.connection.isOpen).map(room => room.leave()));
     await harness.shutdown();
     db.close();
+    rmSync(fixture.directory, { recursive: true, force: true });
   });
   async function join(name: string, avatar: 'mint' | 'amber' | 'violet' = 'mint', cookie?: string) {
     const room = await sdk(cookie ?? await createIdentity()).joinOrCreate('space', { name, avatar });
@@ -90,14 +95,142 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const x = player.x;
     alice.send('input', { x: 1, y: 0 });
     await until(() => player.x > x);
+    assert.equal(player.facing, 'right'); assert.equal(player.motion, 'walk');
     await delay(350);
     const stopped = player.x;
     await delay(150);
     assert.equal(player.x, stopped);
+    assert.equal(player.motion, 'idle'); assert.equal(player.facing, 'right');
     player.x = 310; player.y = 250;
     alice.send('input', { x: 1, y: 0 });
     await delay(150);
     assert.equal(player.x, 310);
+    assert.equal(player.motion, 'idle');
+  });
+  for (const action of ['sit', 'wave', 'exercise', 'sleep', 'read']) {
+    test(`${action} runs in place, stops movement and is cancelled by new movement`, async () => {
+      const alice = await join('AbilityUser');
+      const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+      const player = authoritative.state.players.get(alice.sessionId)!;
+      alice.send('input', { x: 1, y: 0 });
+      await until(() => player.motion === 'walk');
+      assert.equal((await alice.request('activateAction', { action, animated: true })).ok, true);
+      const position = { x: player.x, y: player.y };
+      assert.equal(player.action, action); assert.equal(player.actionAnimated, true);
+      assert.equal(player.actionTargetId, ''); assert.equal(player.motion, 'idle');
+      assert.equal(player.facing, 'right');
+      alice.send('input', { x: 0, y: 0 });
+      await delay(150);
+      assert.deepEqual({ x: player.x, y: player.y }, position);
+      assert.equal(player.action, action); assert.equal(player.motion, 'idle');
+      await until(() => alice.state.players.get(alice.sessionId)?.actionAnimated === true);
+      alice.send('input', { x: 0, y: 1 });
+      await until(() => player.action === 'none');
+      assert.equal(player.actionTargetId, ''); assert.equal(player.actionAnimated, false);
+      await until(() => player.motion === 'walk');
+      assert.equal(player.facing, 'down');
+    });
+  }
+  test('adjacent tiles perform sit in place without borrowing a nearby anchor', async () => {
+    const alice = await join('AdjacentAction');
+    const player = harness.getRoomById<SpaceRoom>(alice.roomId).state.players.get(alice.sessionId)!;
+    player.x = 399.99; player.y = 392; player.facing = 'left';
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
+    assert.deepEqual([player.x, player.y, player.facing, player.actionTargetId, player.actionAnimated],
+      [399.99, 392, 'left', '', false]);
+  });
+  test('matching sit anchor overrides facing, ignores forged context and retains occupancy', async () => {
+    const alice = await join('SeatedAlice');
+    const bob = await join('SeatedBob');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    const other = authoritative.state.players.get(bob.sessionId)!;
+    player.x = 402; player.y = 386;
+    const forged = { action: 'sit', animated: false, objectId: 'lobby-seat-2', sessionId: bob.sessionId,
+      facing: 'down', x: 1, y: 1, offsetX: 900, linkedObjectId: 'forged-desk', variant: 'forged' };
+    assert.equal((await alice.request('activateAction', forged)).ok, true);
+    assert.deepEqual([player.x, player.y, player.facing, player.motion, player.action, player.actionTargetId],
+      [408, 392, 'up', 'idle', 'sit', 'lobby-seat-1']);
+    assert.equal(other.action, 'none');
+    const objects = authoritative.state.worldObjects.get('lobby')!.objects;
+    const object = objects.get('lobby-seat-1')!;
+    assert.equal(object.occupiedBy, alice.sessionId); assert.equal(object.variant, 'occupied');
+    assert.equal(objects.get('desk-1')?.variant, '');
+    assert.equal(objects.has('forged-desk'), false);
+    // Future handlers can update a linked authored ID without referencing visual tiles.
+    objects.get('desk-1')!.variant = 'active';
+    await until(() => bob.state.worldObjects.get('lobby')?.objects.get('desk-1')?.variant === 'active');
+    await until(() => bob.state.players.get(alice.sessionId)?.action === 'sit');
+    other.x = 408; other.y = 392;
+    assert.equal((await bob.request('activateAction', { action: 'sit', animated: false })).ok, false);
+    alice.send('input', { x: 0, y: 0 });
+    await delay(150);
+    assert.equal(player.action, 'sit'); assert.equal(player.x, 408);
+    alice.send('input', { x: -1, y: 0 });
+    await until(() => player.action === 'none');
+    assert.equal(player.actionTargetId, ''); assert.equal(player.actionAnimated, false); assert.equal(player.facing, 'left');
+    assert.equal(object.occupiedBy, ''); assert.equal(object.variant, 'empty');
+    await until(() => player.motion === 'walk');
+    assert.equal((await bob.request('activateAction', { action: 'sit', animated: true })).ok, true);
+    assert.equal(object.occupiedBy, bob.sessionId);
+    await bob.leave();
+    await until(() => object.occupiedBy === '');
+    assert.equal(object.variant, 'empty');
+  });
+  test('action matching uses the requested name and applies world-pixel offsets with optional facing', async () => {
+    const alice = await join('Reader');
+    const player = harness.getRoomById<SpaceRoom>(alice.roomId).state.players.get(alice.sessionId)!;
+    player.x = 402; player.y = 386; player.facing = 'right';
+    assert.equal((await alice.request('activateAction', { action: 'read', animated: false })).ok, true);
+    assert.deepEqual([player.x, player.y, player.facing, player.action, player.actionTargetId],
+      [410, 391, 'right', 'read', 'reading-spot']);
+    await delay(550);
+    assert.equal((await alice.request('activateAction', { action: 'read', animated: true })).ok, true);
+    assert.deepEqual([player.x, player.y], [410, 391]);
+    assert.equal(player.actionAnimated, true);
+  });
+  test('non-zero movement cancels an action even when collision blocks the movement', async () => {
+    const alice = await join('BlockedAction');
+    const player = harness.getRoomById<SpaceRoom>(alice.roomId).state.players.get(alice.sessionId)!;
+    player.x = 310; player.y = 250;
+    assert.equal((await alice.request('activateAction', { action: 'exercise', animated: true })).ok, true);
+    alice.send('input', { x: 1, y: 0 });
+    await until(() => player.action === 'none');
+    await delay(150);
+    assert.equal(player.x, 310); assert.equal(player.actionAnimated, false);
+    assert.equal(player.actionTargetId, ''); assert.equal(player.motion, 'idle');
+  });
+  test('a dropped seated player retains occupancy during reconnection and releases it on final leave', async () => {
+    const alice = await join('SeatedReconnect');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    player.x = 408; player.y = 392;
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
+    const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
+    const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    authoritative.clients.find(client => client.sessionId === alice.sessionId)!.leave(1001);
+    await until(() => !player.connected);
+    assert.equal(player.action, 'sit'); assert.equal(player.motion, 'idle');
+    assert.equal(object.occupiedBy, alice.sessionId);
+    await reconnected;
+    await until(() => player.connected);
+    assert.equal(player.action, 'sit'); assert.equal(object.occupiedBy, alice.sessionId);
+    await alice.leave();
+    await until(() => object.occupiedBy === '');
+  });
+  test('revoked identities cannot activate an authored seat even at its anchor', async () => {
+    const cookie = await createIdentity();
+    const alice = await join('RevokedSeat', 'mint', cookie);
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    player.x = 408; player.y = 392;
+    const left = new Promise<number>(resolve => alice.onLeave.once(resolve));
+    await fetch(endpoint + '/api/auth/sign-out', { method: 'POST', headers: { Cookie: cookie, Origin: endpoint,
+      'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, false);
+    assert.equal(player.action, 'none');
+    assert.equal(authoritative.state.worldObjects.get('lobby')?.objects.get('lobby-seat-1')?.occupiedBy, '');
+    assert.equal(await left, 4003);
   });
   test('chat is broadcast as text with server identity, bounded length, and rate limiting', async () => {
     const alice = await join('Alice');
@@ -477,6 +610,10 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const alice = await join('Alice');
     const bob = await join('Bob');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    player.x = 408; player.y = 392;
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
+    const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
     authoritative.reconnectionSeconds = 0.1;
     alice.reconnection.enabled = false;
     const token = alice.reconnectionToken;
@@ -485,6 +622,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await until(() => bob.state.players.size === 1);
     await assert.rejects(harness.sdk.reconnect(token));
     assert.equal(authoritative.clients.length, 1);
+    assert.equal(object.occupiedBy, ''); assert.equal(object.variant, 'empty');
   });
   for (const [name, type, payload] of [
     ['invalid direction', 'input', { x: 2, y: 0 }],

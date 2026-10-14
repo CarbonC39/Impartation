@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { InteractionRegistry } from './interactions.js';
 import type { MovementInput } from './index.js';
+import { actionNameSchema, facingSchema, type Facing } from './character.js';
 
 export const TILE_SIZE = 16;
-export const PLAYER_RADIUS = 10;
+// Ground footprint ends at the foot anchor; sprite dimensions never affect physics.
+export const PLAYER_FOOTPRINT = { width: 12, height: 8 } as const;
 export const PLAYER_SPEED = 150;
 export const TICK_MS = 50;
 export type Point = { x: number; y: number };
@@ -12,10 +14,15 @@ export type Zone = Rect & {
   id: string; kind: string; resourceId: string;
   properties: Record<string, unknown>;
 };
+export type ActionObject = Point & {
+  id: string; kind: 'action'; action: string; facing?: Facing;
+  offsetX: number; offsetY: number; linkedObjectId?: string;
+};
 export type WorldMap = {
   width: number; height: number;
   spawns: Record<string, Point>;
   collisions: Rect[]; zones: Zone[];
+  actions: ActionObject[];
 };
 
 // Only project semantic objects are constrained. Decorative objects stay opaque.
@@ -43,6 +50,11 @@ const tiledSemanticsSchema = z.object({
   layers: z.array(z.unknown()),
 }).passthrough();
 const identifier = z.string().trim().min(1).max(128);
+const actionPropertiesSchema = z.object({
+  action: actionNameSchema, facing: facingSchema.optional(),
+  offsetX: z.number().finite().default(0), offsetY: z.number().finite().default(0),
+  linkedObjectId: identifier.optional(),
+});
 export type InteractionDefinition = { validate(zone: Zone): void };
 export const interactionDefinitions = new InteractionRegistry<InteractionDefinition>();
 for (const kind of ['board', 'pomodoro', 'web']) {
@@ -88,23 +100,41 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
     return { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
   });
   const ids = new Set<string>();
-  const zones = objects('interactions').map(obj => {
+  const zones: Zone[] = [];
+  const actions: ActionObject[] = [];
+  for (const obj of objects('interactions')) {
     const id = identifier.parse(obj.name);
     const kind = identifier.parse(obj.class || obj.type);
-    if (obj.point || ids.has(id)) throw new Error('Interactions must be uniquely named rectangles');
+    if (ids.has(id)) throw new Error('Interactions must have unique authored IDs');
     ids.add(id);
     const properties = Object.fromEntries(obj.properties.map(prop => [prop.name, prop.value]));
+    if (kind === 'action') {
+      if (!obj.point || obj.width || obj.height) throw new Error('Action anchors must be named points');
+      const actionProperties = actionPropertiesSchema.parse(properties);
+      actions.push({ id, kind: 'action', x: obj.x, y: obj.y, ...actionProperties });
+      continue;
+    }
+    if (obj.point) throw new Error('Zone interactions must be rectangles');
     const zone: Zone = { id, kind, resourceId: typeof properties.resourceId === 'string' ? properties.resourceId.trim() : '',
       properties, x: obj.x, y: obj.y, width: obj.width, height: obj.height };
     definitions.get(kind)?.validate(zone);
-    return zone;
-  });
-  const world: WorldMap = { width: map.width * TILE_SIZE, height: map.height * TILE_SIZE, spawns, collisions, zones };
+    zones.push(zone);
+  }
+  const world: WorldMap = { width: map.width * TILE_SIZE, height: map.height * TILE_SIZE, spawns, collisions, zones, actions };
   for (const obj of [...collisions, ...zones]) {
     if (obj.width <= 0 || obj.height <= 0 || obj.x < 0 || obj.y < 0 ||
       obj.x + obj.width > world.width || obj.y + obj.height > world.height) throw new Error('Semantic rectangle must have positive size and stay inside map bounds');
   }
   for (const spawn of Object.values(spawns)) if (!canStand(world, spawn.x, spawn.y)) throw new Error('Spawn is outside walkable area');
+  const actionTiles = new Set<string>();
+  for (const object of actions) {
+    if (!canStand(world, object.x, object.y) || !canStand(world, object.x + object.offsetX, object.y + object.offsetY)) {
+      throw new Error('Action anchor and its offset must stay inside walkable area');
+    }
+    const tile = `${object.action}:${Math.floor(object.x / TILE_SIZE)},${Math.floor(object.y / TILE_SIZE)}`;
+    if (actionTiles.has(tile)) throw new Error('Only one anchor per action and grid tile is supported');
+    actionTiles.add(tile);
+  }
   return world;
 }
 
@@ -133,11 +163,17 @@ export function validateMapRegistry(registry: WorldRegistry): WorldRegistry {
 export function contains(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
+/** Positional activation uses the foot's grid tile, never a surrounding radius. */
+export function standsOnAction(object: ActionObject, position: Point): boolean {
+  return Math.floor(object.x / TILE_SIZE) === Math.floor(position.x / TILE_SIZE) &&
+    Math.floor(object.y / TILE_SIZE) === Math.floor(position.y / TILE_SIZE);
+}
 export function canStand(map: WorldMap, x: number, y: number): boolean {
-  const r = PLAYER_RADIUS;
-  return x >= r && y >= r && x <= map.width - r && y <= map.height - r &&
-    !map.collisions.some(rect => x + r > rect.x && x - r < rect.x + rect.width &&
-      y + r > rect.y && y - r < rect.y + rect.height);
+  const halfWidth = PLAYER_FOOTPRINT.width / 2;
+  const top = y - PLAYER_FOOTPRINT.height;
+  return x >= halfWidth && top >= 0 && x <= map.width - halfWidth && y <= map.height &&
+    !map.collisions.some(rect => x + halfWidth > rect.x && x - halfWidth < rect.x + rect.width &&
+      y > rect.y && top < rect.y + rect.height);
 }
 export function stepMovement(map: WorldMap, position: Point, input: MovementInput, deltaMs: number): Point {
   const length = Math.hypot(input.x, input.y) || 1;
@@ -160,6 +196,8 @@ export const worldRegistryResponseSchema = z.object({
       width: z.number().positive(), height: z.number().positive(), spawns: z.record(identifier, pointSchema),
       collisions: z.array(rectSchema),
       zones: z.array(rectSchema.extend({ id: identifier, kind: identifier, resourceId: z.string(), properties: z.record(z.string(), z.unknown()) })),
+      actions: z.array(pointSchema.extend({ id: identifier, kind: z.literal('action'),
+        ...actionPropertiesSchema.shape })),
     }),
   })).min(1),
 });

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人互动空间，支持用选取的角色形象移动、互动、使用工具、文字交流。
+基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人互动空间，支持用选取的角色形象移动、互动、使用工具、文字交流。角色外观预设用于地图中的精灵形象，不是个人头像图片。
 
 Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
 
@@ -18,7 +18,13 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
+打开 <http://localhost:5173>，按界面引导选择昵称和角色外观后进入空间。登录页和世界选择目前是前端原型：表单不执行密码认证，世界名称只影响界面标签；后端仍使用持久匿名身份和地图 registry。
+
+使用 WASD、方向键或屏幕方向按钮移动。在地图作者放置的动作锚点所在格按 E 或点击“坐下”执行动作，也可启用动画选项。移动会取消当前动作；输入文字时键盘移动暂停。服务端根据玩家权威位置验证动作请求并查找锚点。
+
+相机缩放由 `VITE_CAMERA_ZOOM` 控制，默认值为 `2`，接受任意有限正数且独立于 tile 尺寸；修改 `.env` 后重启 Vite。动作锚点定义角色位置、动作和可选朝向，不绘制家具；地图作者可在 Tiled 视觉层独立摆放家具。`assets/characters/walk.png` 目前只有行走帧，因此动作暂时显示对应方向的 idle 帧，等待动作帧图集。帧尺寸和帧内脚点单独配置；替换图集时要同步检查角色定义中的帧尺寸和 `groundAnchor`。现有外观预设对同一图集应用不同配色。
+
+后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
 
 ## 常用命令
 

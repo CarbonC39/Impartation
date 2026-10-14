@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { createTestMap } from '../../../packages/shared/test-fixtures/world';
 
 /** Test-only maps exercise the registry without adding destinations to the product map. */
 export function createWorldFixture(): string {
@@ -10,7 +11,7 @@ export function createWorldFixture(): string {
   const map = z.object({
     layers: z.array(z.object({ name: z.string(), type: z.string(), objects: z.array(z.record(z.string(), z.unknown())).optional() }).passthrough()),
     tilesets: z.array(z.object({ name: z.string(), image: z.string() }).passthrough()),
-  }).passthrough().parse(JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8')));
+  }).passthrough().parse(createTestMap());
   const image = fileURLToPath(new URL('../../../assets/maps/tiles.png', import.meta.url));
   map.layers[0].name = 'floor';
   map.layers.find(layer => layer.name === 'spawns')!.objects![0].name = 'entry';
@@ -23,11 +24,11 @@ export function createWorldFixture(): string {
   writeFileSync(join(directory, 'atlas.tsj'), JSON.stringify({ ...map.tilesets[0], image }));
   const studio = {
     orientation: 'orthogonal', infinite: false, width: 24, height: 16, tilewidth: 16, tileheight: 16,
-    tilesets: [{ firstgid: 1, source: 'atlas.tsj' }, { ...map.tilesets[0], firstgid: 13, name: 'details' }],
+    tilesets: [{ firstgid: 1, source: 'atlas.tsj' }, { ...map.tilesets[0], firstgid: 37, name: 'details' }],
     layers: [
       { name: 'floor', type: 'tilelayer', width: 24, height: 16, data: Array.from({ length: 384 }, () => 1) },
       { name: 'artwork', type: 'group', layers: [
-        { name: 'decorations', type: 'tilelayer', width: 24, height: 16, data: Array.from({ length: 384 }, () => 15), opacity: 0.5 },
+        { name: 'decorations', type: 'tilelayer', width: 24, height: 16, data: Array.from({ length: 384 }, () => 39), opacity: 0.5 },
       ] },
       { name: 'spawns', type: 'objectgroup', objects: [{ name: 'arrival', point: true, x: 96, y: 96 }] },
       { name: 'collisions', type: 'objectgroup', objects: [] },
