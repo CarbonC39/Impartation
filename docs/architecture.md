@@ -268,7 +268,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | `GET /api/world` | 公开地图目录与所有权威地图语义 |
 | `GET /api/maps/:id/map.json` | 公开规范化 Tiled JSON；未知地图返回 404 |
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
-| `GET /api/tools` | 公开工具 resourceId、kind、mode、URL 和 fallback；不能放凭据 |
+| `GET /api/tools` | 公开工具 resourceId、mode、URL 和 fallback；不能放凭据 |
 | `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
 | `PATCH /api/me` | JSON 更新昵称/avatar，校验提供的 Origin，不接受 role 更新 |
 | `/api/auth/*` | 只开放匿名登录、session 查询、退出和绑定码生成/兑换的指定方法，其余返回 404 |

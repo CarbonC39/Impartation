@@ -1,12 +1,16 @@
 # Virtual Workspace
 
-基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人空间。Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。页面可用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。项目不提供编辑器、画笔或播放同步实现。正式注册/登录、账号恢复和私密房间尚未实现。移动使用 WASD 或方向键，暂不提供触屏移动控件。
+A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat.
 
-## 本地运行
+Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
-需要 Node.js 24 或更新版本、npm。
+External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; pages can open in a new tab (`external`) or in a sandboxed iframe (`embed`). External services keep their own accounts and permissions. Formal sign-up and login, account recovery, and private rooms are not implemented yet.
+
+## Run locally
+
+Requires Node.js 24 or later and npm.
 
 ```sh
 cp .env.example .env
@@ -14,42 +18,42 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
+Open <http://localhost:5173>. The backend health check is at <http://localhost:2567/health>. The development server proxies `/api`, `/health`, Colyseus matchmaking, and WebSocket traffic.
 
-## 常用命令
+## Common commands
 
-| 命令 | 用途 |
+| Command | Purpose |
 | --- | --- |
-| `npm run check` | strict 类型检查、Node 测试和生产构建 |
-| `npm run test:e2e` | Chromium 浏览器测试，自动启动开发服务 |
-| `npm run check:all` | 执行以上两组检查 |
-| `npm run build` | 构建 shared、backend 和 frontend |
-| `npm start` | 启动已构建的后端，前端需单独托管 |
-| `npm run identity -- list` | 列出本地身份资料 |
-| `npm run identity -- role USER_ID admin` | 授予项目管理员 |
-| `npm run identity -- role USER_ID member` | 移除项目管理员 |
+| `npm run check` | Strict type checking, Node tests, and production builds |
+| `npm run test:e2e` | Chromium browser tests; starts development services automatically |
+| `npm run check:all` | Runs both checks above |
+| `npm run build` | Builds shared, backend, and frontend workspaces |
+| `npm start` | Starts the built backend; host the frontend separately |
+| `npm run identity -- list` | Lists local identity profiles |
+| `npm run identity -- role USER_ID admin` | Grants project administrator role |
+| `npm run identity -- role USER_ID member` | Removes project administrator role |
 
-浏览器测试首次运行前执行 `npx playwright install chromium`。覆盖范围、隔离方式和 NixOS 配置见[测试说明](docs/testing.md)。
+Before the first browser test run, install Chromium with `npx playwright install chromium`. See [testing](docs/testing.md) for coverage, isolation, and NixOS setup.
 
-## 配置与部署
+## Configuration and deployment
 
-根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。地图契约与渲染边界见[地图制作](docs/tiled.md)。
+The root [`.env.example`](.env.example) contains configuration examples. The backend and Vite both read the root `.env`; restart services after changing it. `MAP_REGISTRY_PATH` defaults to `assets/maps/registry.json`, and map files are resolved relative to the registry. See [Tiled maps](docs/tiled.md) for the map contract and rendering limits.
 
-生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。前端单独托管，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
+In production, set a random `IDENTITY_SECRET` of at least 32 characters, the public site URL in `IDENTITY_BASE_URL`, and the deployed frontend origins in `IDENTITY_TRUSTED_ORIGINS`. Host the frontend separately and use a same-origin reverse proxy for `/api`, `/matchmake`, and the Colyseus WebSocket. `VITE_SERVER_URL` only controls the Colyseus connection; identity, map, and tool configuration APIs always use same-origin `/api`.
 
-SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，需持久化并备份。HTTP Basic Auth 由部署者的代理提供。
+Deploy SQLite with a single backend instance. The default database is `data/world.sqlite`; persist and back it up. HTTP Basic Auth, if needed, is provided by the deployer's proxy.
 
-用 `EXTERNAL_TOOLS` 将地图 `resourceId` 关联到 `{ url, mode?, fallback? }`。URL 必填；`mode` 可为 `embed` 或 `external`，默认 `external`。`fallback: "external"` 会在嵌入容器旁提供手动打开链接，不会检测 iframe 加载失败。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
+Use `EXTERNAL_TOOLS` to map Tiled `resourceId` values to `{ url, mode?, fallback? }`. `url` is required; `mode` can be `embed` or `external` and defaults to `external`. `fallback: "external"` adds a manual open link beside an embedded page; iframe load failures are not detected. The project does not start Docker containers, so deploy and validate tool services separately. `GET /api/world` publishes the map directory; the server also provides normalized Tiled JSON and explicitly referenced map assets.
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 | --- | --- |
-| [架构](docs/architecture.md) | 模块、状态归属和功能边界 |
-| [匿名身份与权限](docs/account-system.md) | 跨设备绑定、身份 API、管理员 CLI 和迁移 |
-| [地图制作](docs/tiled.md) | Tiled 制图步骤、碰撞、交互区和验证 |
-| [外部工具入口](docs/integration-plan.md) | 地址配置、公开 API 和入口行为 |
-| [Integrations](docs/integrations.md) | 内置工具与外置服务的接入和权限 |
-| [测试](docs/testing.md) | 命令、覆盖范围和未覆盖项 |
-| [待办](docs/roadmap.md) | 尚未实现的功能 |
-| [协作约定](AGENTS.md) | 实现、验证和提交要求 |
+| [Architecture](docs/architecture.md) | Modules, state ownership, and feature boundaries |
+| [Identity and permissions](docs/account-system.md) | Device linking, identity APIs, administrator CLI, and migrations |
+| [Tiled maps](docs/tiled.md) | Map authoring, collisions, interaction zones, and validation |
+| [External tool configuration](docs/integration-plan.md) | URL configuration, public APIs, and launch behavior |
+| [Integrations](docs/integrations.md) | Built-in tools, external services, and permissions |
+| [Testing](docs/testing.md) | Commands, coverage, and known gaps |
+| [Roadmap](docs/roadmap.md) | Features not implemented yet |
+| [Contributor instructions](AGENTS.md) | Implementation, verification, and commit conventions |
