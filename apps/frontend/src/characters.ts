@@ -1,9 +1,17 @@
-import { appearanceSchema, FACINGS, type Facing, type Motion } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSETS, appearanceSchema, FACINGS, type Facing, type Motion } from '@virtual-workspace/shared';
+
+export const layerAssets = {
+  base: '/characters/walk.png', eyes: '/characters/eyes.png',
+  hair1: '/characters/hair1.png', hair2: '/characters/hair2.png',
+  shirt: '/characters/shirt.png', 't-shirt': '/characters/t-shirt.png',
+  pants: '/characters/pants.png', skirt: '/characters/skirt.png', shoes: '/characters/shoes.png',
+} as const;
+export type LayerAssetId = keyof typeof layerAssets;
+export const layerAssetIds = Object.values(APPEARANCE_ASSETS).flat() as LayerAssetId[];
 
 // Source frame dimensions belong to the character, independently of map tile dimensions.
-// Four columns per direction, in down/left/right/up row order.
+// Four columns per row, in down/left/right/up direction order.
 const character = {
-  texture: 'character-walk', url: '/characters/walk.png',
   frameWidth: 16, frameHeight: 24,
   // Frame-local foot point; transparent padding does not define the ground anchor.
   groundAnchor: { x: 8, y: 23 },
@@ -14,25 +22,24 @@ const character = {
   frameMs: 120,
 } as const;
 export const avatars = {
-  mint: { ...character, tint: 0x88dbb4 },
-  amber: { ...character, tint: 0xefbd65 },
-  violet: { ...character, tint: 0xbb9de8 },
+  mint: character, amber: character, violet: character,
 } as const;
 export function avatarDefinition(id: string) {
   return avatars[id as keyof typeof avatars] ?? avatars.mint;
 }
-const appearanceTints = { coral:0xf07872, sunshine:0xf2c552, sky:0x64a9df, leaf:0x67ae80, lilac:0xaa82cf } as const;
-const tintCache = new Map<string, number>();
-export function appearanceTint(avatarId: string, serializedAppearance: string): number {
-  const cached = tintCache.get(serializedAppearance);
-  if (cached !== undefined) return cached;
-  try {
-    const appearance = appearanceSchema.parse(JSON.parse(serializedAppearance));
-    const tint = appearanceTints[appearance.topColor];
-    tintCache.set(serializedAppearance, tint);
-    return tint;
-  } catch { return avatarDefinition(avatarId).tint; }
+function defaultAppearance() { return appearanceSchema.parse({}); }
+const appearanceCache = new Map<string, ReturnType<typeof defaultAppearance>>();
+export function characterAppearance(serialized: string) {
+  const cached = appearanceCache.get(serialized);
+  if (cached) return cached;
+  let parsed: unknown;
+  try { parsed = JSON.parse(serialized); } catch { parsed = {}; }
+  const appearance = appearanceSchema.safeParse(parsed);
+  const value = appearance.success ? appearance.data : defaultAppearance();
+  appearanceCache.set(serialized, value);
+  return value;
 }
+export function tintNumber(color: string): number { return Number.parseInt(color.slice(1), 16); }
 
 /** Local time selects walk or configured action frames; unconfigured actions fall back to directional idle. */
 export function characterFrame(avatarId: string, facing: Facing, motion: Motion, action: string,

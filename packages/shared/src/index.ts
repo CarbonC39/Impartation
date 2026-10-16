@@ -4,15 +4,21 @@ import { z } from 'zod';
 export const ROOM_NAME = 'space';
 export const AVATARS = ['mint', 'amber', 'violet'] as const;
 export const avatarSchema = z.enum(AVATARS);
+export const APPEARANCE_ASSETS = {
+  body: ['base'], face: ['eyes'], hair: ['hair1', 'hair2'],
+  top: ['shirt', 't-shirt'], bottom: ['pants', 'skirt'], shoes: ['shoes'],
+} as const;
+export const APPEARANCE_LAYERS = ['body', 'face', 'bottom', 'shoes', 'top', 'hair'] as const;
+const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit RGB hex color');
+const part = <T extends readonly [string, ...string[]]>(assets: T, assetId: T[number], color: string) =>
+  z.object({ assetId: z.enum(assets).default(assetId), color: colorSchema.default(color) }).strict();
 export const appearanceSchema = z.object({
-  skin: z.enum(['light', 'warm', 'deep']).default('warm'),
-  hair: z.enum(['short', 'long', 'bun']).default('short'),
-  hairColor: z.enum(['dark', 'brown', 'blonde', 'pink']).default('brown'),
-  top: z.enum(['tee', 'sweater', 'overall']).default('tee'),
-  topColor: z.enum(['coral', 'sunshine', 'sky', 'leaf', 'lilac']).default('sky'),
-  bottom: z.enum(['pants', 'skirt', 'shorts']).default('pants'),
-  bottomColor: z.enum(['denim', 'navy', 'plum', 'mint']).default('denim'),
-  accessory: z.enum(['none', 'glasses', 'flower', 'hat']).default('none'),
+  body: part(APPEARANCE_ASSETS.body, 'base', '#ffffff').default({ assetId: 'base', color: '#ffffff' }),
+  face: part(APPEARANCE_ASSETS.face, 'eyes', '#ffffff').default({ assetId: 'eyes', color: '#ffffff' }),
+  hair: part(APPEARANCE_ASSETS.hair, 'hair1', '#704b3c').default({ assetId: 'hair1', color: '#704b3c' }),
+  top: part(APPEARANCE_ASSETS.top, 't-shirt', '#64a9df').default({ assetId: 't-shirt', color: '#64a9df' }),
+  bottom: part(APPEARANCE_ASSETS.bottom, 'pants', '#587eaa').default({ assetId: 'pants', color: '#587eaa' }),
+  shoes: part(APPEARANCE_ASSETS.shoes, 'shoes', '#6a554e').default({ assetId: 'shoes', color: '#6a554e' }),
 }).strict();
 export const DEFAULT_APPEARANCE = appearanceSchema.parse({});
 export const joinSchema = z.object({

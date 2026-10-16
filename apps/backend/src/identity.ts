@@ -26,13 +26,35 @@ await (await auth.$context).checkSchema?.();
 export type Identity = { userId: string; sessionId: string; token: string };
 export type Profile = { id: string; name: string; avatar: JoinOptions['avatar']; appearance: JoinOptions['appearance']; role: 'member' | 'admin' };
 
+function storedAppearance(value: unknown): Profile['appearance'] {
+  const current = appearanceSchema.safeParse(value);
+  if (current.success) return current.data;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return DEFAULT_APPEARANCE;
+  const old = value as Record<string, unknown>;
+  const color = (key: string, palette: Record<string, string>, fallback: string) =>
+    typeof old[key] === 'string' ? palette[old[key]] ?? fallback : fallback;
+  const asset = (key: string, choices: Record<string, string>, fallback: string) =>
+    typeof old[key] === 'string' ? choices[old[key]] ?? fallback : fallback;
+  return appearanceSchema.parse({
+    body: { assetId: 'base', color: color('skin', { light: '#ffffff', warm: '#f4d6bc', deep: '#c59478' }, '#ffffff') },
+    face: { assetId: 'eyes', color: '#ffffff' },
+    hair: { assetId: asset('hair', { short: 'hair1', long: 'hair2', bun: 'hair2' }, 'hair1'),
+      color: color('hairColor', { dark: '#343344', brown: '#704b3c', blonde: '#efc75e', pink: '#dc7196' }, '#704b3c') },
+    top: { assetId: asset('top', { tee: 't-shirt', sweater: 'shirt', overall: 'shirt' }, 't-shirt'),
+      color: color('topColor', { coral: '#f07872', sunshine: '#f2c552', sky: '#64a9df', leaf: '#67ae80', lilac: '#aa82cf' }, '#64a9df') },
+    bottom: { assetId: asset('bottom', { pants: 'pants', skirt: 'skirt', shorts: 'pants' }, 'pants'),
+      color: color('bottomColor', { denim: '#587eaa', navy: '#354d71', plum: '#805a91', mint: '#6aa989' }, '#587eaa') },
+    shoes: DEFAULT_APPEARANCE.shoes,
+  });
+}
+
 export function profile(userId: string): Profile | undefined {
   const row = db.prepare('SELECT user_id AS id, name, avatar_id AS avatar, appearance_json AS appearanceJson, role FROM profiles WHERE user_id = ?')
     .get(userId) as { id: string; name: string; avatar: JoinOptions['avatar']; appearanceJson: string; role: Profile['role'] } | undefined;
   if (!row) return;
   let appearance: unknown = DEFAULT_APPEARANCE;
   try { appearance = JSON.parse(row.appearanceJson); } catch { /* Invalid legacy data uses defaults. */ }
-  return { id: row.id, name: row.name, avatar: row.avatar, appearance: appearanceSchema.parse(appearance), role: row.role };
+  return { id: row.id, name: row.name, avatar: row.avatar, appearance: storedAppearance(appearance), role: row.role };
 }
 
 export function ensureProfile(userId: string, options: JoinOptions = { name: '访客', avatar: 'mint', appearance: DEFAULT_APPEARANCE }): Profile {

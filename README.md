@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. The character editor supports appearance choices, preview, random outfits, and saved profiles; layered character art will be integrated later. Until then, the map uses clothing color as a tint for the placeholder sprite.
+A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. The character editor previews and saves six layered sprite sheets (body, face, hair, top, bottom, shoes), each with a validated asset ID and editable RGB color. All layers share one animation frame and foot anchor in the map.
 
 Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
@@ -22,7 +22,7 @@ Open <http://localhost:5173>, follow the entry flow, choose a nickname and custo
 
 Move with WASD, the arrow keys, or the on-screen direction pad. At an authored action anchor, press E or click **Sit** to sit; the animation option can be enabled as well. Movement cancels the current action, and typing pauses keyboard movement. The server validates action requests and resolves anchors from the player's authoritative position.
 
-Camera zoom is controlled by `VITE_CAMERA_ZOOM`, which defaults to `2` and accepts any finite positive number independently of tile size. Restart Vite after changing `.env`. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. `assets/characters/walk.png` currently contains walking frames only, so actions display the matching directional idle frame until action frames are provided. Frame size and the in-frame foot point are configured separately; update the character definition's frame size and `groundAnchor` when replacing the sheet.
+Camera zoom is controlled by `VITE_CAMERA_ZOOM`, which defaults to `2` and accepts any finite positive number independently of tile size. Restart Vite after changing `.env`. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. Character sheets use 16×24 frames in four columns and eight rows. The first four rows are down/left/right/up walking poses; the next four are action poses. The first column is static and columns 2–4 animate. Every layer must keep the same layout and foot anchor; asset IDs in `appearance` are resolved by the frontend character asset manifest.
 
 The backend health check is at <http://localhost:2567/health>. The development server proxies `/api`, `/health`, Colyseus matchmaking, and WebSocket traffic.
 

@@ -5,13 +5,19 @@ import type Phaser from 'phaser';
 import type { SpaceScene } from '../src/SpaceScene';
 import { avatars } from '../src/characters';
 
-async function enter(page: Page, name: string, avatar = 'mint', prepare?: () => Promise<void>) {
+async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => Promise<void>) {
   await page.goto('/');
   await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
   await prepare?.();
   await openAvatarScreen(page);
   await page.locator('#name').fill(name);
-  await page.locator(`input[name="avatar-choice"][value="${avatar}"]`).check();
+  if (outfit === 'amber') {
+    await page.locator('[data-appearance-category="hair"]').click();
+    await page.locator('#appearance-choices select').selectOption('hair2');
+  } else if (outfit === 'violet') {
+    await page.locator('[data-appearance-category="top"]').click();
+    await page.locator('#appearance-choices select').selectOption('shirt');
+  }
   await page.locator('#join').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
@@ -466,8 +472,10 @@ test('two browser guests render their avatars and exchange plain-text chat throu
   await enter(bob, 'E2EBob', 'violet');
   const observer = await observe();
   try {
-    await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EAlice' && player.avatar === 'amber')).toBe(true);
-    await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EBob' && player.avatar === 'violet')).toBe(true);
+    await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EAlice' &&
+      JSON.parse(player.appearance).hair.assetId === 'hair2')).toBe(true);
+    await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EBob' &&
+      JSON.parse(player.appearance).top.assetId === 'shirt')).toBe(true);
     await page.locator('#message').fill('<b>你好</b>');
     await page.locator('#send').click();
     await expect(bob.locator('#messages')).toContainText('E2EAlice：<b>你好</b>');
@@ -613,7 +621,8 @@ test('binding a second browser restores the same identity, profile and note perm
     await expect(target.locator('#identity-feedback')).toHaveText('已绑定同一身份');
     await expect(target.locator('#identity-status')).toHaveText(identity!);
     await expect(target.locator('#name')).toHaveValue('E2EBound');
-    await expect(target.locator('#avatar')).toHaveValue('violet');
+    await expect.poll(async () => (await target.evaluate(async () =>
+      (await (await fetch('/api/me')).json()).appearance.top.assetId)) as string).toBe('shirt');
     await joinSavedProfile(target);
     await walkTo(target, observer, 'E2EBound', 'board');
     await target.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();

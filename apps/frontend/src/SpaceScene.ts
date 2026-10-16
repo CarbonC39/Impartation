@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
-import { TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
+import { APPEARANCE_LAYERS, TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
 import { zoneLabels } from './interactions/labels';
-import { appearanceTint, avatarDefinition, avatars, characterFacing, characterFrame } from './characters';
+import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
 
-type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; animation: string; elapsed: number };
+type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[];
+  label: Phaser.GameObjects.Text; animation: string; elapsed: number };
 
 export class SpaceScene extends Phaser.Scene {
   private sprites = new Map<string, PlayerVisual>();
@@ -25,8 +26,9 @@ export class SpaceScene extends Phaser.Scene {
     for (const [index, tileset] of this.renderMap.tilesets.entries()) {
       if (tileset.image) this.load.image(`tiles-${index}`, tileset.image);
     }
-    for (const avatar of new Map(Object.values(avatars).map(avatar => [avatar.texture, avatar])).values()) {
-      this.load.spritesheet(avatar.texture, avatar.url, { frameWidth: avatar.frameWidth, frameHeight: avatar.frameHeight });
+    const avatar = avatarDefinition('mint');
+    for (const id of layerAssetIds) {
+      this.load.spritesheet(id, layerAssets[id], { frameWidth: avatar.frameWidth, frameHeight: avatar.frameHeight });
     }
     preloadObjectVisuals(this);
   }
@@ -80,12 +82,14 @@ export class SpaceScene extends Phaser.Scene {
       let sprite = this.sprites.get(id);
       if (!sprite) {
         const avatar = avatarDefinition(player.avatar);
-        const character = this.add.sprite(player.x, player.y, avatar.texture).setName(id);
+        const layers = APPEARANCE_LAYERS.map(() => this.add.sprite(player.x, player.y, 'base')
+          .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight));
+        const character = layers[0]!.setName(id);
         if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
         const label = this.add.text(player.x, player.y - avatar.groundAnchor.y - 4, player.name,
           { fontSize: '12px', color: id === this.room.sessionId ? '#fff2a3' : '#ffffff' })
           .setOrigin(0.5, 1).setScale(1 / this.cameras.main.zoom);
-        sprite = { sprite: character, label, animation: '', elapsed: 0 };
+        sprite = { sprite: character, layers, label, animation: '', elapsed: 0 };
         this.sprites.set(id, sprite);
       }
       const blend = Math.min(1, delta / TICK_MS);
@@ -100,17 +104,23 @@ export class SpaceScene extends Phaser.Scene {
       sprite.elapsed = animation === sprite.animation ? sprite.elapsed + delta : 0;
       sprite.animation = animation;
       const frame = characterFrame(player.avatar, facing, motion, action, player.actionAnimated, sprite.elapsed);
-      // Walk-only sheets can be replaced by the full action sheet without changing this renderer.
-      const renderedFrame = this.textures.get(avatar.texture).has(String(frame)) ? frame : avatar.idle[facing];
-      sprite.sprite.setTexture(avatar.texture, renderedFrame)
-        .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight)
-        .setTint(appearanceTint(player.avatar, player.appearance)).setAlpha(player.connected ? 1 : 0.35).setDepth(sprite.sprite.y);
+      const renderedFrame = this.textures.get('base').has(String(frame)) ? frame : avatar.idle[facing];
+      const appearance = characterAppearance(player.appearance);
+      for (const [index, layer] of APPEARANCE_LAYERS.entries()) {
+        const part = appearance[layer];
+        sprite.layers[index]!.setTexture(part.assetId, renderedFrame).setTint(tintNumber(part.color))
+          .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
+          .setDepth(sprite.sprite.y + index * 0.001);
+      }
       const name = action === 'sit' ? `${player.name} · 坐` : player.name;
       if (sprite.label.text !== name) sprite.label.setText(name);
       sprite.label.setPosition(sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 4).setDepth(this.mapEntry.world.height + 1);
     }
     for (const [id, sprite] of this.sprites) {
-      if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) { sprite.sprite.destroy(); sprite.label.destroy(); this.sprites.delete(id); }
+      if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) {
+        for (const layer of sprite.layers) layer.destroy();
+        sprite.label.destroy(); this.sprites.delete(id);
+      }
     }
     const ownPlayer = players.get(this.room.sessionId);
     this.zoneChanged(ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.zoneId : '');

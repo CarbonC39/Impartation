@@ -145,7 +145,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 | `serverTime` | 服务端时间戳 | 番茄钟显示使用的时间基准 |
 | `worldObjects` | map ID → `MapObjectState`（authored object ID → `{ variant, occupiedBy }`） | 房间内各地图对象的共享视觉变体和占用状态；动作锚点、区域及关联对象 ID 均预留状态 |
 
-Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。appearance 由共享 `appearanceSchema` 校验，包括肤色、发型、发色、上衣、上衣颜色、下装、下装颜色和配饰；动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。角色图层素材待导入；地图当前使用上衣颜色 tint 现有占位精灵。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
+Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes 六层的素材 ID 和 RGB 颜色；动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
 
 消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal 和 activateAction，后者返回 `{ ok, message }`。activateAction 只接收动作名和可选动画标记；地图与玩家位置由服务端权威读取。服务端 chat 是实时广播；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
 
@@ -171,7 +171,7 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 
 客户端对服务端位置做线性插值，无本地预测或重演。全屏画布使用 RESIZE，镜头在地图范围内跟随当前玩家；键盘和屏幕方向按钮提交相同的 input，松开、页面隐藏或失焦会停止输入。`facing` 由方向输入更新，`motion` 表示 idle/walk；激活动作时服务端同步动作、动画标记和目标对象 ID，并按锚点规则调整位置与朝向。非零移动会清除动作状态。场景中的区域通知使用服务端 zoneId；界面提示和按钮状态不会替代服务端位置校验。
 
-角色素材由 [characters.ts](../apps/frontend/src/characters.ts) 配置帧尺寸与帧内地面脚点；这些值独立于地图 tile 与碰撞尺寸。约定图集为 4 列：前四行按 down/left/right/up 排列行走帧，第五至八行按同样方向顺序排列 sit 帧；后续动作在角色配置中增加对应的四个方向行；idle 和静态动作使用各行第一帧，走路使用列 1–4，动画动作使用列 2–4。动画帧由客户端本地时间选择，不进入 Schema。当前 `assets/characters/walk.png` 为 64×96，仅含行走帧；完整 64×192 动作图集提供前，动作显示方向 idle 帧，不伪造坐姿美术。mint、amber、violet 目前使用同一图集并应用不同 tint。
+角色素材由 [characters.ts](../apps/frontend/src/characters.ts) 配置帧尺寸与帧内地面脚点；这些值独立于地图 tile 与碰撞尺寸。约定图集为 4 列：前四行按 down/left/right/up 排列行走帧，第五至八行按同样方向顺序排列 sit 帧；后续动作在角色配置中增加对应的四个方向行；idle 和静态动作使用各行第一帧，走路使用列 1–4，动画动作使用列 2–4。动画帧由客户端本地时间选择，不进入 Schema。目前所有角色图层都是 64×192，帧尺寸 16×24。body 使用 `walk.png`，原 `eyes.png` 作为完整帧 face 图层，其他素材由 `appearance.assetId` 选择；各层使用同一帧号、位置和脚点。mint、amber、violet 是保留的角色原型 ID；实际外观由 appearance 决定。
 
 `Tiled 对象 → interaction → worldObjects 状态 → 视觉表示` 是对象呈现的数据路径。动作锚点可保留 `linkedObjectId`，WorldObjectState 按地图和 authored ID 保存对象 variant，以支持后续变体切换；当前动作不执行脚本，也不改变桌面行为。`worldObjectVisuals.ts` 保留按 authored ID 和 kind/variant 绘制叠加图的能力。叠加视觉尺寸单独定义，不依赖 tile 尺寸；业务 handler 只修改对象状态，不写 GID 或调用 putTileAt。
 

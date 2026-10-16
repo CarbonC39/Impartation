@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { DEFAULT_APPEARANCE, ROOM_NAME, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateMapRegistry, type WorldRegistry, type SpaceProtocol, type MovementInput, type JoinOptions } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSETS, DEFAULT_APPEARANCE, ROOM_NAME, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateMapRegistry, type WorldRegistry, type SpaceProtocol, type MovementInput, type JoinOptions } from '@virtual-workspace/shared';
 import { SpaceScene } from './SpaceScene';
+import { drawAppearancePreview } from './appearancePreview';
 import { createInteractions } from './interactions';
 import type { InteractionDispatcher } from './interactions/dispatcher';
 import { z } from 'zod';
@@ -89,81 +90,64 @@ element<HTMLFormElement>('create-world-form').addEventListener('submit', event =
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
   button.addEventListener('click', () => showScreen(button.dataset.back ?? 'world-screen'));
 });
-const avatarChoices = [...document.querySelectorAll<HTMLInputElement>('input[name="avatar-choice"]')];
 type AppearancePart = keyof JoinOptions['appearance'];
-const appearanceChoices: Record<AppearancePart, readonly string[]> = {
-  skin: ['light', 'warm', 'deep'], hair: ['short', 'long', 'bun'],
-  hairColor: ['dark', 'brown', 'blonde', 'pink'], top: ['tee', 'sweater', 'overall'],
-  topColor: ['coral', 'sunshine', 'sky', 'leaf', 'lilac'], bottom: ['pants', 'skirt', 'shorts'],
-  bottomColor: ['denim', 'navy', 'plum', 'mint'], accessory: ['none', 'glasses', 'flower', 'hat'],
-};
 const appearanceLabels: Record<string, string> = {
-  light:'白皙', warm:'暖调', deep:'小麦', short:'短发', long:'长发', bun:'丸子头',
-  dark:'黑色', brown:'棕色', blonde:'金色', pink:'粉色', tee:'短袖', sweater:'毛衣', overall:'背带裤',
-  coral:'珊瑚红', sunshine:'向日黄', sky:'天空蓝', leaf:'嫩叶绿', lilac:'丁香紫',
-  pants:'长裤', skirt:'裙子', shorts:'短裤', denim:'牛仔蓝', navy:'海军蓝', plum:'梅子紫', mint:'薄荷绿',
-  none:'无', glasses:'眼镜', flower:'小花', hat:'帽子',
+  base: '基础身体', eyes: '默认面部', hair1: '发型一', hair2: '发型二',
+  shirt: '衬衫', 't-shirt': '短袖', pants: '长裤', skirt: '裙子', shoes: '基础鞋',
 };
-const appearanceColors = {
-  skin: { light:'#f7d6bd', warm:'#d99a70', deep:'#a9684c' },
-  hairColor: { dark:'#343344', brown:'#704b3c', blonde:'#efc75e', pink:'#dc7196' },
-  topColor: { coral:'#f07872', sunshine:'#f2c552', sky:'#64a9df', leaf:'#67ae80', lilac:'#aa82cf' },
-  bottomColor: { denim:'#587eaa', navy:'#354d71', plum:'#805a91', mint:'#6aa989' },
-} as const;
-let currentAppearance: JoinOptions['appearance'] = { ...DEFAULT_APPEARANCE };
-let activeAppearancePart: AppearancePart = 'skin';
+let currentAvatar: JoinOptions['avatar'] = 'mint';
+let currentAppearance: JoinOptions['appearance'] = structuredClone(DEFAULT_APPEARANCE);
+let activeAppearancePart: AppearancePart = 'body';
+const previewCanvas = element<HTMLCanvasElement>('avatar-canvas');
 function renderAppearancePreview() {
-  const skin = appearanceColors.skin[currentAppearance.skin];
-  const hair = appearanceColors.hairColor[currentAppearance.hairColor];
-  const top = appearanceColors.topColor[currentAppearance.topColor];
-  const bottom = appearanceColors.bottomColor[currentAppearance.bottomColor];
-  const hairShape = currentAppearance.hair === 'long'
-    ? `<path fill="${hair}" d="M16 27V14h4V9h24v5h4v26h-6V23H20v17h-4z"/>`
-    : currentAppearance.hair === 'bun'
-      ? `<path fill="${hair}" d="M16 27V14h4V9h20v5h4v13H20v-4z"/><rect x="37" y="3" width="10" height="10" fill="${hair}"/>`
-      : `<path fill="${hair}" d="M16 27V14h4V9h24v5h4v13H20v-4z"/>`;
-  const garment = currentAppearance.top === 'overall'
-    ? `<path fill="${top}" d="M14 39h36v26H14zM19 34h7v17h-7zM38 34h7v17h-7z"/><path fill="#f5d675" d="M18 47h9v7h-9zM37 47h9v7h-9z"/>`
-    : `<path fill="${top}" d="M18 37h28l8 9-5 7-5-4v17H20V49l-5 4-5-7z"/><path fill="#ffffff55" d="M27 38h10v4H27z"/>`;
-  const lower = currentAppearance.bottom === 'skirt'
-    ? `<path fill="${bottom}" d="M19 63h26l7 17H12z"/>`
-    : currentAppearance.bottom === 'shorts'
-      ? `<path fill="${bottom}" d="M19 62h26v12H34v-6h-4v6H19z"/>`
-      : `<path fill="${bottom}" d="M19 62h26v18H32V68h-4v12H16z"/>`;
-  const accessory = currentAppearance.accessory === 'glasses'
-    ? '<path fill="none" stroke="#343344" stroke-width="3" d="M20 27h9v7h-9zM35 27h9v7h-9zM29 29h6" />'
-    : currentAppearance.accessory === 'flower'
-      ? '<path fill="#f486a1" d="M42 12h4v4h4v4h-4v4h-4v-4h-4v-4h4z"/><rect x="43" y="16" width="3" height="3" fill="#ffd86a"/>'
-      : currentAppearance.accessory === 'hat'
-        ? '<path fill="#f2c552" d="M13 13h38v5H13zM20 6h24v8H20z"/>' : '';
-  element('avatar-preview').innerHTML = `<svg class="avatar-diy-sprite pixel-svg" viewBox="0 0 64 84" aria-hidden="true"><ellipse cx="32" cy="80" rx="20" ry="3" fill="#23324733"/><path fill="${bottom}" d="M25 72h6v9h-6zM36 72h6v9h-6z"/>${lower}${garment}<path fill="${skin}" d="M12 42h7v16h-7zM45 42h7v16h-7zM22 16h20v24H22z"/>${hairShape}<path fill="#343344" d="M26 27h3v4h-3zM36 27h3v4h-3z"/><path fill="#aa5260" d="M29 35h7v2h-7z"/>${accessory}</svg>`;
-  renderAppearanceOptions();
+  void drawAppearancePreview(previewCanvas, currentAppearance).catch(error => {
+    joinFeedback.textContent = error instanceof Error ? error.message : String(error);
+  });
+}
+function changeAppearance(part: AppearancePart, change: Partial<JoinOptions['appearance'][AppearancePart]>) {
+  currentAppearance = appearanceSchema.parse({ ...currentAppearance, [part]: { ...currentAppearance[part], ...change } });
+  renderAppearancePreview();
 }
 function renderAppearanceOptions() {
-  const values = appearanceChoices[activeAppearancePart];
   const container = element('appearance-choices');
-  container.replaceChildren(...values.map(value => {
-    const button = document.createElement('button');
-    button.type = 'button'; button.className = 'appearance-option';
-    button.dataset.appearanceValue = value;
-    button.setAttribute('aria-pressed', String(currentAppearance[activeAppearancePart] === value));
-    const swatch = document.createElement('span'); swatch.className = 'appearance-swatch';
-    if (activeAppearancePart in appearanceColors) {
-      const palette = appearanceColors[activeAppearancePart as keyof typeof appearanceColors] as Record<string, string>;
-      swatch.style.backgroundColor = palette[value];
-    } else swatch.textContent = activeAppearancePart === 'hair' ? '发' : activeAppearancePart === 'accessory' ? '饰' : '衣';
-    button.append(swatch, document.createTextNode(appearanceLabels[value] ?? value));
-    button.addEventListener('click', () => {
-      currentAppearance = appearanceSchema.parse({ ...currentAppearance, [activeAppearancePart]: value });
-      renderAppearancePreview();
-    });
-    return button;
-  }));
+  const assetLabel = document.createElement('label');
+  assetLabel.textContent = '素材';
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', '图层素材');
+  for (const id of APPEARANCE_ASSETS[activeAppearancePart]) {
+    const option = document.createElement('option');
+    option.value = id; option.textContent = appearanceLabels[id] ?? id;
+    select.append(option);
+  }
+  select.value = currentAppearance[activeAppearancePart].assetId;
+  select.addEventListener('change', () => {
+    const selected = APPEARANCE_ASSETS[activeAppearancePart].find(id => id === select.value);
+    if (selected) changeAppearance(activeAppearancePart, { assetId: selected });
+  });
+  assetLabel.append(select);
+  const colorLabel = document.createElement('label');
+  colorLabel.textContent = activeAppearancePart === 'body' ? '身体乘色' : '颜色';
+  const color = document.createElement('input');
+  color.type = 'color'; color.value = currentAppearance[activeAppearancePart].color;
+  color.setAttribute('aria-label', '选择 RGB 颜色');
+  const hex = document.createElement('input');
+  hex.type = 'text'; hex.maxLength = 7; hex.value = color.value;
+  hex.pattern = '#[0-9a-fA-F]{6}'; hex.setAttribute('aria-label', '十六进制 RGB 颜色');
+  color.addEventListener('input', () => { hex.value = color.value; changeAppearance(activeAppearancePart, { color: color.value }); });
+  hex.addEventListener('change', () => {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex.value)) { hex.value = currentAppearance[activeAppearancePart].color; return; }
+    color.value = hex.value; changeAppearance(activeAppearancePart, { color: hex.value });
+  });
+  const colorFields = document.createElement('span');
+  colorFields.className = 'appearance-color-fields';
+  colorFields.append(color, hex);
+  colorLabel.append(colorFields);
+  container.replaceChildren(assetLabel, colorLabel);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-appearance-category]').forEach(button => {
   button.addEventListener('click', () => {
     const part = button.dataset.appearanceCategory as AppearancePart | undefined;
-    if (!part || !(part in appearanceChoices)) return;
+    if (!part || !(part in APPEARANCE_ASSETS)) return;
     activeAppearancePart = part;
     document.querySelectorAll('[data-appearance-category]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
     renderAppearanceOptions();
@@ -171,7 +155,10 @@ document.querySelectorAll<HTMLButtonElement>('[data-appearance-category]').forEa
 });
 element<HTMLButtonElement>('randomize-appearance').addEventListener('click', () => {
   const random = <T extends readonly string[]>(values: T): T[number] => values[Math.floor(Math.random() * values.length)]!;
-  currentAppearance = appearanceSchema.parse(Object.fromEntries(Object.entries(appearanceChoices).map(([part, values]) => [part, random(values)])));
+  const rgb = () => `#${Math.floor(Math.random() * 0x1000000).toString(16).padStart(6, '0')}`;
+  currentAppearance = appearanceSchema.parse(Object.fromEntries(
+    Object.entries(APPEARANCE_ASSETS).map(([part, assets]) => [part, { assetId: random(assets), color: part === 'body' || part === 'face' ? '#ffffff' : rgb() }])));
+  renderAppearanceOptions();
   renderAppearancePreview();
 });
 element<HTMLButtonElement>('save-appearance').addEventListener('click', async event => {
@@ -181,20 +168,15 @@ element<HTMLButtonElement>('save-appearance').addEventListener('click', async ev
   try {
     await identityReady;
     const options = joinSchema.parse({ name: element<HTMLInputElement>('name').value,
-      avatar: element<HTMLSelectElement>('avatar').value, appearance: currentAppearance });
+      avatar: currentAvatar, appearance: currentAppearance });
     showIdentity(await saveProfile(options));
     joinFeedback.textContent = '造型已保存';
   } catch (error) {
     joinFeedback.textContent = `保存失败：${error instanceof Error ? error.message : String(error)}`;
   } finally { button.disabled = false; }
 });
-function updateAvatarPreview() {
-  const selected = avatarChoices.find(input => input.checked);
-  if (selected) element<HTMLSelectElement>('avatar').value = selected.value;
-  renderAppearancePreview();
-}
-avatarChoices.forEach(input => input.addEventListener('change', updateAvatarPreview));
-updateAvatarPreview();
+renderAppearanceOptions();
+renderAppearancePreview();
 const virtualDirections = new Set<string>();
 window.addEventListener('blur', () => virtualDirections.clear());
 document.addEventListener('visibilitychange', () => { if (document.hidden) virtualDirections.clear(); });
@@ -218,10 +200,10 @@ function readVirtualInput(): MovementInput {
 function showIdentity(value: Profile) {
   element('identity-status').textContent = `身份：${value.id} · ${value.role === 'admin' ? '管理员' : '成员'}`;
   element<HTMLInputElement>('name').value = value.name;
-  element<HTMLSelectElement>('avatar').value = value.avatar;
+  currentAvatar = value.avatar;
   currentAppearance = appearanceSchema.parse(value.appearance);
-  const choice = avatarChoices.find(input => input.value === value.avatar);
-  if (choice) { choice.checked = true; updateAvatarPreview(); }
+  renderAppearanceOptions();
+  renderAppearancePreview();
   element<HTMLButtonElement>('identity-export').disabled = false;
 }
 join.disabled = true;
@@ -284,7 +266,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
   try {
     await identityReady;
     const options = joinSchema.parse({ name: element<HTMLInputElement>('name').value,
-      avatar: element<HTMLSelectElement>('avatar').value, appearance: currentAppearance });
+      avatar: currentAvatar, appearance: currentAppearance });
     showIdentity(await saveProfile(options));
     element<HTMLButtonElement>('identity-import').disabled = true;
     const response = await fetch('/api/world', { signal: AbortSignal.timeout(12_000) });
