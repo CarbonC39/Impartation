@@ -6,7 +6,7 @@ A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a charac
 
 Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
-External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; pages can open in a new tab (`external`) or in a sandboxed iframe (`embed`). External services keep their own accounts and permissions. Formal sign-up and login, account recovery, and private rooms are not implemented yet.
+External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows the tool panel, and clicking Open launches a new tab (`external`) or mounts a sandboxed iframe (`embed`). External services keep their own accounts and permissions. Formal sign-up and login, account recovery, and private rooms are not implemented yet.
 
 ## Run locally
 
@@ -49,7 +49,7 @@ In production, set a random `IDENTITY_SECRET` of at least 32 characters, the pub
 
 Deploy SQLite with a single backend instance. The default database is `data/world.sqlite`; persist and back it up. HTTP Basic Auth, if needed, is provided by the deployer's proxy.
 
-Use `EXTERNAL_TOOLS` to map Tiled `resourceId` values to `{ url, mode?, fallback? }`. `url` is required; `mode` can be `embed` or `external` and defaults to `external`. `fallback: "external"` adds a manual open link beside an embedded page; iframe load failures are not detected. The project does not start Docker containers, so deploy and validate tool services separately. `GET /api/world` publishes the map directory; the server also provides normalized Tiled JSON and explicitly referenced map assets.
+Use `EXTERNAL_TOOLS` to map Tiled `resourceId` values to `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`. `url` is required; `mode` defaults to `external`. An embed opens only after a click and closes on zone exit. `manualExternalOpen: true` adds a separate manual link beside an open iframe; it does not detect load failures. `allowSameOrigin` defaults to false and should be enabled only for trusted self-hosted tools. Legacy `fallback: "external"` remains accepted as a manual-link alias. The project does not start Docker containers, so deploy and validate tool services separately. `GET /api/world` publishes the map directory; the server also provides normalized Tiled JSON and explicitly referenced map assets.
 
 ## Documentation
 

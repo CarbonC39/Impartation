@@ -202,7 +202,7 @@ Portal 保留同一房间、连接、身份和聊天。加入房间使用 initia
 | shared `interactionDefinitions` | `validate(zone)` | Tiled 语义解析时按 kind 调用 |
 | frontend `interactions/index.ts` | `InteractionHandler` | 组装 handlers；dispatcher 路由区域、连接和销毁事件 |
 | backend `interactions/index.ts` | 消息字典及生命周期钩子 | `SpaceRoom` 合成消息并调用 initialize/tick/dispose |
-| frontend `web/presentations.ts` | WebTool 展示实现 | WebTool handler 按 mode 展示、清理页面 |
+| frontend `web/presentations.ts` | WebTool 展示实现 | 用户点击打开后按 mode 展示；离开区域时清理页面 |
 
 客户端 [InteractionDispatcher](../apps/frontend/src/interactions/dispatcher.ts) 只认识 `setZone`、`setConnected`、`dispose`。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
 
@@ -214,12 +214,12 @@ board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/interact
 
 ### 5.2 embed / external
 
-所有外置工具区域使用 Tiled 类型 `web`，并以 `resourceId` 匹配 `EXTERNAL_TOOLS` 中的 `WebTool`。配置不声明 kind；具体服务由 URL 决定。`mode` 省略时默认为 `external`。
+所有外置工具区域使用 Tiled 类型 `web`，并以 `resourceId` 匹配 `EXTERNAL_TOOLS` 中的 `WebTool`。配置不声明 kind；具体服务由 URL 决定。进入区域只显示入口，点击打开才调用展示策略。`mode` 省略时默认为 `external`。
 
 | mode | 当前实现 | 配置要求 |
 | --- | --- | --- |
-| `embed` | 在宿主中创建 iframe，离开时移除 | 必须有 HTTP(S) URL |
-| `external` | 显示新标签页链接，使用 `noopener noreferrer` | 必须有 HTTP(S) URL |
+| `embed` | 点击后在宿主中创建 iframe，离开时移除 | 必须有 HTTP(S) URL |
+| `external` | 点击后在新标签页打开，使用 `noopener noreferrer` | 必须有 HTTP(S) URL |
 
 展示实现签名为 `(tool, host) => cleanup`。presentation registry 注册 embed 与 external 展示策略；外置配置只选择这两种方式。需要自定义展示时，创建并注入 registry：
 
@@ -231,9 +231,9 @@ const interactions = createInteractions(room, presentations);
 // renderEmbed / renderExternal 接收 WebTool 与宿主元素，并返回清理函数。
 ```
 
-`fallback: 'external'` 可选，仅对 embed 生效：iframe 旁显示手动打开链接，不检测加载失败，也不自动切换。external 需要 URL；embed 同样需要 URL。
+`manualExternalOpen: true` 仅对 embed 生效：已打开的 iframe 旁显示手动外链，不检测加载失败，也不自动切换。旧 `fallback: 'external'` 是兼容别名；显式的 `manualExternalOpen` 优先。展示策略缺失时直接报错，不自动改用 external。
 
-iframe sandbox 仅开放 `allow-scripts allow-forms allow-popups`，不开放 `allow-same-origin`，referrer policy 为 `no-referrer`。第三方 CSP、登录或浏览器能力要求可能使其无法嵌入，应选 external。项目不代理工具流量、不管理容器、不签发工具凭据或映射跨服务身份与权限。
+iframe sandbox 默认仅开放 `allow-scripts allow-forms allow-popups`，referrer policy 为 `no-referrer`。单项配置 `allowSameOrigin: true` 才增加 `allow-same-origin`，只供可信自托管工具使用。第三方 CSP、登录或浏览器能力要求可能使其无法嵌入，应选 external。项目不代理工具流量、不管理容器、不签发工具凭据或映射跨服务身份与权限，也没有 iframe bridge、postMessage API 或服务适配层。
 
 ### 5.3 增加交互时的修改顺序
 
@@ -278,7 +278,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | `GET /api/world` | 公开地图目录与所有权威地图语义 |
 | `GET /api/maps/:id/map.json` | 公开规范化 Tiled JSON；未知地图返回 404 |
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
-| `GET /api/tools` | 公开工具 resourceId、mode、URL 和 fallback；不能放凭据 |
+| `GET /api/tools` | 公开工具 resourceId、URL 和可选展示配置；不能放凭据 |
 | `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
 | `PATCH /api/me` | JSON 更新昵称/avatar/appearance，校验提供的 Origin，不接受 role 更新 |
 | `/api/auth/*` | 只开放匿名登录、session 查询、退出和绑定码生成/兑换的指定方法，其余返回 404 |
@@ -300,7 +300,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | 地图语义 / 移动 | `world.test.ts`；单位、偏移、碰撞边界、未知 kind 与无关 Tiled 元数据 |
 | 地图加载 / Portal | `portal.test.ts` 和浏览器地图切换用例；目标验证、资源 API、身份与房间保留 |
 | interaction handler | `space.test.ts` / `db.test.ts`；身份、权限、位置、限流和持久化范围 |
-| presentation / 清理 | `architecture.test.ts` / `web-tools.test.ts` / 浏览器用例；策略选择、embed 的手动 fallback 和离开清理 |
+| presentation / 清理 | `architecture.test.ts` / `web-tools.test.ts` / 浏览器用例；显式打开、策略选择、手动外链和离开清理 |
 
 `npm run check` 执行类型检查、Node 测试和构建；`npm run test:e2e` 使用独立开发服务、内存数据库和临时多地图 fixture。测试世界不向默认示例地图添加测试 Portal。第三方页面用替身验证展示契约，不验证真实编辑、绘画或同步播放。浏览器测试当前只覆盖 Chromium，触屏移动、其它浏览器和弱网络压力仍需额外验证；仓库尚无 CI 配置。
 

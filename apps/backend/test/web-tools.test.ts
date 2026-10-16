@@ -48,9 +48,9 @@ for (const url of ['javascript:alert(1)', 'data:text/html,hello', 'file:///tmp/t
   });
 }
 
-test('web presentation accepts only embed and external, with required URL and optional external fallback', () => {
+test('web presentation accepts embed and external with optional manual link and trusted origin settings', () => {
   for (const mode of ['external', 'embed']) {
-    const entry = { mode, url: 'https://board.example/', fallback: 'external' };
+    const entry = { mode, url: 'https://board.example/', manualExternalOpen: true, allowSameOrigin: true };
     assert.deepEqual(loadWebTools(JSON.stringify({ 'shared-canvas': entry }), [world]), [{ resourceId: 'shared-canvas', ...entry }]);
   }
   for (const entry of [

@@ -67,7 +67,7 @@ test('web presentation dispatch selects embed or external by resource configurat
     'external:another-resource', 'cleanup:external']);
   const fallback = new PresentationRegistry().register('external', () => () => {});
   assert.throws(() => fallback.open({ ...base, mode: 'embed' }, host));
-  fallback.open({ ...base, mode: 'embed', fallback: 'external' }, host)();
+  assert.throws(() => fallback.open({ ...base, mode: 'embed', fallback: 'external' }, host));
 });
 
 test('server interactions compose new kinds and reject ambiguous message names', async () => {

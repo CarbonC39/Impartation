@@ -29,16 +29,16 @@
 
 ## 外置接入
 
-| 功能 | 地图类型 | 默认 resourceId |
-| --- | --- | --- |
-| 白板 | `web` | `shared-canvas` |
-| 共同作画 | `web` | `shared-drawing` |
-| YouTube/Bilibili 同步观看 | `web` | `lounge-screen` |
-| 协作文档 | `web` | `shared-document` |
+| 功能 | 预期服务 | 地图类型 | 默认 resourceId |
+| --- | --- | --- | --- |
+| 白板 | WBO | `web` | `shared-canvas` |
+| 面向绘师的共同作画 | Drawpile 的浏览器入口 | `web` | `shared-drawing` |
+| YouTube/Bilibili 同步观看 | SyncTV | `web` | `lounge-screen` |
+| 协作文档 | Etherpad | `web` | `shared-document` |
 
-优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再在地图中为外置入口使用 `web` 类型，并通过 `EXTERNAL_TOOLS` 以 `resourceId` 配置 URL；配置格式和公开 API 见[入口配置](integration-plan.md)。配置形状为 `{ url, mode?, fallback? }`，URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。embed 可设置 `fallback: "external"`，在 iframe 旁显示手动打开链接；不检测加载失败或自动切换。board 和 pomodoro 是项目内置交互，有独立面板 handler。
+优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再在地图中为外置入口使用 `web` 类型，并通过 `EXTERNAL_TOOLS` 以 `resourceId` 配置 URL；配置格式和公开 API 见[入口配置](integration-plan.md)。进入区域只显示工具面板，点击“打开”后才按 `mode` 打开新标签页或挂载 iframe。配置可选 `manualExternalOpen`，在已打开的 embed 旁显示手动外链；旧 `fallback: "external"` 是兼容别名，没有加载失败检测或自动切换。`allowSameOrigin` 默认 false，仅供可信自托管页面按需启用。board 和 pomodoro 是项目内置交互，有独立面板 handler。
 
-项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 使用带 `allow-scripts allow-forms allow-popups` 且不含 `allow-same-origin` 的沙盒 iframe，但不改变第三方服务的授权边界；项目身份和管理员角色不映射到外置服务。离开区域、项目 session 失效或角色变化都不撤销工具自己的会话。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
+项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 默认使用 `allow-scripts allow-forms allow-popups` 且不含 `allow-same-origin` 的沙盒 iframe；配置 `allowSameOrigin: true` 才增加该权限。离开区域会移除 iframe，但不会撤销工具自己的会话；项目身份和管理员角色不映射到外置服务。没有 iframe bridge、postMessage API 或服务适配层。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
 
 白板与面向绘师的共同作画是独立功能；视频通话和屏幕共享不在范围内。
 

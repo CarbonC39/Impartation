@@ -6,7 +6,7 @@
 
 Tiled JSON 是地图几何与交互的源数据；服务端地图 registry 可登记多张 16×16 tile 的有限正交地图，Portal 在同一房间中切换地图与命名出生点。
 
-地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。页面可用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。正式注册/登录、账号恢复和私密房间尚未实现。
+地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。进入区域只显示工具面板；点击“打开”后才用 `external` 新标签页或 `embed` 沙盒 iframe 展示；外置服务保留自己的账号和权限。正式注册/登录、账号恢复和私密房间尚未实现。
 
 ## 本地运行
 
@@ -49,7 +49,7 @@ npm run dev
 
 SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，需持久化并备份。HTTP Basic Auth 由部署者的代理提供。
 
-用 `EXTERNAL_TOOLS` 将地图 `resourceId` 关联到 `{ url, mode?, fallback? }`。URL 必填；`mode` 可为 `embed` 或 `external`，默认 `external`。`fallback: "external"` 会在嵌入容器旁提供手动打开链接，不会检测 iframe 加载失败。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
+用 `EXTERNAL_TOOLS` 将地图 `resourceId` 关联到 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`。URL 必填，mode 默认 `external`。embed 在点击后挂载，离开区域时移除；`manualExternalOpen: true` 在已打开的 iframe 旁提供手动外链，不检测加载失败。`allowSameOrigin` 默认 false，仅供可信自托管工具启用；旧 `fallback: "external"` 仍作为手动外链别名接受。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
 
 ## 文档
 

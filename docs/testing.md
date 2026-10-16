@@ -31,13 +31,13 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长；动作点朝向/偏移、同格动作匹配、非法动作锚点和方向输入朝向 | [world.test.ts](../apps/backend/test/world.test.ts) |
 | 角色帧选择 | 角色图集尺寸与方向帧索引有效性、走路帧选择、idle/动作姿态回退 | [character.test.ts](../apps/backend/test/character.test.ts) |
-| WebTool 配置 | 跨地图资源一致性、embed/external mode、embed 的手动 external fallback、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
+| WebTool 配置 | 跨地图资源一致性、embed/external mode、手动外链与同源选项、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
 | 交互架构 | 通用前后端分发、handler 清理、消息冲突、展示策略与 shared 协议一致性 | [architecture.test.ts](../apps/backend/test/architecture.test.ts) |
 | 多地图服务 | registry/API、多图层和外置 TSJ 资源、权威 Portal 转换、目标地图碰撞和身份保留；同名对象按地图隔离 | [portal.test.ts](../apps/backend/test/portal.test.ts) |
 | SQLite | v1-v3 迁移、旧留言保留、持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
 | 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
 | HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消 | [space.test.ts](../apps/backend/test/space.test.ts) |
-| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作按钮、动画选项及移动取消动作；多地图 Portal 与多图层/tileset；embed、embed 的手动 external fallback、external 和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作按钮、动画选项及移动取消动作；多地图 Portal 与多图层/tileset；显式打开 embed/external、手动外链和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 
@@ -53,4 +53,4 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 ## 未覆盖项
 
-真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。测试验证 iframe 容器和 external 链接行为，不验证第三方站点允许嵌入或真实服务功能。
+真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。测试验证 iframe 容器和 external 打开行为，不验证第三方站点允许嵌入或真实服务功能。

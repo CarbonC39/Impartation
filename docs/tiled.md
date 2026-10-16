@@ -81,7 +81,7 @@ Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 
 内置留言板与番茄钟分别注册为 `board`、`pomodoro`，按 `resourceId` 归属数据。所有地图外置页面入口统一使用类型 `web`，并按 `resourceId` 关联配置；多个区域可引用相同资源。`name` 标识区域本身。
 
-`EXTERNAL_TOOLS` 以 resourceId 为键配置 `{ url, mode?, fallback? }`，其中 URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。embed 在沙盒 iframe 容器内呈现配置页面；external 打开配置的原生页面。`fallback: "external"` 仅在 embed 旁增加手动打开链接，不检测 iframe 加载失败，也不自动切换。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
+`EXTERNAL_TOOLS` 以 resourceId 为键配置 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`，其中 URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。进入区域只显示入口；用户点击打开后才挂载 embed iframe 或打开 external 新标签页。`manualExternalOpen: true` 仅在已打开的 embed 旁增加手动外链；旧 `fallback: "external"` 是兼容别名，两者均不检测加载失败或自动切换。`allowSameOrigin` 默认 false，仅对可信自托管的 embed 开放。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
 
 公共 WebTool 配置会通过 `GET /api/tools` 暴露给浏览器，不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
 

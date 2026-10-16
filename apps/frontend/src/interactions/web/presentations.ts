@@ -12,33 +12,34 @@ export class PresentationRegistry {
     const mode = tool.mode ?? 'external';
     const strategy = this.strategies.get(mode);
     if (strategy) return strategy(tool, host);
-    if (tool.fallback === 'external') return this.open({ ...tool, mode: 'external', fallback: undefined }, host);
     throw new Error('此展示方式尚未注册');
   }
 }
 
-const external: Presentation = (tool, host) => {
+const external: Presentation = tool => {
   if (!tool.url) throw new Error('Missing external URL');
-  const link = document.createElement('a');
-  link.textContent = '打开工具'; link.href = tool.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-  host.append(link);
-  return () => link.remove();
+  window.open(tool.url, '_blank', 'noopener,noreferrer');
+  return () => {};
 };
 const embed: Presentation = (tool, host) => {
   if (!tool.url) throw new Error('Missing embed URL');
   const frame = document.createElement('iframe');
   frame.title = tool.resourceId; frame.src = tool.url;
-  frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+  frame.setAttribute('sandbox', `allow-scripts allow-forms allow-popups${tool.allowSameOrigin ? ' allow-same-origin' : ''}`);
   frame.referrerPolicy = 'no-referrer'; frame.style.width = '100%'; frame.style.height = '400px';
   host.append(frame);
-  const fallback = tool.fallback === 'external' ? external(tool, host) : undefined;
-  return () => { frame.remove(); fallback?.(); };
+  const manualExternalOpen = tool.manualExternalOpen ?? (tool.fallback === 'external');
+  let manualLink: HTMLAnchorElement | undefined;
+  if (manualExternalOpen) {
+    manualLink = document.createElement('a');
+    manualLink.textContent = '手动在新标签页打开';
+    manualLink.href = tool.url;
+    manualLink.target = '_blank';
+    manualLink.rel = 'noopener noreferrer';
+    host.append(manualLink);
+  }
+  return () => { frame.remove(); manualLink?.remove(); };
 };
-export function createPresentations(existingLink?: HTMLAnchorElement) {
-  const externalStrategy: Presentation = existingLink ? (tool, _host) => {
-    if (!tool.url) throw new Error('Missing external URL');
-    existingLink.href = tool.url; existingLink.hidden = false;
-    return () => { existingLink.hidden = true; existingLink.removeAttribute('href'); };
-  } : external;
-  return new PresentationRegistry().register('external', externalStrategy).register('embed', embed);
+export function createPresentations() {
+  return new PresentationRegistry().register('external', external).register('embed', embed);
 }

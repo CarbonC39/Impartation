@@ -633,13 +633,15 @@ test('binding a second browser restores the same identity, profile and note perm
 
 test('embed presentation uses a sandboxed container and clears it when leaving', async ({ page, context }) => {
   const target = toolCases[1];
-  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', fallback: 'external' }] }));
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed' }] }));
   await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Embedded tool fixture</p>' }));
   await enter(page, 'E2EPresentation');
   const observer = await observe();
   try {
     await walkToTool(page, observer, target);
     const frame = page.locator('#tool-panel iframe');
+    await expect(frame).toHaveCount(0);
+    await page.locator('#tool-open').click();
     await expect(frame).toBeVisible();
     await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
     await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
@@ -650,14 +652,16 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
 });
 
 
-test('embed presentation provides an explicit external fallback and clears both on zone exit', async ({ page, context }) => {
-  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', fallback: 'external' }] }));
+test('embed presentation provides a manual external link and clears both on zone exit', async ({ page, context }) => {
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed', manualExternalOpen: true }] }));
   await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Web tool fallback fixture</p>' }));
   await enter(page, 'E2EWebFallback');
   const observer = await observe();
   try {
     await walkToTool(page, observer, toolCases[1]);
-    const fallback = page.locator('#tool-panel').getByRole('link', { name: '打开工具', exact: true });
+    await expect(page.locator('#tool-panel iframe')).toHaveCount(0);
+    await page.locator('#tool-open').click();
+    const fallback = page.locator('#tool-panel').getByRole('link', { name: '手动在新标签页打开', exact: true });
     await expect(fallback).toHaveAttribute('href', toolDirectory[1].url);
     await expect(page.locator('#tool-panel iframe')).toBeVisible();
     const openedPage = page.waitForEvent('popup');

@@ -92,6 +92,9 @@ export type PresentationMode = z.infer<typeof presentationModeSchema>;
 export const webToolConfigSchema = z.object({
   mode: presentationModeSchema.optional(),
   url: webToolUrlSchema,
+  allowSameOrigin: z.boolean().optional(),
+  manualExternalOpen: z.boolean().optional(),
+  // Legacy alias for manualExternalOpen; this never detects iframe failure.
   fallback: z.literal('external').optional(),
 }).strict();
 export const webToolsConfigSchema = z.record(resourceIdSchema, webToolConfigSchema);
