@@ -1,13 +1,14 @@
 import { webToolsSchema, type WebTool, type Zone } from '@virtual-workspace/shared';
 import { zoneLabels } from '../labels';
+import { element } from '../panel';
 import { createPresentations, type PresentationRegistry } from './presentations';
 
+/** Entering a web zone shows a small hint above it; only a click opens the tool. */
 export class WebToolInteraction {
-  private panel = document.getElementById('tool-panel')!;
-  private heading = document.getElementById('tool-heading')!;
-  private status = document.getElementById('tool-status')!;
-  private link = document.getElementById('tool-open') as HTMLAnchorElement;
-  private presentationHost = document.createElement('div');
+  private hint = element('tool-hint');
+  private status = element('tool-status');
+  private link = element<HTMLAnchorElement>('tool-open');
+  private window = new TvWindow();
   private cleanupPresentation?: () => void;
   private controller = new AbortController();
   private current?: Zone;
@@ -16,15 +17,18 @@ export class WebToolInteraction {
   private state: 'loading' | 'ready' | 'failed' = 'loading';
   private readonly openTool = (event: MouseEvent) => {
     event.preventDefault();
+    this.link.blur(); // Return keyboard movement to the map.
     const zone = this.current;
     if (!this.connected || this.state !== 'ready' || zone?.kind !== 'web') return;
     const tool = this.tools.find(item => item.resourceId === zone.resourceId);
     if (!tool || ((tool.mode ?? 'external') === 'embed' && this.cleanupPresentation)) return;
     this.closePresentation();
     try {
-      this.cleanupPresentation = this.presentations.open(tool, this.presentationHost);
+      if ((tool.mode ?? 'external') === 'embed') this.window.open(zoneLabels[zone.kind] ?? zone.kind, () => this.close());
+      this.cleanupPresentation = this.presentations.open(tool, this.window.screen, this.window.links);
       this.render();
     } catch (error) {
+      this.window.close();
       this.status.textContent = error instanceof Error ? error.message : '展示方式不可用';
     }
   };
@@ -33,7 +37,7 @@ export class WebToolInteraction {
   constructor(presentations?: PresentationRegistry) {
     this.presentations = presentations ?? createPresentations();
     this.link.addEventListener('click', this.openTool);
-    this.panel.append(this.presentationHost); void this.load();
+    void this.load();
   }
 
   setZone(zone: Zone | undefined) {
@@ -53,15 +57,20 @@ export class WebToolInteraction {
     this.controller.abort();
     this.link.removeEventListener('click', this.openTool);
     this.closePresentation();
+    this.window.dispose();
     this.current = undefined;
     this.render();
-    this.presentationHost.remove();
+  }
+
+  private close() {
+    this.closePresentation();
+    this.render();
   }
 
   private closePresentation() {
     this.cleanupPresentation?.();
     this.cleanupPresentation = undefined;
-    this.presentationHost.replaceChildren();
+    this.window.close();
   }
 
   private async load() {
@@ -79,21 +88,87 @@ export class WebToolInteraction {
   private render() {
     this.link.hidden = true;
     this.link.removeAttribute('href');
+    this.status.textContent = '';
     const zone = this.current;
-    this.panel.hidden = !this.connected || !zone || zone.kind !== 'web';
-    if (this.panel.hidden || !zone) return;
-    this.heading.textContent = zoneLabels[zone.kind] ?? zone.kind;
+    this.hint.hidden = !this.connected || !zone || zone.kind !== 'web';
+    if (this.hint.hidden || !zone) return;
     if (this.state === 'loading') { this.status.textContent = '正在加载工具入口…'; return; }
-    if (this.state === 'failed') { this.status.textContent = '工具入口加载失败，请重新进入空间重试。'; return; }
+    if (this.state === 'failed') { this.status.textContent = '工具入口加载失败，请重新进入空间重试'; return; }
     const tool = this.tools.find(item => item.resourceId === zone.resourceId);
-    if (!tool) { this.status.textContent = '此区域尚未配置工具地址。'; return; }
+    if (!tool) { this.status.textContent = '此区域尚未配置工具地址'; return; }
     const mode = tool.mode ?? 'external';
-    this.status.textContent = mode === 'external' ?
-      '点击打开后将在新标签页启动；身份和权限由工具管理。' :
-      this.cleanupPresentation ? '嵌入页面已打开；离开区域时关闭。身份和权限由工具管理。' :
-        '点击打开后将在此处嵌入页面；身份和权限由工具管理。';
-    this.link.textContent = `打开${zoneLabels[zone.kind] ?? zone.kind}`;
+    const label = zoneLabels[zone.kind] ?? zone.kind;
+    this.link.textContent = mode === 'external' ? `打开${label} ↗` : `打开${label}`;
+    this.link.title = mode === 'external' ? '在新标签页打开；身份和权限由工具管理' : '在窗口中打开；离开区域时关闭。身份和权限由工具管理';
     this.link.href = tool.url;
     this.link.hidden = mode === 'embed' && !!this.cleanupPresentation;
+  }
+}
+
+/** Centered, draggable TV-style frame that hosts embedded tools. */
+class TvWindow {
+  private root = element('tool-window');
+  private heading = element('tool-heading');
+  private bar = element('tool-drag');
+  private closeButton = element<HTMLButtonElement>('tool-close');
+  readonly screen = element('tool-screen');
+  readonly links = element('tool-links');
+  private offset = { x: 0, y: 0 };
+  private drag?: { pointerId: number; x: number; y: number; originX: number; originY: number };
+  private onClose?: () => void;
+  private controller = new AbortController();
+
+  constructor() {
+    const options = { signal: this.controller.signal };
+    this.closeButton.addEventListener('click', () => this.onClose?.(), options);
+    this.root.addEventListener('keydown', event => { if (event.key === 'Escape') this.onClose?.(); }, options);
+    this.bar.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || (event.target as HTMLElement).closest('button, a')) return;
+      event.preventDefault();
+      this.drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, originX: this.offset.x, originY: this.offset.y };
+      this.bar.setPointerCapture(event.pointerId);
+      this.root.classList.add('dragging');
+    }, options);
+    this.bar.addEventListener('pointermove', event => {
+      if (this.drag?.pointerId !== event.pointerId) return;
+      this.move(this.drag.originX + event.clientX - this.drag.x, this.drag.originY + event.clientY - this.drag.y);
+    }, options);
+    const end = (event: PointerEvent) => {
+      if (this.drag?.pointerId !== event.pointerId) return;
+      this.drag = undefined;
+      this.root.classList.remove('dragging');
+    };
+    this.bar.addEventListener('pointerup', end, options);
+    this.bar.addEventListener('pointercancel', end, options);
+    window.addEventListener('resize', () => { if (!this.root.hidden) this.move(this.offset.x, this.offset.y); }, options);
+  }
+
+  open(title: string, onClose: () => void) {
+    this.heading.textContent = title;
+    this.onClose = onClose;
+    this.root.hidden = false;
+    this.move(0, 0);
+  }
+
+  close() {
+    this.onClose = undefined;
+    this.drag = undefined;
+    this.root.classList.remove('dragging');
+    this.root.hidden = true;
+    this.screen.replaceChildren();
+    this.links.replaceChildren();
+  }
+
+  dispose() { this.close(); this.controller.abort(); }
+
+  /** Offsets are relative to the centered position; keep the title bar reachable. */
+  private move(x: number, y: number) {
+    const rect = this.root.getBoundingClientRect();
+    const maxX = Math.max(0, (window.innerWidth + rect.width) / 2 - 80);
+    const maxY = Math.max(0, (window.innerHeight - rect.height) / 2 + rect.height - 40);
+    const minY = (rect.height - window.innerHeight) / 2;
+    this.offset = { x: Math.min(maxX, Math.max(-maxX, x)), y: Math.min(maxY, Math.max(minY, y)) };
+    this.root.style.setProperty('--drag-x', `${this.offset.x}px`);
+    this.root.style.setProperty('--drag-y', `${this.offset.y}px`);
   }
 }

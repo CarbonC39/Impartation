@@ -29,7 +29,7 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 
 ### 角色动作锚点
 
-在 `interactions` 对象层放置命名 point object，`class` 设为 `action`，并用 string property `action` 指定动作名称。对象 `name` 是当前地图内唯一的 authored ID；动作锚点没有 `resourceId`。
+在 `interactions` 对象层放置命名 point object，`class` 设为 `action`，并用 string property `action` 指定动作名称。地图可以声明任意合法名称，但只有 shared `CHARACTER_ACTIONS` 目录中的动作（目前为 `sit`）可被玩家触发；新增动作需同时加入目录和角色图集的动作行。对象 `name` 是当前地图内唯一的 authored ID；动作锚点没有 `resourceId`。
 
 可选 string property `facing` 覆盖角色朝向（`up`、`down`、`left` 或 `right`）；省略时保留当前朝向。`offsetX`、`offsetY` 是以世界像素计的有限数值偏移，默认均为 0。可选 `linkedObjectId` 为地图对象保留关联 ID，供后续对象变体扩展使用。
 
@@ -81,7 +81,7 @@ Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 
 内置留言板与番茄钟分别注册为 `board`、`pomodoro`，按 `resourceId` 归属数据。所有地图外置页面入口统一使用类型 `web`，并按 `resourceId` 关联配置；多个区域可引用相同资源。`name` 标识区域本身。
 
-`EXTERNAL_TOOLS` 以 resourceId 为键配置 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`，其中 URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。进入区域只显示入口；用户点击打开后才挂载 embed iframe 或打开 external 新标签页。`manualExternalOpen: true` 仅在已打开的 embed 旁增加手动外链；旧 `fallback: "external"` 是兼容别名，两者均不检测加载失败或自动切换。`allowSameOrigin` 默认 false，仅对可信自托管的 embed 开放。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
+`EXTERNAL_TOOLS` 以 resourceId 为键配置 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`，其中 URL 必填，mode 可为 `embed` 或 `external`，默认 `external`。进入区域只在区域上方显示入口提示；用户点击后才在居中、可拖动的电视框窗口中挂载 embed iframe，或打开 external 新标签页。`manualExternalOpen: true` 仅在已打开的 embed 旁增加手动外链；旧 `fallback: "external"` 是兼容别名，两者均不检测加载失败或自动切换。`allowSameOrigin` 默认 false，仅对可信自托管的 embed 开放。展示模式不改变服务器端身份、位置或权限校验，也不映射项目身份。
 
 公共 WebTool 配置会通过 `GET /api/tools` 暴露给浏览器，不得含凭据。见[内置与外置接入](integrations.md)和[入口配置](integration-plan.md)。
 

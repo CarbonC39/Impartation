@@ -33,7 +33,8 @@ export const inputSchema = z.object({
 export const chatSchema = z.object({ text: z.string().trim().min(1).max(500) });
 export type MovementInput = z.infer<typeof inputSchema>;
 export type JoinOptions = z.infer<typeof joinSchema>;
-export type ChatMessage = { id: string; name: string; text: string; sentAt: number };
+/** `sessionId` is set by the server from the sending connection. */
+export type ChatMessage = { id: string; sessionId: string; name: string; text: string; sentAt: number };
 
 const resourceIdSchema = z.string().trim().min(1).max(128);
 export const boardPostSchema = z.object({ resourceId: resourceIdSchema, text: chatSchema.shape.text });

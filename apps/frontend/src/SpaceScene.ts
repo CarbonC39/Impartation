@@ -7,6 +7,17 @@ import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
 
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[];
   label: Phaser.GameObjects.Text; animation: string; elapsed: number };
+type ChatBubble = { text: string; expiresAt: number; view?: Phaser.GameObjects.Text };
+export type ScreenPoint = { x: number; y: number };
+export type SceneHooks = {
+  zoneChanged(id: string): void;
+  /** Screen position (canvas pixels) of the top edge of the player's current zone. */
+  zoneAnchor(point: ScreenPoint | undefined): void;
+  activate(): void;
+  virtualInput(): MovementInput;
+};
+const BUBBLE_MS = 5000;
+const BUBBLE_CHARS = 60;
 
 export class SpaceScene extends Phaser.Scene {
   private sprites = new Map<string, PlayerVisual>();
@@ -14,12 +25,19 @@ export class SpaceScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private inputElapsed = 0;
   private lastInput = '';
+  private bubbles = new Map<string, ChatBubble>();
+  private lastAnchor = '';
 
   constructor(private room: Room<SpaceProtocol>, private mapEntry: RegisteredMap,
-    private renderMap: { tilesets: { name: string; image?: string }[] }, private zoneChanged: (id: string) => void,
-    private activate: () => void,
-    private virtualInput: () => MovementInput = () => ({ x: 0, y: 0 })) {
+    private renderMap: { tilesets: { name: string; image?: string }[] }, private hooks: SceneHooks) {
     super('space');
+  }
+  /** Show a short-lived speech bubble; plain text only, so markup is never interpreted. */
+  showBubble(sessionId: string, text: string) {
+    this.bubbles.get(sessionId)?.view?.destroy();
+    const chars = [...text.replace(/\s+/g, ' ')];
+    const clipped = chars.length > BUBBLE_CHARS ? `${chars.slice(0, BUBBLE_CHARS).join('')}…` : chars.join('');
+    this.bubbles.set(sessionId, { text: clipped, expiresAt: performance.now() + BUBBLE_MS });
   }
   preload() {
     this.cache.tilemap.add('world', { format: Phaser.Tilemaps.Formats.TILED_JSON, data: this.renderMap });
@@ -68,6 +86,7 @@ export class SpaceScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', visibility);
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
+      this.hooks.zoneAnchor(undefined);
       canvas.removeEventListener('pointerdown', focusCanvas);
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', visibility);
@@ -115,24 +134,33 @@ export class SpaceScene extends Phaser.Scene {
       const name = action === 'sit' ? `${player.name} · 坐` : player.name;
       if (sprite.label.text !== name) sprite.label.setText(name);
       sprite.label.setPosition(sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 4).setDepth(this.mapEntry.world.height + 1);
+      this.updateBubble(id, sprite.label);
+    }
+    const now = performance.now();
+    for (const [id, bubble] of this.bubbles) {
+      const visible = players.get(id)?.mapId === this.mapEntry.id;
+      if (bubble.expiresAt <= now || !visible) { bubble.view?.destroy(); this.bubbles.delete(id); }
     }
     for (const [id, sprite] of this.sprites) {
       if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) {
         for (const layer of sprite.layers) layer.destroy();
         sprite.label.destroy(); this.sprites.delete(id);
+        this.bubbles.get(id)?.view?.destroy(); this.bubbles.delete(id);
       }
     }
     const ownPlayer = players.get(this.room.sessionId);
-    this.zoneChanged(ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.zoneId : '');
+    const zoneId = ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.zoneId : '';
+    this.hooks.zoneChanged(zoneId);
+    this.updateZoneAnchor(zoneId);
     const activatePressed = Phaser.Input.Keyboard.JustDown(this.keys.E);
     // Never queue movement during automatic reconnection.
     if (!ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) { this.lastInput = ''; return; }
     const typing = document.activeElement instanceof HTMLElement &&
       ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) &&
       !(document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'checkbox');
-    const touchInput = document.hidden ? { x: 0, y: 0 } : this.virtualInput();
+    const touchInput = document.hidden ? { x: 0, y: 0 } : this.hooks.virtualInput();
     const active = !document.hidden && ((document.hasFocus() && !typing) || touchInput.x !== 0 || touchInput.y !== 0);
-    if (active && !typing && activatePressed) this.activate();
+    if (active && !typing && activatePressed) this.hooks.activate();
     const input: MovementInput = active ? {
       x: Phaser.Math.Clamp(Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown) + touchInput.x, -1, 1),
       y: Phaser.Math.Clamp(Number(this.keys.S.isDown || this.keys.DOWN.isDown) - Number(this.keys.W.isDown || this.keys.UP.isDown) + touchInput.y, -1, 1),
@@ -144,5 +172,26 @@ export class SpaceScene extends Phaser.Scene {
       this.lastInput = serialized;
       this.inputElapsed = 0;
     }
+  }
+  private updateBubble(id: string, label: Phaser.GameObjects.Text) {
+    const bubble = this.bubbles.get(id);
+    if (!bubble) return;
+    bubble.view ??= this.add.text(0, 0, bubble.text, {
+      fontSize: '12px', color: '#25384c', backgroundColor: '#fffdf4e6', padding: { x: 6, y: 3 },
+      align: 'center', wordWrap: { width: 180, useAdvancedWrap: true },
+    }).setOrigin(0.5, 1).setScale(1 / this.cameras.main.zoom);
+    bubble.view.setPosition(label.x, label.y - label.displayHeight - 2).setDepth(this.mapEntry.world.height + 2);
+  }
+  private updateZoneAnchor(zoneId: string) {
+    const zone = zoneId ? this.mapEntry.world.zones.find(item => item.id === zoneId) : undefined;
+    const camera = this.cameras.main;
+    const point = zone && {
+      x: Math.round(Phaser.Math.Clamp((zone.x + zone.width / 2 - camera.worldView.x) * camera.zoom, 0, camera.width)),
+      y: Math.round(Phaser.Math.Clamp((zone.y - camera.worldView.y) * camera.zoom, 0, camera.height)),
+    };
+    const key = point ? `${point.x},${point.y}` : '';
+    if (key === this.lastAnchor) return;
+    this.lastAnchor = key;
+    this.hooks.zoneAnchor(point);
   }
 }

@@ -1,42 +1,80 @@
 import type { Room } from '@colyseus/sdk';
-import { activateActionSchema, type ActivateActionInput, type InteractionResult, type SpaceProtocol } from '@virtual-workspace/shared';
+import { activateActionSchema, CHARACTER_ACTIONS, CHARACTER_ACTION_NAMES, isCharacterAction, standsOnAction,
+  type ActivateActionInput, type CharacterActionName, type InteractionResult, type SpaceProtocol, type WorldMap } from '@virtual-workspace/shared';
 import { element } from './panel';
 
-/** Character abilities work in place; the server supplies any matching map context. */
+/**
+ * Character abilities from the shared catalog. The server resolves anchors and validates the request;
+ * the client only uses the map to pick which action E triggers and to label it.
+ */
 export class CharacterActions {
   private pending = false;
   private disposed = false;
+  private selected: CharacterActionName = CHARACTER_ACTION_NAMES[0];
+  private buttons = new Map<CharacterActionName, HTMLButtonElement>();
   private readonly renderState = () => this.refresh();
-  private readonly click = () => {
-    this.button.blur(); // Return keyboard movement to the map after mouse/touch activation.
-    void this.activate();
+  private readonly click = (event: MouseEvent) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
+    const action = button?.dataset.action;
+    if (!button || !action || !isCharacterAction(action)) return;
+    button.blur(); // Return keyboard movement to the map after mouse/touch activation.
+    this.selected = action;
+    void this.activateAction({ action, animated: this.animatedFor(action) });
   };
 
   constructor(
     private readonly room: Room<SpaceProtocol>,
-    private readonly button: HTMLButtonElement,
+    private readonly world: () => WorldMap | undefined,
+    private readonly list: HTMLElement,
     private readonly animated: HTMLInputElement,
     private readonly feedback: HTMLElement,
   ) {
+    for (const action of CHARACTER_ACTION_NAMES) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary';
+      button.dataset.action = action;
+      button.setAttribute('aria-label', CHARACTER_ACTIONS[action].label);
+      this.buttons.set(action, button);
+    }
+    this.list.replaceChildren(...this.buttons.values());
     this.room.onStateChange(this.renderState);
-    this.button.addEventListener('click', this.click);
+    this.list.addEventListener('click', this.click);
     this.animated.addEventListener('change', this.renderState);
     this.refresh();
+  }
+
+  /** E prefers the action of the anchor under the character's feet, then the last chosen action. */
+  private keyAction(): CharacterActionName {
+    const player = this.room.state?.players.get(this.room.sessionId);
+    const anchor = player && this.world()?.actions.find(object => isCharacterAction(object.action) && standsOnAction(object, player));
+    return anchor && isCharacterAction(anchor.action) ? anchor.action : this.selected;
+  }
+
+  private animatedFor(action: CharacterActionName) {
+    return CHARACTER_ACTIONS[action].animated && this.animated.checked;
   }
 
   refresh() {
     const player = this.room.state?.players.get(this.room.sessionId);
     const connected = Boolean(player?.connected && this.room.connection.isOpen);
-    const sameAction = player?.action === 'sit' && player.actionAnimated === this.animated.checked;
-
-    this.button.disabled = this.disposed || this.pending || !connected || sameAction;
-    this.animated.disabled = this.disposed || this.pending || !connected;
-    this.button.textContent = player?.action === 'sit' ? '已坐下' : '坐下';
-    this.button.setAttribute('aria-label', '坐下');
+    const keyAction = this.keyAction();
+    for (const [action, button] of this.buttons) {
+      const definition = CHARACTER_ACTIONS[action];
+      const active = player?.action === action;
+      const same = active && player.actionAnimated === this.animatedFor(action);
+      button.disabled = this.disposed || this.pending || !connected || same;
+      button.textContent = active ? definition.activeLabel : definition.label;
+      button.setAttribute('aria-pressed', String(active));
+      if (action === keyAction) button.dataset.key = 'E';
+      else delete button.dataset.key;
+    }
+    this.animated.disabled = this.disposed || this.pending || !connected || !CHARACTER_ACTIONS[keyAction].animated;
   }
 
   async activate() {
-    return this.activateAction({ action: 'sit', animated: this.animated.checked });
+    const action = this.keyAction();
+    return this.activateAction({ action, animated: this.animatedFor(action) });
   }
 
   async activateAction(input: ActivateActionInput): Promise<InteractionResult> {
@@ -68,18 +106,18 @@ export class CharacterActions {
     if (this.disposed) return;
     this.disposed = true;
     this.room.onStateChange.remove(this.renderState);
-    this.button.removeEventListener('click', this.click);
+    this.list.removeEventListener('click', this.click);
     this.animated.removeEventListener('change', this.renderState);
-    this.button.disabled = true;
-    this.button.textContent = '坐下';
+    for (const button of this.buttons.values()) button.disabled = true;
     this.animated.disabled = true;
   }
 }
 
-export function createCharacterActions(room: Room<SpaceProtocol>) {
+export function createCharacterActions(room: Room<SpaceProtocol>, world: () => WorldMap | undefined) {
   return new CharacterActions(
     room,
-    element<HTMLButtonElement>('activate-object'),
+    world,
+    element('action-list'),
     element<HTMLInputElement>('action-animated'),
     element('object-feedback'),
   );

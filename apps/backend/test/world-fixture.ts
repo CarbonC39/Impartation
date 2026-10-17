@@ -9,9 +9,9 @@ export function createRoomWorldFixture() {
   const directory = mkdtempSync(join(tmpdir(), 'workspace-room-world-'));
   const source = createTestMap();
   source.layers[3].objects.push({ id: 11, name: 'reading-spot', class: 'action',
-    point: true, x: 408, y: 392, width: 0, height: 0,
+    point: true, x: 360, y: 440, width: 0, height: 0,
     properties: [
-      { name: 'action', type: 'string', value: 'read' },
+      { name: 'action', type: 'string', value: 'sit' },
       { name: 'offsetX', type: 'float', value: 2 },
       { name: 'offsetY', type: 'float', value: -1 },
     ],

@@ -1,5 +1,5 @@
-import { activateActionSchema, standsOnAction, contains, canStand, MapObjectState, WorldObjectState,
-  type ActivateActionInput, type InteractionResult, type Player, type RegisteredMap } from '@virtual-workspace/shared';
+import { activateActionSchema, CHARACTER_ACTIONS, standsOnAction, contains, canStand, MapObjectState, WorldObjectState,
+  type ActivateAction, type InteractionResult, type Player, type RegisteredMap } from '@virtual-workspace/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 
 type ActionContext = InteractionContext & {
@@ -43,7 +43,8 @@ export function createActionInteraction(context: ActionContext) {
     messages: {
       activateAction: {
         format: activateActionSchema,
-        handler: async (client: SpaceClient, { action, animated = false }: ActivateActionInput): Promise<InteractionResult> => {
+        handler: async (client: SpaceClient, { action, animated: requestedAnimation }: ActivateAction): Promise<InteractionResult> => {
+          const animated = requestedAnimation && CHARACTER_ACTIONS[action].animated;
           if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
           const player = context.state.players.get(client.sessionId);
           const map = player && context.maps.get(player.mapId);

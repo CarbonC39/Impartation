@@ -6,6 +6,7 @@ import { Client, type Room } from '@colyseus/sdk';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
+import { CHARACTER_ACTION_NAMES } from '@virtual-workspace/shared';
 
 process.env.DATABASE_PATH = ':memory:';
 const fixture = createRoomWorldFixture();
@@ -107,7 +108,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal(player.x, 310);
     assert.equal(player.motion, 'idle');
   });
-  for (const action of ['sit', 'wave', 'exercise', 'sleep', 'read']) {
+  for (const action of CHARACTER_ACTION_NAMES) {
     test(`${action} runs in place, stops movement and is cancelled by new movement`, async () => {
       const alice = await join('AbilityUser');
       const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
@@ -177,23 +178,23 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await until(() => object.occupiedBy === '');
     assert.equal(object.variant, 'empty');
   });
-  test('action matching uses the requested name and applies world-pixel offsets with optional facing', async () => {
+  test('action matching applies world-pixel offsets and keeps facing when the anchor has none', async () => {
     const alice = await join('Reader');
     const player = harness.getRoomById<SpaceRoom>(alice.roomId).state.players.get(alice.sessionId)!;
-    player.x = 402; player.y = 386; player.facing = 'right';
-    assert.equal((await alice.request('activateAction', { action: 'read', animated: false })).ok, true);
+    player.x = 354; player.y = 434; player.facing = 'right';
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
     assert.deepEqual([player.x, player.y, player.facing, player.action, player.actionTargetId],
-      [410, 391, 'right', 'read', 'reading-spot']);
+      [362, 439, 'right', 'sit', 'reading-spot']);
     await delay(550);
-    assert.equal((await alice.request('activateAction', { action: 'read', animated: true })).ok, true);
-    assert.deepEqual([player.x, player.y], [410, 391]);
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: true })).ok, true);
+    assert.deepEqual([player.x, player.y], [362, 439]);
     assert.equal(player.actionAnimated, true);
   });
   test('non-zero movement cancels an action even when collision blocks the movement', async () => {
     const alice = await join('BlockedAction');
     const player = harness.getRoomById<SpaceRoom>(alice.roomId).state.players.get(alice.sessionId)!;
     player.x = 310; player.y = 250;
-    assert.equal((await alice.request('activateAction', { action: 'exercise', animated: true })).ok, true);
+    assert.equal((await alice.request('activateAction', { action: 'sit', animated: true })).ok, true);
     alice.send('input', { x: 1, y: 0 });
     await until(() => player.action === 'none');
     await delay(150);
@@ -236,7 +237,9 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const alice = await join('Alice');
     const bob = await join('Bob');
     const received: string[] = [];
-    bob.onMessage('chat', message => { received.push(message.text); assert.equal(message.name, 'Alice'); });
+    bob.onMessage('chat', message => {
+      received.push(message.text); assert.equal(message.name, 'Alice'); assert.equal(message.sessionId, alice.sessionId);
+    });
     alice.send('chat', { text: ' <b>hello</b> ' });
     await until(() => received.length === 1);
     assert.equal(received[0], '<b>hello</b>');

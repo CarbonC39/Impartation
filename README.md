@@ -6,7 +6,7 @@ A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a charac
 
 Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
-External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows the tool panel, and clicking Open launches a new tab (`external`) or mounts a sandboxed iframe (`embed`). External services keep their own accounts and permissions. Formal sign-up and login, account recovery, and private rooms are not implemented yet.
+External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows a small hint above the zone, and clicking it launches a new tab (`external`) or opens a sandboxed iframe in a centered, draggable TV-style window (`embed`). External services keep their own accounts and permissions. Formal sign-up and login, account recovery, and private rooms are not implemented yet.
 
 ## Run locally
 
@@ -18,9 +18,11 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>, follow the entry flow, choose a nickname and customize the character, then enter the space. Appearance choices can be previewed, randomized, and saved to the persistent profile. The sign-in and world selection screens are frontend prototypes: the form does not authenticate with a password, and the world name only changes the UI label. The backend still uses persistent anonymous identity and its map registry.
+Open <http://localhost:5173>, follow the entry flow, choose a nickname and customize the character, then enter the space. Appearance choices can be previewed, randomized, and saved to the persistent profile. There is no account or password: the start screen uses the persistent anonymous identity and offers one-time binding codes for other devices. The world selection screen is a frontend prototype; the world name only changes the UI label, and the backend uses its map registry.
 
-Move with WASD, the arrow keys, or the on-screen direction pad. At an authored action anchor, press E or click **Sit** to sit; the animation option can be enabled as well. Movement cancels the current action, and typing pauses keyboard movement. The server validates action requests and resolves anchors from the player's authoritative position.
+Move with WASD, the arrow keys, or the on-screen direction pad. The action list shows the character actions defined in the shared catalog (`CHARACTER_ACTIONS`, currently **Sit**); the server rejects any other action name. Click an action to perform it, or press E to perform the action of the anchor under the character (otherwise the last chosen action); the animation option applies to actions with animated frames. Movement cancels the current action, and typing pauses keyboard movement. The server validates action requests and resolves anchors from the player's authoritative position.
+
+Chat messages appear in a translucent, collapsible panel and as short-lived speech bubbles above the speaker. While the panel is collapsed, an unread count is shown.
 
 Camera zoom is controlled by `VITE_CAMERA_ZOOM`, which defaults to `2` and accepts any finite positive number independently of tile size. Restart Vite after changing `.env`. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. Character sheets use 16×24 frames in four columns and eight rows. The first four rows are down/left/right/up walking poses; the next four are action poses. The first column is static and columns 2–4 animate. Every layer must keep the same layout and foot anchor; asset IDs in `appearance` are resolved by the frontend character asset manifest.
 

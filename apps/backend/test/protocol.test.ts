@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, boardPostSchema,
-  boardDeleteSchema, pomodoroActionSchema, activateActionSchema } from '@virtual-workspace/shared';
+  boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES } from '@virtual-workspace/shared';
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {
   assert.deepEqual(joinSchema.parse({ name: ' Alice ' }), { name: 'Alice', avatar: 'mint', appearance: DEFAULT_APPEARANCE });
@@ -19,14 +19,14 @@ test('all nine direction inputs are allowed and extra fields cannot set authorit
   assert.deepEqual(inputSchema.parse({ x: 0, y: 1, sessionId: 'other-player', position: { x: 9000 } }), { x: 0, y: 1 });
 });
 
-test('character action requests accept future names and strip client authority', () => {
+test('character action requests accept only catalog actions and strip client authority', () => {
   assert.deepEqual(activateActionSchema.parse({ action: ' sit ', animated: true,
     objectId: 'seat-1', sessionId: 'other', x: 100, y: 200, facing: 'up', variant: 'occupied' }),
   { action: 'sit', animated: true });
-  for (const action of ['sit', 'wave', 'exercise', 'sleep', 'read']) {
+  for (const action of CHARACTER_ACTION_NAMES) {
     assert.deepEqual(activateActionSchema.parse({ action }), { action, animated: false });
   }
-  for (const value of [{}, null, { action: '' }, { action: ' ' }, { action: 'none' },
+  for (const value of [{}, null, { action: 'wave' }, { action: 'read' }, { action: '' }, { action: ' ' }, { action: 'none' },
     { action: 'a'.repeat(33) }, { action: 1 }, { action: 'sit', animated: 'yes' }, { action: 'sit', animated: 1 }]) {
     assert.equal(activateActionSchema.safeParse(value).success, false);
   }

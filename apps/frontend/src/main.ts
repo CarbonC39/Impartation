@@ -25,16 +25,17 @@ const messageInput = element<HTMLInputElement>('message');
 const messages = element<HTMLOListElement>('messages');
 const zone = element('zone');
 let game: Phaser.Game | undefined;
+let scene: SpaceScene | undefined;
 const themePicker = element<HTMLSelectElement>('theme');
 const themes = ['meadow', 'ocean', 'sunset', 'lavender'] as const;
 type Theme = typeof themes[number];
 const themeBackgrounds: Record<Theme, string> = { meadow:'#bdebd0', ocean:'#b7e8ff', sunset:'#ffd2b5', lavender:'#e4caff' };
-let currentTheme: Theme = themes.find(theme => theme === localStorage.getItem('virtual-workspace-theme')) ?? 'meadow';
+let currentTheme: Theme = themes.find(theme => theme === readPreference('virtual-workspace-theme')) ?? 'meadow';
 function applyTheme(theme: Theme) {
   currentTheme = theme;
   document.documentElement.dataset.theme = theme;
   themePicker.value = theme;
-  localStorage.setItem('virtual-workspace-theme', theme);
+  writePreference('virtual-workspace-theme', theme);
   if (game) game.canvas.style.backgroundColor = themeBackgrounds[theme];
 }
 applyTheme(currentTheme);
@@ -54,6 +55,36 @@ let renderGeneration = 0;
 let selectedWorld = '阳光大厅';
 let leavingIntentionally = false;
 
+const chatCard = element('chat-card');
+const chatToggle = element<HTMLButtonElement>('chat-toggle');
+const chatUnread = element('chat-unread');
+let unread = 0;
+function readPreference(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePreference(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* Preferences are optional. */ }
+}
+function setChatCollapsed(collapsed: boolean) {
+  chatCard.classList.toggle('collapsed', collapsed);
+  element('chat-body').hidden = collapsed;
+  chatToggle.setAttribute('aria-expanded', String(!collapsed));
+  chatToggle.setAttribute('aria-label', collapsed ? '展开聊天' : '折叠聊天');
+  chatToggle.textContent = collapsed ? '展开' : '收起';
+  if (!collapsed) setUnread(0);
+  writePreference('virtual-workspace-chat-collapsed', String(collapsed));
+}
+function setUnread(count: number) {
+  unread = count;
+  chatUnread.hidden = count === 0;
+  chatUnread.textContent = count > 99 ? '99+' : String(count);
+}
+setChatCollapsed(readPreference('virtual-workspace-chat-collapsed') === 'true');
+chatToggle.addEventListener('click', () => {
+  setChatCollapsed(!chatCard.classList.contains('collapsed'));
+  chatToggle.blur(); // Return keyboard movement to the map.
+});
+
 function showScreen(id: string) {
   document.querySelectorAll<HTMLElement>('.flow-screen').forEach(screen => {
     const active = screen.id === id;
@@ -68,10 +99,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
     promise.then(value => { window.clearTimeout(timer); resolve(value); }, error => { window.clearTimeout(timer); reject(error); });
   });
 }
-element<HTMLFormElement>('login-form').addEventListener('submit', event => {
-  event.preventDefault();
-  showScreen('world-screen');
-});
+element<HTMLButtonElement>('start').addEventListener('click', () => showScreen('world-screen'));
 element<HTMLDivElement>('world-list').addEventListener('click', event => {
   const tile = (event.target as HTMLElement).closest<HTMLButtonElement>('.world-tile[data-world]');
   if (!tile) return;
@@ -250,7 +278,9 @@ function cleanup() {
   element('object-feedback').textContent = '';
   game?.destroy(true);
   game = undefined;
+  scene = undefined;
   room = undefined;
+  setUnread(0);
   setConnected(false);
   join.disabled = false;
   leave.disabled = true;
@@ -279,7 +309,11 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     if (!room.state?.players) await withTimeout(new Promise<void>(resolve => room!.onStateChange.once(() => resolve())),
       10_000, '空间已连接，但没有收到地图角色数据');
     interactions = createInteractions(room);
-    actions = createCharacterActions(room);
+    const actionRoom = room;
+    actions = createCharacterActions(room, () => {
+      const mapId = actionRoom.state.players.get(actionRoom.sessionId)?.mapId;
+      return worldRegistry?.maps.find(map => map.id === mapId)?.world;
+    });
     messages.replaceChildren();
     room.onMessage('chat', message => {
       const li = document.createElement('li');
@@ -287,6 +321,8 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
       messages.append(li);
       if (messages.children.length > 100) messages.firstElementChild?.remove();
       messages.scrollTop = messages.scrollHeight;
+      if (chatCard.classList.contains('collapsed')) setUnread(unread + 1);
+      scene?.showBubble(message.sessionId, message.text);
     });
     room.onDrop(() => { setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
     room.onReconnect(() => { setConnected(true); status.textContent = '连接已恢复'; });
@@ -325,17 +361,27 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
     const renderMap = renderMapSchema.parse(await response.json());
     if (generation !== renderGeneration || room !== activeRoom) return;
     game?.destroy(true);
+    const zoneAnchor = element('zone-anchor');
+    scene = new SpaceScene(activeRoom, entry, renderMap, {
+      zoneChanged: id => {
+        const current = entry.world.zones.find(item => item.id === id);
+        const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
+        if (zone.textContent !== text) zone.textContent = text;
+        interactions?.setZone(current);
+      },
+      zoneAnchor: point => {
+        zoneAnchor.hidden = !point;
+        if (point) zoneAnchor.style.transform = `translate(${point.x}px, ${point.y}px)`;
+      },
+      activate: () => { void actions?.activate(); },
+      virtualInput: readVirtualInput,
+    });
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: entry.world.width, height: entry.world.height,
       backgroundColor: '#2b423e',
       pixelArt: true,
       scale: { mode: Phaser.Scale.RESIZE },
-      scene: new SpaceScene(activeRoom, entry, renderMap, id => {
-        const current = entry.world.zones.find(item => item.id === id);
-        const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
-        if (zone.textContent !== text) zone.textContent = text;
-        interactions?.setZone(current);
-      }, () => { void actions?.activate(); }, readVirtualInput),
+      scene,
     });
     renderedMap = mapId;
   } finally { if (generation === renderGeneration) renderingMap = ''; }
