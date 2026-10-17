@@ -121,7 +121,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
 type AppearancePart = keyof JoinOptions['appearance'];
 const appearanceLabels: Record<string, string> = {
   base: '基础身体', eyes: '默认面部', hair1: '发型一', hair2: '发型二',
-  shirt: '衬衫', 't-shirt': '短袖', pants: '长裤', skirt: '裙子', shoes: '基础鞋',
+  hair3: '发型三', hair4: '发型四', hair6: '发型六', hair7: '发型七',
+  shirt: '衬衫', 't-shirt': '短袖', school_uniform: '校服', suit: '西装', pants: '长裤', skirt: '裙子', shoes: '基础鞋',
 };
 let currentAvatar: JoinOptions['avatar'] = 'mint';
 let currentAppearance: JoinOptions['appearance'] = structuredClone(DEFAULT_APPEARANCE);
