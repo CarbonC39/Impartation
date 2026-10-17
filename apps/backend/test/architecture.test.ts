@@ -60,14 +60,14 @@ test('web presentation dispatch selects embed or external by resource configurat
     events.push(`embed:${tool.resourceId}`); return () => events.push('cleanup:embed');
   });
   const base = { resourceId: 'resource', url: 'https://tools.example/' };
-  registry.open(base, host)();
-  registry.open({ ...base, mode: 'embed' }, host)();
-  registry.open({ ...base, resourceId: 'another-resource', mode: 'external' }, host)();
+  registry.open(base, host, host)();
+  registry.open({ ...base, mode: 'embed' }, host, host)();
+  registry.open({ ...base, resourceId: 'another-resource', mode: 'external' }, host, host)();
   assert.deepEqual(events, ['external:resource', 'cleanup:external', 'embed:resource', 'cleanup:embed',
     'external:another-resource', 'cleanup:external']);
   const fallback = new PresentationRegistry().register('external', () => () => {});
-  assert.throws(() => fallback.open({ ...base, mode: 'embed' }, host));
-  assert.throws(() => fallback.open({ ...base, mode: 'embed', fallback: 'external' }, host));
+  assert.throws(() => fallback.open({ ...base, mode: 'embed' }, host, host));
+  assert.throws(() => fallback.open({ ...base, mode: 'embed', fallback: 'external' }, host, host));
 });
 
 test('server interactions compose new kinds and reject ambiguous message names', async () => {

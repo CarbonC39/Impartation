@@ -42,7 +42,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       const now = Date.now();
       if (!player || now - (this.lastChat.get(client.sessionId) ?? 0) < 500) return;
       this.lastChat.set(client.sessionId, now);
-      const message: ChatMessage = { id: randomUUID(), name: player.name, text, sentAt: now };
+      const message: ChatMessage = { id: randomUUID(), sessionId: client.sessionId, name: player.name, text, sentAt: now };
       this.broadcast('chat', message);
     }),
     ...this.interactions.messages,

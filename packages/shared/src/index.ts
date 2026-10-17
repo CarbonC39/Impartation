@@ -5,8 +5,8 @@ export const ROOM_NAME = 'space';
 export const AVATARS = ['mint', 'amber', 'violet'] as const;
 export const avatarSchema = z.enum(AVATARS);
 export const APPEARANCE_ASSETS = {
-  body: ['base'], face: ['eyes'], hair: ['hair1', 'hair2'],
-  top: ['shirt', 't-shirt'], bottom: ['pants', 'skirt'], shoes: ['shoes'],
+  body: ['base'], face: ['eyes'], hair: ['hair1', 'hair2', 'hair3', 'hair4', 'hair6', 'hair7'],
+  top: ['shirt', 't-shirt', 'school_uniform', 'suit'], bottom: ['pants', 'skirt'], shoes: ['shoes'],
 } as const;
 export const APPEARANCE_LAYERS = ['body', 'face', 'bottom', 'shoes', 'top', 'hair'] as const;
 const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit RGB hex color');
@@ -33,7 +33,8 @@ export const inputSchema = z.object({
 export const chatSchema = z.object({ text: z.string().trim().min(1).max(500) });
 export type MovementInput = z.infer<typeof inputSchema>;
 export type JoinOptions = z.infer<typeof joinSchema>;
-export type ChatMessage = { id: string; name: string; text: string; sentAt: number };
+/** `sessionId` is set by the server from the sending connection. */
+export type ChatMessage = { id: string; sessionId: string; name: string; text: string; sentAt: number };
 
 const resourceIdSchema = z.string().trim().min(1).max(128);
 export const boardPostSchema = z.object({ resourceId: resourceIdSchema, text: chatSchema.shape.text });

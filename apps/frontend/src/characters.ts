@@ -3,7 +3,10 @@ import { APPEARANCE_ASSETS, appearanceSchema, FACINGS, type Facing, type Motion 
 export const layerAssets = {
   base: '/characters/walk.png', eyes: '/characters/eyes.png',
   hair1: '/characters/hair1.png', hair2: '/characters/hair2.png',
+  hair3: '/characters/hair3.png', hair4: '/characters/hair4.png',
+  hair6: '/characters/hair6.png', hair7: '/characters/hair7.png',
   shirt: '/characters/shirt.png', 't-shirt': '/characters/t-shirt.png',
+  school_uniform: '/characters/school_uniform.png', suit: '/characters/suit.png',
   pants: '/characters/pants.png', skirt: '/characters/skirt.png', shoes: '/characters/shoes.png',
 } as const;
 export type LayerAssetId = keyof typeof layerAssets;

@@ -135,7 +135,7 @@ test('in-place static and animated sit use distinct action columns and movement 
   try {
     await expect.poll(() => player()?.name).toBe('E2EActions');
     const position = { x: player().x, y: player().y };
-    await page.locator('#activate-object').click();
+    await page.locator('#action-list [data-action="sit"]').click();
     await expect.poll(() => player().action).toBe('sit');
     expect(player().actionAnimated).toBe(false);
     expect(player().actionTargetId).toBe('');
@@ -173,9 +173,7 @@ test('in-place static and animated sit use distinct action columns and movement 
 
 async function openAvatarScreen(page: Page) {
   if (await page.locator('#login-screen').isVisible()) {
-    await page.locator('#account').fill('e2e-guest');
-    await page.locator('#password').fill('e2e-password');
-    await page.locator('#login-form button[type="submit"]').click();
+    await page.locator('#start').click();
   }
   if (await page.locator('#world-screen').isVisible()) {
     await page.locator('#world-list [data-world="sunny-lobby"]').click();
@@ -241,7 +239,7 @@ async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typ
   try {
     await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(target.resourceId);
   } finally { await page.keyboard.up('w'); }
-  await expect(page.locator('#tool-panel')).toBeVisible();
+  await expect(page.locator('#tool-hint')).toBeVisible();
 }
 
 for (const target of toolCases) {
@@ -255,7 +253,7 @@ for (const target of toolCases) {
     const observer = await observe();
     try {
       await walkToTool(page, observer, target);
-      await expect(page.locator('#tool-heading')).toHaveText('网页工具');
+      await expect(page.locator('#tool-open')).toHaveText('打开网页工具 ↗');
       const url = `https://tools.example/resources/${target.resourceId}`;
       await expect(page.locator('#tool-open')).toHaveAttribute('href', url);
       const popupReady = page.waitForEvent('popup');
@@ -271,7 +269,7 @@ for (const target of toolCases) {
       await page.locator('#game canvas').focus();
       const direction = target.x > 352 ? 'a' : 'd';
       await page.keyboard.down(direction);
-      try { await expect(page.locator('#tool-panel')).toBeHidden(); }
+      try { await expect(page.locator('#tool-hint')).toBeHidden(); }
       finally { await page.keyboard.up(direction); }
       await expect(page.locator('#tool-open')).not.toHaveAttribute('href');
     } finally { if (observer.connection.isOpen) await observer.leave(); }
@@ -294,7 +292,7 @@ for (const scenario of [
       await expect(page.locator('#tool-open')).not.toHaveAttribute('href');
       await expect(page.locator('#status')).toContainText('已进入空间');
       await page.locator('#leave').click();
-      await expect(page.locator('#tool-panel')).toBeHidden();
+      await expect(page.locator('#tool-hint')).toBeHidden();
     } finally { if (observer.connection.isOpen) await observer.leave(); }
   });
 }
@@ -388,7 +386,7 @@ test('mobile seat activation renders the character and releases occupancy when w
   await enter(page, 'E2ESeat');
   await spriteResponse;
   const observer = await observe();
-  const button = page.locator('#activate-object');
+  const button = page.locator('#action-list [data-action="sit"]');
   const canvas = page.locator('#game canvas');
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
   const player = () => observer.state.players.get(sessionId)!;
@@ -468,7 +466,7 @@ test('two browser guests render their avatars and exchange plain-text chat throu
   page.on('pageerror', error => errors.push(error.message));
   const bob = await browser.newPage();
   bob.on('pageerror', error => errors.push(error.message));
-  await enter(page, 'E2EAlice', 'amber');
+  await enter(page, 'E2EAlice', 'amber', () => captureRenderedScene(page));
   await enter(bob, 'E2EBob', 'violet');
   const observer = await observe();
   try {
@@ -484,6 +482,20 @@ test('two browser guests render their avatars and exchange plain-text chat throu
     await bob.locator('#message').fill('收到');
     await bob.locator('#send').click();
     await expect(page.locator('#messages')).toContainText('E2EBob：收到');
+    // Speech bubbles render above the speaker as plain Phaser text.
+    await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.children.list
+      .some(child => child instanceof Object && 'text' in child && child.text === '收到'))).toBe(true);
+    await page.locator('#chat-toggle').click();
+    await expect(page.locator('#chat-body')).toBeHidden();
+    await expect(page.locator('#chat-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await bob.waitForTimeout(550); // Server chat cooldown.
+    await bob.locator('#message').fill('折叠时');
+    await bob.locator('#send').click();
+    await expect(page.locator('#chat-unread')).toHaveText('1');
+    await page.locator('#chat-toggle').click();
+    await expect(page.locator('#chat-body')).toBeVisible();
+    await expect(page.locator('#chat-unread')).toBeHidden();
+    await expect(page.locator('#messages')).toContainText('E2EBob：折叠时');
     expect(errors).toEqual([]);
   } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
@@ -639,13 +651,33 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
   const observer = await observe();
   try {
     await walkToTool(page, observer, target);
-    const frame = page.locator('#tool-panel iframe');
+    const frame = page.locator('#tool-window iframe');
     await expect(frame).toHaveCount(0);
     await page.locator('#tool-open').click();
     await expect(frame).toBeVisible();
+    await expect(page.locator('#tool-open')).toBeHidden();
     await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
     await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
-    await expect(page.frameLocator('#tool-panel iframe').getByText('Embedded tool fixture')).toBeVisible();
+    await expect(page.frameLocator('#tool-window iframe').getByText('Embedded tool fixture')).toBeVisible();
+    // The TV frame opens centered and can be dragged by its title bar.
+    const windowBox = async () => (await page.locator('#tool-window').boundingBox())!;
+    const viewport = page.viewportSize()!;
+    const opened = await windowBox();
+    expect(Math.abs(opened.x + opened.width / 2 - viewport.width / 2)).toBeLessThan(2);
+    const bar = (await page.locator('#tool-heading').boundingBox())!;
+    await page.mouse.move(bar.x + 10, bar.y + bar.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bar.x + 70, bar.y + bar.height / 2 + 40, { steps: 4 });
+    await page.mouse.up();
+    const moved = await windowBox();
+    expect(moved.x - opened.x).toBeCloseTo(60, 0);
+    expect(moved.y - opened.y).toBeCloseTo(40, 0);
+    await page.locator('#tool-close').click();
+    await expect(frame).toHaveCount(0);
+    await expect(page.locator('#tool-window')).toBeHidden();
+    await expect(page.locator('#tool-open')).toBeVisible();
+    await page.locator('#tool-open').click();
+    await expect(frame).toBeVisible();
     await page.locator('#leave').click();
     await expect(frame).toHaveCount(0);
   } finally { if (observer.connection.isOpen) await observer.leave(); }
@@ -659,11 +691,11 @@ test('embed presentation provides a manual external link and clears both on zone
   const observer = await observe();
   try {
     await walkToTool(page, observer, toolCases[1]);
-    await expect(page.locator('#tool-panel iframe')).toHaveCount(0);
+    await expect(page.locator('#tool-window iframe')).toHaveCount(0);
     await page.locator('#tool-open').click();
-    const fallback = page.locator('#tool-panel').getByRole('link', { name: '手动在新标签页打开', exact: true });
+    const fallback = page.locator('#tool-window').getByRole('link', { name: '手动在新标签页打开', exact: true });
     await expect(fallback).toHaveAttribute('href', toolDirectory[1].url);
-    await expect(page.locator('#tool-panel iframe')).toBeVisible();
+    await expect(page.locator('#tool-window iframe')).toBeVisible();
     const openedPage = page.waitForEvent('popup');
     await fallback.click();
     const toolPage = await openedPage;
@@ -675,9 +707,10 @@ test('embed presentation provides a manual external link and clears both on zone
     await page.bringToFront();
     await page.locator('#game canvas').focus();
     await page.keyboard.down('d');
-    try { await expect(page.locator('#tool-panel')).toBeHidden(); }
+    try { await expect(page.locator('#tool-hint')).toBeHidden(); }
     finally { await page.keyboard.up('d'); }
-    await expect(page.locator('#tool-panel iframe')).toHaveCount(0);
+    await expect(page.locator('#tool-window')).toBeHidden();
+    await expect(page.locator('#tool-window iframe')).toHaveCount(0);
     await expect(fallback).toHaveCount(0);
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });

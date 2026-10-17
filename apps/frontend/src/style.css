@@ -274,3 +274,47 @@ button[data-key="START"]::before { border-radius:0; }
   .map-screen #messages { flex:1; min-height:0; margin:6px 0; padding:0; }
   .map-screen .touch-controls { left:12px; bottom:13px; }
 }
+
+/* Translucent, collapsible chat over the map. */
+.map-screen .chat-card { height:auto; max-height:min(42vh,340px); padding:10px 12px; border-radius:0; background:color-mix(in srgb,#14202d 46%,transparent); backdrop-filter:blur(4px); pointer-events:auto; }
+.map-screen .chat-card.collapsed { width:auto; }
+.chat-body { display:flex; flex-direction:column; min-height:0; flex:1; }
+.chat-body[hidden] { display:none; }
+.map-screen .chat-card:not(.collapsed) #messages { height:min(30vh,240px); }
+.chat-toggle { margin-left:auto; min-height:28px; padding:2px 10px; border:1px solid #ffffffa6; background:transparent; color:#fff; font-size:12px; box-shadow:none; }
+.chat-toggle:hover:not(:disabled) { transform:none; background:#ffffff26; }
+.chat-unread { min-width:20px; padding:1px 6px; background:var(--accent); color:var(--accent-ink); font-size:11px; font-weight:900; text-align:center; text-shadow:none; }
+.chat-unread[hidden] { display:none; }
+@media (max-width:700px) { .map-screen .chat-card { height:auto; max-height:min(36vh,260px); padding:8px 10px; } .map-screen .chat-card:not(.collapsed) #messages { height:min(22vh,160px); } }
+
+/* Character action list from the shared catalog. */
+.positional-controls label { flex-direction:row; }
+.action-list { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
+.action-list button[aria-pressed="true"] { background:var(--accent); color:var(--accent-ink); }
+
+/* Small hint above the current zone; positioned in canvas pixels by the scene. */
+.zone-anchor { position:absolute; z-index:4; top:0; left:0; width:0; height:0; pointer-events:none; }
+.zone-anchor[hidden] { display:none; }
+.zone-hint { position:absolute; bottom:6px; left:0; transform:translateX(-50%); display:flex; align-items:center; gap:6px; padding:4px 10px; border:2px solid var(--border); background:var(--panel); color:var(--ink); font-size:12px; font-weight:800; white-space:nowrap; box-shadow:3px 3px 0 var(--border); pointer-events:auto; }
+.zone-hint::after { content:''; position:absolute; left:50%; bottom:-8px; width:10px; height:6px; transform:translateX(-50%); background:var(--border); clip-path:polygon(0 0,100% 0,50% 100%); }
+.zone-hint a { color:var(--accent-deep); text-decoration:none; cursor:pointer; }
+.zone-hint a:hover { text-decoration:underline; }
+.zone-hint a[hidden],.zone-hint span:empty { display:none; }
+
+/* Embedded tools appear in a centered, draggable TV frame. */
+.tv-window { --drag-x:0px; --drag-y:0px; position:fixed; z-index:20; left:50%; top:50%; width:min(880px,calc(100vw - 32px)); display:flex; flex-direction:column; align-items:center; transform:translate(calc(-50% + var(--drag-x)),calc(-50% + var(--drag-y))); }
+.tv-window[hidden] { display:none; }
+.tv-bar { width:100%; display:flex; align-items:center; gap:10px; padding:6px 10px; border:3px solid #1b1d22; border-bottom:0; background:#3a3f48; color:#f3efe2; cursor:grab; touch-action:none; user-select:none; }
+.tv-window.dragging .tv-bar { cursor:grabbing; }
+.tv-bar h2 { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.tv-links a { color:#ffe083; font-size:12px; }
+.tv-close { min-height:28px; padding:0 9px; border:2px solid #1b1d22; background:#c6294d; color:#fff; box-shadow:none; font-size:12px; }
+.tv-close:hover:not(:disabled) { transform:none; }
+.tv-bezel { width:100%; display:flex; gap:12px; padding:16px; border:3px solid #1b1d22; border-radius:0 0 18px 18px; background:linear-gradient(180deg,#5b4636,#3d2e24); box-shadow:inset 0 0 0 3px #7a604b,6px 6px 0 #1b1d2299; }
+.tv-screen { flex:1; min-width:0; height:min(540px,calc(100vh - 170px)); display:flex; border:6px solid #111; border-radius:14px; background:#0b0d10; box-shadow:inset 0 0 24px #000; overflow:hidden; }
+.tv-screen iframe { flex:1; width:100%; height:100%; border:0; background:#fff; }
+.tv-knobs { flex:none; width:34px; display:flex; flex-direction:column; align-items:center; gap:14px; padding-top:10px; }
+.tv-knobs span { width:22px; height:22px; border:3px solid #1b1d22; border-radius:50%; background:radial-gradient(circle at 35% 35%,#d8c8a8,#8a7350); }
+.tv-knobs span:last-child { width:12px; height:12px; margin-top:auto; border-width:2px; background:#ff526e; box-shadow:0 0 6px #ff526e; }
+.tv-stand { width:30%; height:14px; border:3px solid #1b1d22; border-top:0; background:#2b2f36; clip-path:polygon(8% 0,92% 0,100% 100%,0 100%); }
+@media (max-width:700px) { .tv-window { width:calc(100vw - 16px); } .tv-bezel { padding:8px; } .tv-knobs { display:none; } .tv-screen { height:min(60vh,calc(100vh - 140px)); border-width:4px; } }
