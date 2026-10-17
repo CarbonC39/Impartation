@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. The character editor previews and saves six layered sprite sheets (body, face, hair, top, bottom, shoes), each with a validated asset ID and editable RGB color. All layers share one animation frame and foot anchor in the map.
+A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. The character editor previews and saves layered sprite sheets (body, face, hair, top, bottom, shoes, accessories), each with a validated asset ID and editable RGB color. All layers share one animation frame and foot anchor in the map.
 
 Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
@@ -18,7 +18,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>, follow the entry flow, choose a nickname and customize the character, then enter the space. Appearance choices can be previewed, randomized, and saved to the persistent profile. There is no account or password: the start screen uses the persistent anonymous identity and offers one-time binding codes for other devices. The world selection screen is a frontend prototype; the world name only changes the UI label, and the backend uses its map registry.
+Open <http://localhost:5173>, follow the entry flow, choose a nickname and customize the character, then enter the space. Appearance choices can be previewed, randomized, and saved to the persistent profile. Put PNG assets in `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/`; the shared build generates category IDs and paths from these folders. Tops, bottoms, shoes, and accessories support a `none` choice. There is no account or password: the start screen uses the persistent anonymous identity and offers one-time binding codes for other devices. The world selection screen is a frontend prototype; the world name only changes the UI label, and the backend uses its map registry.
 
 Move with WASD, the arrow keys, or the on-screen direction pad. The action list shows the character actions defined in the shared catalog (`CHARACTER_ACTIONS`, currently **Sit**); the server rejects any other action name. Click an action to perform it, or press E to perform the action of the anchor under the character (otherwise the last chosen action); the animation option applies to actions with animated frames. Movement cancels the current action, and typing pauses keyboard movement. The server validates action requests and resolves anchors from the player's authoritative position.
 

@@ -28,7 +28,11 @@ export type Profile = { id: string; name: string; avatar: JoinOptions['avatar'];
 
 function storedAppearance(value: unknown): Profile['appearance'] {
   const current = appearanceSchema.safeParse(value);
-  if (current.success) return current.data;
+  if (current.success) return {
+    ...current.data,
+    // White was the previous default eye tint; migrate it to the new black default.
+    face: { ...current.data.face, color: current.data.face.color.toLowerCase() === '#ffffff' ? '#000000' : current.data.face.color },
+  };
   if (!value || typeof value !== 'object' || Array.isArray(value)) return DEFAULT_APPEARANCE;
   const old = value as Record<string, unknown>;
   const color = (key: string, palette: Record<string, string>, fallback: string) =>
@@ -36,8 +40,8 @@ function storedAppearance(value: unknown): Profile['appearance'] {
   const asset = (key: string, choices: Record<string, string>, fallback: string) =>
     typeof old[key] === 'string' ? choices[old[key]] ?? fallback : fallback;
   return appearanceSchema.parse({
-    body: { assetId: 'base', color: color('skin', { light: '#ffffff', warm: '#f4d6bc', deep: '#c59478' }, '#ffffff') },
-    face: { assetId: 'eyes', color: '#ffffff' },
+    body: { assetId: 'walk', color: color('skin', { light: '#ffffff', warm: '#f4d6bc', deep: '#c59478' }, '#ffffff') },
+    face: { assetId: 'eyes', color: '#000000' },
     hair: { assetId: asset('hair', { short: 'hair1', long: 'hair2', bun: 'hair2' }, 'hair1'),
       color: color('hairColor', { dark: '#343344', brown: '#704b3c', blonde: '#efc75e', pink: '#dc7196' }, '#704b3c') },
     top: { assetId: asset('top', { tee: 't-shirt', sweater: 'shirt', overall: 'shirt' }, 't-shirt'),

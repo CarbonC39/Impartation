@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
-import { APPEARANCE_LAYERS, TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
 import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
@@ -101,7 +101,7 @@ export class SpaceScene extends Phaser.Scene {
       let sprite = this.sprites.get(id);
       if (!sprite) {
         const avatar = avatarDefinition(player.avatar);
-        const layers = APPEARANCE_LAYERS.map(() => this.add.sprite(player.x, player.y, 'base')
+        const layers = APPEARANCE_LAYERS.map(() => this.add.sprite(player.x, player.y, APPEARANCE_ASSETS.body[0])
           .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight));
         const character = layers[0]!.setName(id);
         if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
@@ -123,11 +123,13 @@ export class SpaceScene extends Phaser.Scene {
       sprite.elapsed = animation === sprite.animation ? sprite.elapsed + delta : 0;
       sprite.animation = animation;
       const frame = characterFrame(player.avatar, facing, motion, action, player.actionAnimated, sprite.elapsed);
-      const renderedFrame = this.textures.get('base').has(String(frame)) ? frame : avatar.idle[facing];
+      const renderedFrame = this.textures.get(APPEARANCE_ASSETS.body[0]).has(String(frame)) ? frame : avatar.idle[facing];
       const appearance = characterAppearance(player.appearance);
       for (const [index, layer] of APPEARANCE_LAYERS.entries()) {
         const part = appearance[layer];
-        sprite.layers[index]!.setTexture(part.assetId, renderedFrame).setTint(tintNumber(part.color))
+        const layerSprite = sprite.layers[index]!;
+        if (part.assetId === 'none') { layerSprite.setVisible(false); continue; }
+        layerSprite.setVisible(true).setTexture(part.assetId, renderedFrame).setTint(tintNumber(part.color))
           .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
           .setDepth(sprite.sprite.y + index * 0.001);
       }

@@ -11,7 +11,7 @@ Better Auth 管理匿名用户、session cookie 和一次性令牌。Better Auth
 
 ## 资料与跨设备绑定
 
-个人资料包含昵称 `name`、角色原型 ID `avatar` 和 `appearance` 换装配置。配置包含 body、face、hair、top、bottom、shoes 六层；每层保存已登记的 `assetId` 和六位十六进制 RGB `color`。`appearanceSchema` 校验素材 ID 与颜色，`appearance` 以 JSON 存在 `profiles.appearance_json`，并随 Colyseus Player 状态同步。前端以相同帧号、位置和脚点绘制六张完整角色精灵表，各层颜色作 RGB 乘色；旧版换装数据在读取时转换到现有素材和颜色，下一次保存写入新格式。
+个人资料包含昵称 `name`、角色原型 ID `avatar` 和 `appearance` 换装配置。配置包含 body、face、hair、top、bottom、shoes、accessories 七层；每层保存已登记的 `assetId` 和六位十六进制 RGB `color`。`appearanceSchema` 校验素材 ID 与颜色，`appearance` 以 JSON 存在 `profiles.appearance_json`，并随 Colyseus Player 状态同步。素材按 `assets/characters/<category>/` 文件夹分类，shared 构建时生成素材 ID 和 URL 清单；top、bottom、shoes、accessories 的 `none` 表示隐藏该层。前端以相同帧号、位置和脚点绘制完整角色精灵表，各层颜色作 RGB 乘色；旧版换装数据在读取时转换到现有素材和颜色，下一次保存写入新格式。
 
 `GET /api/me` 读取当前用户资料，`PATCH /api/me` 更新昵称、角色原型和换装配置；`role` 是独立的权限角色（`member`/`admin`），随资料返回供界面显示，更新接口不接受角色修改。角色只能由本地 CLI 设置。绑定码兑换会把当前浏览器切换到原身份；不会合并当前浏览器原身份的资料或留言。cookie 丢失或会话过期且没有其它有效 session 时，目前没有账号恢复方式。
 

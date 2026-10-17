@@ -4,21 +4,20 @@ import { z } from 'zod';
 export const ROOM_NAME = 'space';
 export const AVATARS = ['mint', 'amber', 'violet'] as const;
 export const avatarSchema = z.enum(AVATARS);
-export const APPEARANCE_ASSETS = {
-  body: ['base'], face: ['eyes'], hair: ['hair1', 'hair2', 'hair3', 'hair4', 'hair6', 'hair7'],
-  top: ['shirt', 't-shirt', 'school_uniform', 'suit'], bottom: ['pants', 'skirt'], shoes: ['shoes'],
-} as const;
-export const APPEARANCE_LAYERS = ['body', 'face', 'bottom', 'shoes', 'top', 'hair'] as const;
+import { APPEARANCE_ASSETS } from './appearanceAssets.generated.js';
+export { APPEARANCE_ASSETS, APPEARANCE_ASSET_PATHS } from './appearanceAssets.generated.js';
+export const APPEARANCE_LAYERS = ['body', 'face', 'bottom', 'shoes', 'top', 'hair', 'accessories'] as const;
 const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit RGB hex color');
 const part = <T extends readonly [string, ...string[]]>(assets: T, assetId: T[number], color: string) =>
   z.object({ assetId: z.enum(assets).default(assetId), color: colorSchema.default(color) }).strict();
 export const appearanceSchema = z.object({
-  body: part(APPEARANCE_ASSETS.body, 'base', '#ffffff').default({ assetId: 'base', color: '#ffffff' }),
-  face: part(APPEARANCE_ASSETS.face, 'eyes', '#ffffff').default({ assetId: 'eyes', color: '#ffffff' }),
+  body: part(APPEARANCE_ASSETS.body, 'walk', '#ffffff').default({ assetId: 'walk', color: '#ffffff' }),
+  face: part(APPEARANCE_ASSETS.face, 'eyes', '#000000').default({ assetId: 'eyes', color: '#000000' }),
   hair: part(APPEARANCE_ASSETS.hair, 'hair1', '#704b3c').default({ assetId: 'hair1', color: '#704b3c' }),
   top: part(APPEARANCE_ASSETS.top, 't-shirt', '#64a9df').default({ assetId: 't-shirt', color: '#64a9df' }),
   bottom: part(APPEARANCE_ASSETS.bottom, 'pants', '#587eaa').default({ assetId: 'pants', color: '#587eaa' }),
   shoes: part(APPEARANCE_ASSETS.shoes, 'shoes', '#6a554e').default({ assetId: 'shoes', color: '#6a554e' }),
+  accessories: part(APPEARANCE_ASSETS.accessories, 'none', '#ffffff').default({ assetId: 'none', color: '#ffffff' }),
 }).strict();
 export const DEFAULT_APPEARANCE = appearanceSchema.parse({});
 export const joinSchema = z.object({

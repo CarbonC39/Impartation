@@ -24,6 +24,7 @@ export async function drawAppearancePreview(canvas: HTMLCanvasElement, appearanc
   sourceContext.imageSmoothingEnabled = false;
   for (const layer of APPEARANCE_LAYERS) {
     const part = appearance[layer];
+    if (part.assetId === 'none') continue;
     const image = images.get(part.assetId);
     if (!image) continue;
     sourceContext.clearRect(0, 0, source.width, source.height);
