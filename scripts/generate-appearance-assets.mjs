@@ -15,11 +15,12 @@ for (const category of categories) {
   try { files = await readdir(folder); } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
-  const ids = files.filter(file => file.toLowerCase().endsWith('.png')).sort().map(file => file.slice(0, -4));
-  for (const id of ids) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error(`Invalid character asset filename: ${category}/${id}.png`);
+  const pngFiles = files.filter(file => file.toLowerCase().endsWith('.png')).sort();
+  const ids = pngFiles.map(file => file.slice(0, -4));
+  for (const [index, id] of ids.entries()) {
+    if (!/^[\p{L}\p{N}_-]+$/u.test(id)) throw new Error(`Invalid character asset filename: ${category}/${id}.png`);
     if (Object.hasOwn(paths, id)) throw new Error(`Duplicate character asset ID: ${id}`);
-    paths[id] = `/${relative(join(root, 'assets'), join(folder, `${id}.png`)).split(sep).join('/')}`;
+    paths[id] = `/${relative(join(root, 'assets'), join(folder, pngFiles[index])).split(sep).join('/')}`;
   }
   assets[category] = ids;
 }
