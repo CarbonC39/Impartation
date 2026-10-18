@@ -33,6 +33,7 @@ export const APPEARANCE_ASSETS = {
   "bottom": [
     "none",
     "pants",
+    "shorts",
     "skirt"
   ],
   "shoes": [
@@ -69,6 +70,7 @@ export const APPEARANCE_ASSET_PATHS = {
   "兔女郎": "/characters/top/兔女郎.png",
   "卫衣": "/characters/top/卫衣.png",
   "pants": "/characters/bottom/pants.png",
+  "shorts": "/characters/bottom/shorts.png",
   "skirt": "/characters/bottom/skirt.png",
   "shoes": "/characters/shoes/shoes.png",
   "accessories": "/characters/accessories/accessories.png",
