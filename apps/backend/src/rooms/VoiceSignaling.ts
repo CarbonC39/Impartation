@@ -9,7 +9,7 @@ export class VoiceSignaling {
   constructor(private state: SpaceState, private config: VoiceConfig,
     private clientById: (id: string) => SpaceClient | undefined) {}
 
-  private key(a: string, b: string) { return [a, b].sort().join(':'); }
+  private key(a: string, b: string) { return JSON.stringify([a, b].sort()); }
   private eligible(a: string, b: string, radius: number) {
     return a !== b && canHear(this.state.players.get(a), this.state.players.get(b), radius) &&
       Boolean(this.clientById(a) && this.clientById(b));
@@ -17,8 +17,10 @@ export class VoiceSignaling {
   private count(id: string) { return [...this.pairs.values()].filter(pair => pair.a === id || pair.b === id).length; }
   private remove(pair: Pair) {
     this.pairs.delete(this.key(pair.a, pair.b));
-    this.clientById(pair.a)?.send('voiceEnd', { sessionId: pair.b, peerId: pair.b, connectionId: pair.connectionId });
-    this.clientById(pair.b)?.send('voiceEnd', { sessionId: pair.a, peerId: pair.a, connectionId: pair.connectionId });
+    if (this.state.players.get(pair.a)?.connected && this.state.players.get(pair.a)?.voiceEnabled)
+      this.clientById(pair.a)?.send('voiceEnd', { sessionId: pair.b, peerId: pair.b, connectionId: pair.connectionId });
+    if (this.state.players.get(pair.b)?.connected && this.state.players.get(pair.b)?.voiceEnabled)
+      this.clientById(pair.b)?.send('voiceEnd', { sessionId: pair.a, peerId: pair.a, connectionId: pair.connectionId });
   }
   setEnabled(id: string, enabled: boolean) {
     const player = this.state.players.get(id);
@@ -27,9 +29,9 @@ export class VoiceSignaling {
     if (!enabled) this.clear(id);
   }
   clear(id: string) {
-    for (const pair of [...this.pairs.values()]) if (pair.a === id || pair.b === id) this.remove(pair);
     const player = this.state.players.get(id);
     if (player) player.voiceEnabled = false;
+    for (const pair of [...this.pairs.values()]) if (pair.a === id || pair.b === id) this.remove(pair);
   }
   offer(sender: string, input: VoiceOffer) {
     if (sender >= input.peerId || !this.eligible(sender, input.peerId, this.config.connectRadius)) return false;

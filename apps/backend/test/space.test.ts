@@ -96,6 +96,8 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     receiver.onMessage('voiceOffer', value => receivedOffers.push(value));
     receiver.onMessage('voiceIceCandidate', value => receivedCandidates.push(value));
     receiver.onMessage('voiceEnd', value => ended.push(value.sessionId));
+    initiator.onMessage('voiceAnswer', () => {});
+    initiator.onMessage('voiceEnd', () => {});
     assert.equal(await initiator.request('voiceOffer', offer), false);
     assert.equal(await initiator.request('voiceEnabled', { enabled: true }), true);
     assert.equal(await receiver.request('voiceEnabled', { enabled: true }), true);
@@ -118,6 +120,9 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const [nextSender, nextTarget] = initiator.sessionId < thirdId ? [initiator, carol] : [carol, initiator];
     assert.equal(await nextSender.request('voiceOffer', { peerId: nextTarget.sessionId,
       connectionId: '550e8400-e29b-41d4-a716-446655440001', sdp: 'blocked' }), false);
+    b.x = a.x + 175;
+    await delay(1100);
+    assert.equal(ended.length, 0);
     b.x = a.x + 500;
     await until(() => ended.includes(initiator.sessionId), 2500);
     assert.equal(await initiator.request('voiceOffer', offer), false);
@@ -310,6 +315,8 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
     const sessionId = alice.sessionId;
+    assert.equal(await alice.request('voiceEnabled', { enabled: true }), true);
+    assert.equal(player.voiceEnabled, true);
     alice.send('input', { x: 1, y: 0 });
     const initialX = player.x;
     await until(() => player.x > initialX);
@@ -317,10 +324,12 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
     authoritative.clients.find(client => client.sessionId === sessionId)!.leave(1001, 'test network drop');
     await until(() => player.connected === false);
+    assert.equal(player.voiceEnabled, false);
     await delay(100);
     assert.deepEqual({ x: player.x, y: player.y }, position);
     await reconnected;
     await until(() => player.connected);
+    assert.equal(player.voiceEnabled, false);
     assert.equal(alice.sessionId, sessionId);
     assert.equal(authoritative.state.players.get(sessionId), player);
     assert.deepEqual({ x: player.x, y: player.y }, position);
