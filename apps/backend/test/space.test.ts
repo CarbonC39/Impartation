@@ -14,6 +14,7 @@ process.env.MAP_REGISTRY_PATH = fixture.registryPath;
 process.env.EXTERNAL_TOOLS = JSON.stringify({
   'shared-canvas': { url: 'https://board.example/boards/workspace' },
 });
+process.env.VOICE_MAX_PEERS = '1';
 const { server } = await import('../src/app.config.js');
 const { db } = await import('../src/db.js');
 const { setRole } = await import('../src/identity.js');
@@ -70,6 +71,59 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.deepEqual(await response.json(), [
       { resourceId: 'shared-canvas', url: 'https://board.example/boards/workspace' },
     ]);
+  });
+  test('voice config is public and includes bounded proximity and ICE settings', async () => {
+    const response = await fetch(endpoint + '/api/voice-config');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await response.json(), { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      connectRadius: 160, disconnectRadius: 192, maxPeers: 1, scanIntervalMs: 1000 });
+  });
+  test('voice signaling requires opt-in, server proximity, same map and pair capacity', async () => {
+    const alice = await join('VoiceAlice');
+    const bob = await join('VoiceBob');
+    const carol = await join('VoiceCarol');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const a = authoritative.state.players.get(alice.sessionId)!;
+    const b = authoritative.state.players.get(bob.sessionId)!;
+    const c = authoritative.state.players.get(carol.sessionId)!;
+    const [initiator, receiver] = alice.sessionId < bob.sessionId ? [alice, bob] : [bob, alice];
+    const connectionId = '550e8400-e29b-41d4-a716-446655440000';
+    const offer = { peerId: receiver.sessionId, connectionId, sdp: 'test-offer' };
+    const receivedOffers: { sessionId: string; sdp: string }[] = [];
+    const receivedCandidates: { sessionId: string; candidate: string }[] = [];
+    const ended: string[] = [];
+    receiver.onMessage('voiceOffer', value => receivedOffers.push(value));
+    receiver.onMessage('voiceIceCandidate', value => receivedCandidates.push(value));
+    receiver.onMessage('voiceEnd', value => ended.push(value.sessionId));
+    assert.equal(await initiator.request('voiceOffer', offer), false);
+    assert.equal(await initiator.request('voiceEnabled', { enabled: true }), true);
+    assert.equal(await receiver.request('voiceEnabled', { enabled: true }), true);
+    assert.equal(await carol.request('voiceEnabled', { enabled: true }), true);
+    assert.equal(await initiator.request('voiceOffer', { ...offer, peerId: 'missing' }), false);
+    b.x = a.x + 500;
+    assert.equal(await initiator.request('voiceOffer', offer), false);
+    b.x = a.x; b.mapId = 'other-map';
+    assert.equal(await initiator.request('voiceOffer', offer), false);
+    b.mapId = a.mapId;
+    assert.equal(await initiator.request('voiceOffer', offer), true);
+    await until(() => receivedOffers.length === 1);
+    assert.equal(receivedOffers[0]?.sessionId, initiator.sessionId);
+    assert.equal(await receiver.request('voiceAnswer', { peerId: initiator.sessionId, connectionId, sdp: 'answer' }), true);
+    initiator.send('voiceIceCandidate', { peerId: receiver.sessionId, connectionId, candidate: 'candidate:1',
+      sdpMid: null, sdpMLineIndex: 0 });
+    await until(() => receivedCandidates.length === 1);
+    assert.equal(receivedCandidates[0]?.sessionId, initiator.sessionId);
+    const thirdId = carol.sessionId;
+    const [nextSender, nextTarget] = initiator.sessionId < thirdId ? [initiator, carol] : [carol, initiator];
+    assert.equal(await nextSender.request('voiceOffer', { peerId: nextTarget.sessionId,
+      connectionId: '550e8400-e29b-41d4-a716-446655440001', sdp: 'blocked' }), false);
+    b.x = a.x + 500;
+    await until(() => ended.includes(initiator.sessionId), 2500);
+    assert.equal(await initiator.request('voiceOffer', offer), false);
+    assert.equal(await initiator.request('voiceEnabled', { enabled: false }), true);
+    assert.equal(authoritative.state.players.get(initiator.sessionId)?.voiceEnabled, false);
+    assert.equal(c.voiceEnabled, true);
   });
   test('two guests share the same room and avatar state; consented leave removes only that player', async () => {
     const alice = await join('Alice', 'amber');

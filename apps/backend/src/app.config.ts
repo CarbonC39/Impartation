@@ -6,7 +6,7 @@ import express from 'express';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, identityFromHeaders, ensureProfile, updateProfile } from './identity.js';
 import { joinSchema } from '@virtual-workspace/shared';
-import { config } from './config.js';
+import { config, voiceConfig } from './config.js';
 import { worldRegistry, renderMaps, worldAssets } from './world.js';
 import { loadWebTools } from './interactions/web/config.js';
 
@@ -31,6 +31,7 @@ export const server = defineServer({
     });
     app.use('/api', express.json({ limit: '16kb' }));
     app.get('/api/world', (_req, res) => { res.json(worldRegistry); });
+    app.get('/api/voice-config', (_req, res) => { res.json(voiceConfig); });
     app.get('/api/maps/:id/map.json', (req, res) => {
       const map = renderMaps.get(req.params.id);
       if (!map) { res.sendStatus(404); return; }

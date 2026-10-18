@@ -14,6 +14,7 @@ type Result<T> = T extends { handler: (...args: never[]) => infer R } ? Awaited<
 type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 const protocolMatches: { [K in keyof SpaceProtocol['messages']]: Same<Payload<SpaceProtocol['messages'][K]>, Payload<SpaceRoom['messages'][K]>> } = {
   input: true, chat: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
+  voiceEnabled: true, voiceOffer: true, voiceAnswer: true, voiceIceCandidate: true, voiceEnd: true,
 };
 const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activateAction']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
   boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
