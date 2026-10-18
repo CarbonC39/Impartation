@@ -65,7 +65,7 @@ export function mountPrejoin(elements: Elements, onEnter: (plan: VoicePlan) => v
     const on = elements.micSwitch.getAttribute('aria-checked') !== 'true';
     setSwitch(on);
     setJoinWithMicrophone(on);
-    if (on) void startPreview(); else { stopPreview(); setStatus('进入后可在设置里随时开启语音。'); }
+    if (on) void startPreview(); else { stopPreview(); setStatus('进入后可点右上角麦克风键随时开麦。'); }
   });
   elements.device.addEventListener('change', () => {
     setPreferredMicrophone(elements.device.value);

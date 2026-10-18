@@ -45,10 +45,24 @@ let connected = false;
 let interactions: InteractionDispatcher | undefined;
 let actions: CharacterActions | undefined;
 let voice: ProximityVoice | undefined;
-const voiceToggle = element<HTMLButtonElement>('voice-toggle');
-const voiceMute = element<HTMLButtonElement>('voice-mute');
-voiceToggle.addEventListener('click', () => { void voice?.toggle(); voiceToggle.blur(); });
-voiceMute.addEventListener('click', () => { voice?.toggleMute(); voiceMute.blur(); });
+const voiceMic = element<HTMLButtonElement>('voice-mic');
+const voiceDisconnect = element<HTMLButtonElement>('voice-disconnect');
+voiceMic.addEventListener('click', () => { void voice?.toggleMic(); voiceMic.blur(); });
+voiceDisconnect.addEventListener('click', () => { voice?.disable(); voiceDisconnect.blur(); });
+// Speaker button: a per-browser switch for all incoming sound, kept across visits.
+const soundToggle = element<HTMLButtonElement>('sound-toggle');
+let soundOn = readPreference('virtual-workspace-sound-off') !== 'true';
+function setSoundOn(on: boolean) {
+  soundOn = on;
+  writePreference('virtual-workspace-sound-off', String(!on));
+  const label = on ? '关闭声音' : '开启声音';
+  soundToggle.setAttribute('aria-pressed', String(on));
+  soundToggle.setAttribute('aria-label', label);
+  soundToggle.title = label;
+  voice?.setDeafened(!on);
+}
+setSoundOn(soundOn);
+soundToggle.addEventListener('click', () => { setSoundOn(!soundOn); soundToggle.blur(); });
 const voiceDevice = element<HTMLSelectElement>('voice-device');
 function refreshVoiceDevices() { void fillMicrophoneSelect(voiceDevice, voice?.deviceId || preferredMicrophone()); }
 voiceDevice.addEventListener('change', () => {
@@ -98,7 +112,6 @@ let namesVisible = readPreference('virtual-workspace-show-names') !== 'false';
 function setNamesVisible(visible: boolean) {
   namesVisible = visible;
   writePreference('virtual-workspace-show-names', String(visible));
-  element('toggle-names').setAttribute('aria-pressed', String(visible));
   element('names-switch').setAttribute('aria-checked', String(visible));
 }
 function setChatMode(mode: ChatMode) {
@@ -109,12 +122,10 @@ function setChatMode(mode: ChatMode) {
 }
 setNamesVisible(namesVisible);
 setChatMode(chatModes.find(mode => mode === readPreference('virtual-workspace-chat-mode')) ?? 'half');
-for (const id of ['toggle-names', 'names-switch']) {
-  element<HTMLButtonElement>(id).addEventListener('click', event => {
-    setNamesVisible(!namesVisible);
-    (event.currentTarget as HTMLButtonElement).blur();
-  });
-}
+element<HTMLButtonElement>('names-switch').addEventListener('click', event => {
+  setNamesVisible(!namesVisible);
+  (event.currentTarget as HTMLButtonElement).blur();
+});
 document.querySelectorAll<HTMLButtonElement>('[data-chat-mode]').forEach(button => button.addEventListener('click', () => {
   const mode = chatModes.find(value => value === button.dataset.chatMode);
   if (mode) setChatMode(mode);
@@ -306,7 +317,8 @@ async function enterWorld(plan: VoicePlan) {
     if (!room.state?.players) await withTimeout(new Promise<void>(resolve => room!.onStateChange.once(() => resolve())),
       10_000, '空间已连接，但没有收到地图角色数据');
     interactions = createInteractions(room);
-    voice = new ProximityVoice(room, voiceToggle, voiceMute, element('voice-status'));
+    voice = new ProximityVoice(room, voiceMic, voiceDisconnect, element('voice-status'));
+    voice.setDeafened(!soundOn);
     voice.onDeviceChange = refreshVoiceDevices;
     const actionRoom = room;
     actions = createCharacterActions(room, () => {

@@ -106,7 +106,9 @@
           <div class="map-topbar">
             <div class="hud-chip"><strong id="map-world-name">阳光大厅</strong><span id="status" role="status" aria-live="polite">连接中…</span><span id="voice-status" role="status" aria-live="polite">语音已关闭</span></div>
             <div class="hud-buttons">
-              <button id="toggle-names" class="secondary" type="button" aria-pressed="true"><svg viewBox="0 0 9 9" aria-hidden="true"><path fill="currentColor" d="M1 2h7v1H1zM1 4h5v1H1zM1 6h3v1H1z"/></svg>昵称</button>
+              <!-- Speaker and mic icons: pixelarticons (MIT, © 2019 Gerrit Halfmann), https://github.com/halfmage/pixelarticons -->
+              <button id="sound-toggle" class="secondary icon-button state-icon" type="button" aria-pressed="true" aria-label="关闭声音" title="关闭声音"><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M11 22H9v-2H7v-2h2V6H7V4h2V2h2v20Zm8 0h-6v-2h6v2Zm2-2h-2v-2h2v2ZM7 18H5v-2h2v2Zm10 0h-4v-2h4v2Zm6 0h-2V6h2v12ZM5 10H3v4h2v2H1V8h4v2Zm14 6h-2V8h2v8Zm-4-2h-2v-4h2v4ZM7 8H5V6h2v2Zm10 0h-4V6h4v2Zm4-2h-2V4h2v2Zm-2-2h-6V2h6v2Z"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13 22h-2v-2H9v-2h2V6H9V4h2V2h2v20Zm-4-4H7v-2h2v2Zm-2-8H5v4h2v2H3V8h4v2Zm10.001 5.224h-2v-2H17v-2h-1.999v-2h2v2H19v2h-1.999v2Zm3.999 0h-2v-2h2v2Zm0-4h-2v-2h2v2ZM9 8H7V6h2v2Z"/></svg></button>
+              <button id="voice-mic" class="secondary icon-button state-icon" type="button" aria-pressed="false" aria-label="开启麦克风" title="开启麦克风" disabled><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10 2h4v2h-4zM8 4h2v10H8zm2 10h4v2h-4zm4-10h2v10h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm2-6h2v6h-2zm-7 10h2v2h-2z"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10 2h4v2h-4zM8 8h2v6H8zm2 6h4v2h-4zm4-10h2v6h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm-2-2h2v2h-2zm-2-2h2v2h-2zm-2-2h2v2h-2zM8 8h2v2H8zM6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm16 16h2v2h-2zm2 2h2v2h-2zm-2-10h2v4h-2zm-7 10h2v2h-2z"/></svg></button>
               <button id="settings-toggle" class="secondary icon-button" type="button" aria-label="设置" aria-expanded="false" aria-controls="settings-panel"><svg viewBox="0 0 10 10" aria-hidden="true"><path fill="currentColor" d="M4 0h2v2h1V1h1v1h1v1H8v1h2v2H8v1h1v1H8v1H7V8H6v2H4V8H3v1H2V8H1V7h1V6H0V4h2V3H1V2h1V1h1v1h1zm0 4v2h2V4z"/></svg></button>
               <button id="leave" class="secondary" type="button">离开</button>
             </div>
@@ -117,9 +119,9 @@
             <button id="typing-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>让别人看到我正在输入</button>
             <div role="radiogroup" aria-labelledby="chat-mode-title" class="chat-modes"><span id="chat-mode-title">聊天栏背景</span><div><button type="button" role="radio" data-chat-mode="clear">透明</button><button type="button" role="radio" data-chat-mode="half">半透明</button><button type="button" role="radio" data-chat-mode="solid">实心</button></div></div>
             <h2>附近语音</h2>
-            <div class="voice-controls"><button id="voice-toggle" class="secondary" type="button" disabled>开启语音</button><button id="voice-mute" class="secondary" type="button" disabled>静音</button></div>
             <label class="mic-field">麦克风<select id="voice-device"></select></label>
-            <p class="hint">开启后请求麦克风权限，仅与同地图附近的人通话。</p>
+            <p class="hint">右上角麦克风键开麦或闭麦，喇叭键开关所有声音。首次开麦请求麦克风权限，仅与同地图附近的人通话。</p>
+            <button id="voice-disconnect" class="secondary" type="button" hidden>断开语音并释放麦克风</button>
             <button id="chat-reset" class="secondary" type="button">聊天框位置与大小复原</button>
             <button id="layout-edit" class="secondary touch-only" type="button">调整按键布局</button>
             <p class="hint">界面配色在开始页和换装页右上角调整。</p>
