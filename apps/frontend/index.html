@@ -89,6 +89,17 @@
             <ol id="outfit-slots" class="slot-grid"></ol>
             <p id="outfit-status" class="outfit-status" role="status" aria-live="polite"></p>
           </dialog>
+          <dialog id="prejoin-dialog" class="panel prejoin-dialog" aria-labelledby="prejoin-title">
+            <div class="section-heading"><h2 id="prejoin-title">进入前准备</h2><span id="prejoin-world">阳光大厅</span></div>
+            <button id="prejoin-mic" class="switch" type="button" role="switch" aria-checked="false"><span class="switch-track"></span>进入时开启麦克风</button>
+            <div id="prejoin-mic-options" class="mic-options" hidden>
+              <label class="mic-field">麦克风<select id="prejoin-device"></select></label>
+              <div class="mic-meter" aria-hidden="true"><span id="prejoin-level"></span></div>
+              <label class="check-field"><input id="prejoin-muted" type="checkbox" />进入时先静音</label>
+            </div>
+            <p id="prejoin-status" class="hint" role="status" aria-live="polite"></p>
+            <div class="prejoin-actions"><button id="prejoin-cancel" class="secondary" type="button">返回换装</button><button id="prejoin-enter" class="primary big" type="button">进入<span id="prejoin-enter-world">阳光大厅</span></button></div>
+          </dialog>
         </section>
 
         <section class="flow-screen map-screen" id="map-screen" aria-label="全屏世界地图" hidden>
@@ -103,15 +114,17 @@
           <section id="settings-panel" class="panel settings-panel" aria-label="设置" hidden>
             <h2>显示</h2>
             <button id="names-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>显示昵称</button>
+            <button id="typing-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>让别人看到我正在输入</button>
             <div role="radiogroup" aria-labelledby="chat-mode-title" class="chat-modes"><span id="chat-mode-title">聊天栏背景</span><div><button type="button" role="radio" data-chat-mode="clear">透明</button><button type="button" role="radio" data-chat-mode="half">半透明</button><button type="button" role="radio" data-chat-mode="solid">实心</button></div></div>
             <h2>附近语音</h2>
             <div class="voice-controls"><button id="voice-toggle" class="secondary" type="button" disabled>开启语音</button><button id="voice-mute" class="secondary" type="button" disabled>静音</button></div>
+            <label class="mic-field">麦克风<select id="voice-device"></select></label>
             <p class="hint">开启后请求麦克风权限，仅与同地图附近的人通话。</p>
             <button id="chat-reset" class="secondary" type="button">聊天框位置与大小复原</button>
             <button id="touch-reset" class="secondary touch-only" type="button">方向键位置复原</button>
             <p class="hint">界面配色在开始页和换装页右上角调整。</p>
           </section>
-          <div id="map-layout"><div class="map-stage"><div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><p>加载地图中…</p></div></div><div id="zone-anchor" class="zone-anchor" hidden><div id="tool-hint" class="zone-hint"><a id="tool-open" target="_blank" rel="noopener noreferrer" hidden>打开工具</a><span id="tool-status" role="status"></span></div></div><p id="zone" class="hud-chip zone-chip" role="status">当前区域：无</p></div>
+          <div id="map-layout"><div class="map-stage"><div id="game" aria-label="空间地图，使用 WASD 或方向键移动"><div class="empty-room"><p>加载地图中…</p></div></div><div id="head-overlay" class="head-overlay"></div><div id="zone-anchor" class="zone-anchor" hidden><div id="tool-hint" class="zone-hint"><a id="tool-open" target="_blank" rel="noopener noreferrer" hidden>打开工具</a><span id="tool-status" role="status"></span></div></div><p id="zone" class="hud-chip zone-chip" role="status">当前区域：无</p></div>
             <aside class="chat-card" id="chat-card" data-mode="half" aria-label="聊天"><span id="chat-resize" class="chat-resize" title="拖动调整大小" aria-hidden="true"></span><div class="chat-heading" id="chat-drag" title="拖动移动聊天框，双击复原"><h2>聊天</h2><span id="chat-unread" class="chat-unread" hidden></span><button id="chat-toggle" class="chat-toggle" type="button" aria-expanded="true" aria-controls="chat-body" aria-label="折叠聊天">收起</button></div><div id="chat-body" class="chat-body"><ol id="messages" role="log" aria-live="polite" aria-label="聊天消息"></ol><form id="chat-form"><label for="message">消息</label><div class="compose"><input id="message" maxlength="500" autocomplete="off" placeholder="Enter 发送 · 方向键仍可走动 · Esc 回到地图" required disabled /><button id="send" type="submit" class="primary" disabled>发送</button></div></form></div></aside>
             <div id="touch-controls" class="touch-controls" aria-label="方向键：按住或滑动移动，拖动中间可调整位置"><span class="touch-key touch-up" data-move="up" role="img" aria-label="向上"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1h4v4h4v4h-4v6H6V9H2V5h4z"/></svg></span><span class="touch-key touch-left" data-move="left" role="img" aria-label="向左"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1h4v4h4v4h-4v6H6V9H2V5h4z"/></svg></span><span id="touch-grip" class="touch-key touch-center" title="拖动以移动方向键" aria-label="拖动以移动方向键"><svg viewBox="0 0 8 8" aria-hidden="true"><path fill="currentColor" d="M1 1h2v2H1zM5 1h2v2H5zM1 5h2v2H1zM5 5h2v2H5z"/></svg></span><span class="touch-key touch-right" data-move="right" role="img" aria-label="向右"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1h4v4h4v4h-4v6H6V9H2V5h4z"/></svg></span><span class="touch-key touch-down" data-move="down" role="img" aria-label="向下"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1h4v4h4v4h-4v6H6V9H2V5h4z"/></svg></span></div>
           </div>

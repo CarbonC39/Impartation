@@ -4,10 +4,11 @@ import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, TICK_MS, type SpaceProtocol, type
 import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
+import type { HeadOverlay } from './headOverlay';
 
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[];
   label: Phaser.GameObjects.Text; animation: string; elapsed: number };
-type ChatBubble = { text: string; expiresAt: number; view?: Phaser.GameObjects.Text };
+type ChatBubble = { text: string; expiresAt: number };
 export type ScreenPoint = { x: number; y: number };
 export type SceneHooks = {
   zoneChanged(id: string): void;
@@ -19,6 +20,10 @@ export type SceneHooks = {
   chatInput(): MovementInput;
   /** Local display preference; read every frame so toggling needs no scene restart. */
   namesVisible(): boolean;
+  /** Whether this browser currently hears the player talking (or is itself talking, unmuted). */
+  speaking(sessionId: string): boolean;
+  /** Crisp HTML layer for bubbles, typing dots and the speaking microphone. */
+  overlay: HeadOverlay;
 };
 const BUBBLE_MS = 5000;
 const BUBBLE_CHARS = 60;
@@ -38,7 +43,6 @@ export class SpaceScene extends Phaser.Scene {
   }
   /** Show a short-lived speech bubble; plain text only, so markup is never interpreted. */
   showBubble(sessionId: string, text: string) {
-    this.bubbles.get(sessionId)?.view?.destroy();
     const chars = [...text.replace(/\s+/g, ' ')];
     const clipped = chars.length > BUBBLE_CHARS ? `${chars.slice(0, BUBBLE_CHARS).join('')}…` : chars.join('');
     this.bubbles.set(sessionId, { text: clipped, expiresAt: performance.now() + BUBBLE_MS });
@@ -91,6 +95,7 @@ export class SpaceScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
       this.hooks.zoneAnchor(undefined);
+      this.hooks.overlay.clear();
       canvas.removeEventListener('pointerdown', focusCanvas);
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', visibility);
@@ -143,18 +148,24 @@ export class SpaceScene extends Phaser.Scene {
       if (sprite.label.text !== player.name) sprite.label.setText(player.name);
       sprite.label.setVisible(namesVisible).setAlpha(player.connected ? 1 : 0.5)
         .setPosition(sprite.sprite.x, sprite.sprite.y + 1).setDepth(this.mapEntry.world.height + 1);
-      this.updateBubble(id, sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 2);
+      const camera = this.cameras.main;
+      const headY = sprite.sprite.y - avatar.groundAnchor.y - 1;
+      this.hooks.overlay.update(id, (sprite.sprite.x - camera.worldView.x) * camera.zoom, (headY - camera.worldView.y) * camera.zoom, {
+        bubble: this.bubbles.get(id)?.text,
+        typing: player.connected && player.typing && id !== this.room.sessionId,
+        speaking: player.connected && this.hooks.speaking(id),
+      });
     }
     const now = performance.now();
     for (const [id, bubble] of this.bubbles) {
       const visible = players.get(id)?.mapId === this.mapEntry.id;
-      if (bubble.expiresAt <= now || !visible) { bubble.view?.destroy(); this.bubbles.delete(id); }
+      if (bubble.expiresAt <= now || !visible) this.bubbles.delete(id);
     }
     for (const [id, sprite] of this.sprites) {
       if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) {
         for (const layer of sprite.layers) layer.destroy();
         sprite.label.destroy(); this.sprites.delete(id);
-        this.bubbles.get(id)?.view?.destroy(); this.bubbles.delete(id);
+        this.bubbles.delete(id); this.hooks.overlay.remove(id);
       }
     }
     const ownPlayer = players.get(this.room.sessionId);
@@ -186,15 +197,6 @@ export class SpaceScene extends Phaser.Scene {
       this.lastInput = serialized;
       this.inputElapsed = 0;
     }
-  }
-  private updateBubble(id: string, x: number, headY: number) {
-    const bubble = this.bubbles.get(id);
-    if (!bubble) return;
-    bubble.view ??= this.add.text(0, 0, bubble.text, {
-      fontSize: '12px', color: '#4a3d60', backgroundColor: '#fffaf3f0', padding: { x: 6, y: 3 },
-      align: 'center', wordWrap: { width: 180, useAdvancedWrap: true },
-    }).setOrigin(0.5, 1).setScale(1 / this.cameras.main.zoom);
-    bubble.view.setPosition(x, headY).setDepth(this.mapEntry.world.height + 2);
   }
   private updateZoneAnchor(zoneId: string) {
     const zone = zoneId ? this.mapEntry.world.zones.find(item => item.id === zoneId) : undefined;

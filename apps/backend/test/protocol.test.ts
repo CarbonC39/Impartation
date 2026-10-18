@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, boardPostSchema,
+import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, typingSchema, boardPostSchema,
   boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES,
   canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema } from '@virtual-workspace/shared';
 
@@ -69,6 +69,9 @@ for (const [name, value] of [
 
 test('chat trims whitespace, allows 500 characters and keeps markup as plain text', () => {
   assert.deepEqual(chatSchema.parse({ text: ' <b>你好</b> ' }), { text: '<b>你好</b>' });
+  assert.deepEqual(typingSchema.parse({ typing: true }), { typing: true });
+  assert.equal(typingSchema.safeParse({ typing: 1 }).success, false);
+  assert.equal(typingSchema.safeParse({ typing: true, sessionId: 'forged' }).success, false);
   assert.equal(chatSchema.parse({ text: 'x'.repeat(500) }).text.length, 500);
 });
 for (const [name, value] of [

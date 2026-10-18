@@ -310,6 +310,25 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await until(() => received.length === 2);
     assert.equal(received[1], 'after cooldown');
   });
+  test('typing is a server-held hint that sending chat or expiry clears', async () => {
+    const alice = await join('Alice');
+    const bob = await join('Bob');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const seen = () => bob.state.players.get(alice.sessionId)?.typing;
+    alice.send('typing', { typing: true });
+    await until(() => seen() === true);
+    alice.send('typing', { typing: false });
+    await until(() => seen() === false);
+    alice.send('typing', { typing: true });
+    await until(() => seen() === true);
+    alice.send('chat', { text: 'done typing' });
+    await until(() => seen() === false);
+    alice.send('typing', { typing: true });
+    await until(() => seen() === true);
+    // Expire the hint without waiting the full timeout; the room's 1s clock clears it.
+    (authoritative as unknown as { typingUntil: Map<string, number> }).typingUntil.set(alice.sessionId, Date.now() - 1);
+    await until(() => seen() === false, 2500);
+  });
   test('unexpected disconnect reconnects with the same identity and position', async () => {
     const alice = await join('Alice');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
@@ -696,6 +715,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     ['fractional direction', 'input', { x: 0.5, y: 0 }],
     ['blank chat', 'chat', { text: '   ' }],
     ['oversized chat', 'chat', { text: 'x'.repeat(501) }],
+    ['non-boolean typing', 'typing', { typing: 'yes' }],
   ] as const) test(`malformed ${name} disconnects the sender and releases their seat`, async () => {
     const alice = await join('Alice');
     const bob = await join('Bob');
@@ -705,7 +725,8 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     if (type === 'input') {
       const input = inputSchemaTestPayload(payload);
       alice.send('input', input);
-    } else alice.send('chat', payload);
+    } else if (type === 'typing') alice.send('typing', payload as unknown as { typing: boolean });
+    else alice.send('chat', payload as { text: string });
     assert.equal(await left, 4002);
     await until(() => !authoritative.state.players.has(alice.sessionId));
     await until(() => bob.state.players.size === 1);

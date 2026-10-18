@@ -1,31 +1,18 @@
 import type { Room } from '@colyseus/sdk';
 import { canHear, voiceConfigSchema, type SpaceProtocol, type VoiceConfig, type VoiceIceCandidate,
   type VoiceSignal, type VoiceOffer, type VoiceAnswer, type VoiceEnd } from '@virtual-workspace/shared';
+import { audioContext, captureErrorMessage, LevelMeter, microphoneUnavailableReason, openMicrophone,
+  setPreferredMicrophone, SPEAKING_HOLD_MS, SPEAKING_LEVEL, streamDevice } from './microphone';
 
 type Peer = { id: string; connectionId: string; connection: RTCPeerConnection; audio: HTMLAudioElement;
   candidates: RTCIceCandidateInit[]; localCandidates: RTCIceCandidateInit[]; ready: boolean };
 
 function voiceCapabilityError(): string | undefined {
-  if (!window.isSecureContext) {
-    return `当前地址 ${window.location.origin} 不是安全上下文；本机请用 http://127.0.0.1:5173/ 或 http://localhost:5173/，其它设备需 HTTPS`;
-  }
-  if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
-    return '当前浏览器未提供麦克风 API（getUserMedia）；请检查浏览器或内嵌预览的麦克风设置';
-  }
+  const microphone = microphoneUnavailableReason();
+  if (microphone) return microphone;
   if (typeof window.RTCPeerConnection !== 'function') {
     return '当前浏览器未提供 WebRTC（RTCPeerConnection）；请检查浏览器或内嵌预览的 WebRTC 设置';
   }
-}
-
-function captureErrorMessage(error: unknown): string {
-  if (error instanceof DOMException) {
-    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-      return '麦克风权限被拒绝；请在地址栏的站点权限中允许麦克风后重试';
-    }
-    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') return '未找到麦克风设备';
-    if (error.name === 'NotReadableError' || error.name === 'TrackStartError') return '麦克风无法读取，请检查设备是否被其它程序占用';
-  }
-  return error instanceof Error ? error.message : String(error);
 }
 
 export class ProximityVoice {
@@ -40,6 +27,11 @@ export class ProximityVoice {
   private disposed = false;
   private error = '';
   private unsubscribers: (() => void)[] = [];
+  private meters = new Map<string, LevelMeter>();
+  private loudAt = new Map<string, number>();
+  private levelTimer?: number;
+  /** Called after the device or enabled state changes, so pickers can follow the real device. */
+  onDeviceChange?: (deviceId: string) => void;
 
   constructor(private room: Room<SpaceProtocol>, private toggleButton: HTMLButtonElement,
     private muteButton: HTMLButtonElement, private status: HTMLElement) {
@@ -65,20 +57,25 @@ export class ProximityVoice {
 
   async toggle() {
     if (this.stream) { this.disable(); return; }
-    if (this.disposed || !this.room.connection.isOpen) return;
+    await this.enable();
+  }
+
+  /**
+   * Starts voice. A stream already opened by the pre-join check is reused, so the browser
+   * does not prompt twice; otherwise the preferred device is opened here.
+   */
+  async enable(options: { stream?: MediaStream; muted?: boolean } = {}) {
+    if (this.stream || this.disposed || !this.room.connection.isOpen) { options.stream?.getTracks().forEach(track => track.stop()); return; }
     const capabilityError = voiceCapabilityError();
-    if (capabilityError) { this.error = capabilityError; this.render(); return; }
+    if (capabilityError) { options.stream?.getTracks().forEach(track => track.stop()); this.error = capabilityError; this.render(); return; }
     const generation = ++this.generation;
     this.error = '';
     this.status.textContent = '正在请求麦克风…';
     this.toggleButton.disabled = true;
-    let captured: MediaStream | undefined;
+    let captured: MediaStream | undefined = options.stream;
     try {
       // Call from the user gesture before waiting for network configuration.
-      const capture = navigator.mediaDevices.getUserMedia({ audio: {
-        echoCancellation: true, noiseSuppression: true, autoGainControl: true,
-      }, video: false });
-      captured = await capture;
+      captured ??= await openMicrophone();
       this.configPromise ??= fetch('/api/voice-config', { signal: AbortSignal.timeout(12_000) }).then(async response => {
         if (!response.ok) throw new Error('语音配置加载失败');
         return voiceConfigSchema.parse(await response.json());
@@ -89,13 +86,12 @@ export class ProximityVoice {
         stream.getTracks().forEach(track => track.stop()); return;
       }
       this.config = config;
-      this.stream = stream;
-      stream.getAudioTracks().forEach(track => { track.enabled = !this.muted; track.addEventListener('ended', () => {
-        if (this.stream === stream) { this.disable(); this.error = '麦克风已断开'; this.render(); }
-      }); });
+      this.muted = Boolean(options.muted);
+      this.useStream(stream);
       if (!await this.room.request('voiceEnabled', { enabled: true })) throw new Error('房间拒绝开启语音');
       if (generation !== this.generation || !this.room.connection.isOpen) { this.disable(); return; }
       this.timer = window.setInterval(() => this.scan(), config.scanIntervalMs);
+      this.levelTimer = window.setInterval(() => this.sampleLevels(), 100);
       this.scan();
     } catch (error) {
       this.configPromise = undefined;
@@ -106,6 +102,57 @@ export class ProximityVoice {
       }
     }
     this.render();
+  }
+
+  /** Switches the input device; live peers get the new track without renegotiation. */
+  async setDevice(deviceId: string) {
+    setPreferredMicrophone(deviceId);
+    if (!this.stream) return;
+    const generation = this.generation;
+    try {
+      const next = await openMicrophone(deviceId);
+      if (generation !== this.generation || !this.stream) { next.getTracks().forEach(track => track.stop()); return; }
+      const previous = this.stream;
+      const track = next.getAudioTracks()[0];
+      for (const peer of this.peers.values()) {
+        for (const sender of peer.connection.getSenders()) {
+          if (sender.track?.kind === 'audio') await sender.replaceTrack(track ?? null).catch(() => {});
+        }
+      }
+      this.useStream(next);
+      previous.getTracks().forEach(item => item.stop());
+      this.error = '';
+    } catch (error) { this.error = captureErrorMessage(error); }
+    this.render();
+  }
+
+  get deviceId(): string { return this.stream ? streamDevice(this.stream) : ''; }
+
+  /** True while a player audible to this browser (or this browser itself, unmuted) is talking. */
+  isSpeaking(sessionId: string): boolean {
+    if (sessionId === this.room.sessionId && (!this.stream || this.muted)) return false;
+    return performance.now() - (this.loudAt.get(sessionId) ?? -Infinity) < SPEAKING_HOLD_MS;
+  }
+
+  private useStream(stream: MediaStream) {
+    this.stream = stream;
+    stream.getAudioTracks().forEach(track => { track.enabled = !this.muted; track.addEventListener('ended', () => {
+      if (this.stream === stream) { this.disable(); this.error = '麦克风已断开'; this.render(); }
+    }); });
+    this.setMeter(this.room.sessionId, stream);
+    this.onDeviceChange?.(streamDevice(stream));
+  }
+
+  private setMeter(id: string, stream?: MediaStream) {
+    this.meters.get(id)?.dispose();
+    this.meters.delete(id);
+    this.loudAt.delete(id);
+    if (stream) this.meters.set(id, new LevelMeter(stream));
+  }
+
+  private sampleLevels() {
+    const now = performance.now();
+    for (const [id, meter] of this.meters) if (meter.level() >= SPEAKING_LEVEL) this.loudAt.set(id, now);
   }
 
   toggleMute() {
@@ -130,10 +177,13 @@ export class ProximityVoice {
     ++this.generation;
     this.error = '';
     if (this.timer !== undefined) window.clearInterval(this.timer);
+    if (this.levelTimer !== undefined) window.clearInterval(this.levelTimer);
     this.timer = undefined;
+    this.levelTimer = undefined;
     for (const id of [...this.peers.keys()]) this.closePeer(id, true);
     this.stream?.getTracks().forEach(track => track.stop());
     this.stream = undefined;
+    this.setMeter(this.room.sessionId);
     this.muted = false;
     if (this.room.connection.isOpen) this.room.send('voiceEnabled', { enabled: false });
     this.render();
@@ -181,6 +231,8 @@ export class ProximityVoice {
     connection.ontrack = event => {
       if (this.peers.get(id) !== peer) return;
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      audioContext();
+      this.setMeter(id, audio.srcObject);
       void audio.play().then(() => { if (this.error.startsWith('浏览器阻止播放')) { this.error = ''; this.render(); } })
         .catch(() => { this.error = '浏览器阻止播放，请点击静音按钮重试'; this.render(); });
     };
@@ -289,6 +341,7 @@ export class ProximityVoice {
     const peer = this.peers.get(id);
     if (!peer) return;
     this.peers.delete(id);
+    this.setMeter(id);
     this.cooldown.set(id, Date.now() + 2000);
     peer.connection.close();
     peer.audio.pause();

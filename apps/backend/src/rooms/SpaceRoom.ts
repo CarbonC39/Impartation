@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
-import { SpaceState, Player, joinSchema, inputSchema, chatSchema, stepMovement, contains,
+import { SpaceState, Player, joinSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, contains,
   TICK_MS, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
   type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
@@ -19,6 +19,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   private identities = new Map<string, Identity>();
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
   private lastChat = new Map<string, number>();
+  private typingUntil = new Map<string, number>();
   private lastInteraction = new Map<string, number>();
   private voice = new VoiceSignaling(this.state, voiceConfig, id => this.clients.find(client => client.sessionId === id));
   private interactions = createInteractions({
@@ -46,8 +47,13 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       const now = Date.now();
       if (!player || now - (this.lastChat.get(client.sessionId) ?? 0) < 500) return;
       this.lastChat.set(client.sessionId, now);
+      this.setTyping(client.sessionId, false);
       const message: ChatMessage = { id: randomUUID(), sessionId: client.sessionId, name: player.name, text, sentAt: now };
       this.broadcast('chat', message);
+    }),
+    typing: validate(typingSchema, async (client: SpaceClient, { typing }: { typing: boolean }) => {
+      if (!await this.authorize(client)) return;
+      this.setTyping(client.sessionId, typing);
     }),
     voiceEnabled: validate(voiceEnabledSchema, async (client: SpaceClient, input: { enabled: boolean }) => {
       if (!await this.authorize(client)) return false;
@@ -78,6 +84,14 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     return value;
   }
 
+  /** Typing is only an expiring hint: chat, disconnect, leave or silence clears it. */
+  private setTyping(sessionId: string, typing: boolean) {
+    const player = this.state.players.get(sessionId);
+    const active = typing && Boolean(player?.connected);
+    if (active) this.typingUntil.set(sessionId, Date.now() + TYPING_TIMEOUT_MS); else this.typingUntil.delete(sessionId);
+    if (player && player.typing !== active) player.typing = active;
+  }
+
   private checkInteraction(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
     const player = this.state.players.get(client.sessionId);
     const current = player && worlds.get(player.mapId)?.world.zones.find(zone => contains(zone, player.x, player.y));
@@ -96,6 +110,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     for (const handler of this.interactions.registry.values()) handler.initialize?.();
     this.clock.setInterval(() => {
       this.voice.tick();
+      const now = Date.now();
+      for (const [id, until] of this.typingUntil) if (until <= now) this.setTyping(id, false);
       for (const handler of this.interactions.registry.values()) handler.tick?.();
       for (const client of this.clients) void this.authorize(client).then(value => {
         if (!value) { this.movementInputs.delete(client.sessionId); client.leave(4003, 'Identity expired'); }
@@ -139,6 +155,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   }
   onDrop(client: SpaceClient, code: number) {
     this.voice.clear(client.sessionId);
+    this.setTyping(client.sessionId, false);
     const player = this.state.players.get(client.sessionId);
     if (player) { player.connected = false; player.motion = 'idle'; }
     this.movementInputs.delete(client.sessionId);
@@ -162,6 +179,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     this.lastChat.delete(client.sessionId);
+    this.typingUntil.delete(client.sessionId);
     this.lastInteraction.delete(client.sessionId);
   }
   onDispose() { this.voice.dispose(); for (const handler of this.interactions.registry.values()) handler.dispose?.(); }

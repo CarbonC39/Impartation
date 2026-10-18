@@ -28,6 +28,7 @@ export type SpaceProtocol = {
   messages: {
     input: (client: unknown, input: MovementInput) => void;
     chat: (client: unknown, input: { text: string }) => void;
+    typing: (client: unknown, input: { typing: boolean }) => void;
     boardPost: (client: unknown, input: BoardPostInput) => InteractionResult;
     boardDelete: (client: unknown, input: BoardDeleteInput) => InteractionResult;
     pomodoro: (client: unknown, input: PomodoroActionInput) => InteractionResult;

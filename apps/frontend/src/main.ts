@@ -19,6 +19,9 @@ import { mountOutfitSlots } from './outfitSlots';
 import { ProximityVoice } from './voice';
 import { TouchPad } from './touchPad';
 import { ChatLayout } from './chatLayout';
+import { HeadOverlay } from './headOverlay';
+import { mountPrejoin, type VoicePlan } from './prejoin';
+import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -46,6 +49,12 @@ const voiceToggle = element<HTMLButtonElement>('voice-toggle');
 const voiceMute = element<HTMLButtonElement>('voice-mute');
 voiceToggle.addEventListener('click', () => { void voice?.toggle(); voiceToggle.blur(); });
 voiceMute.addEventListener('click', () => { voice?.toggleMute(); voiceMute.blur(); });
+const voiceDevice = element<HTMLSelectElement>('voice-device');
+function refreshVoiceDevices() { void fillMicrophoneSelect(voiceDevice, voice?.deviceId || preferredMicrophone()); }
+voiceDevice.addEventListener('change', () => {
+  if (voice) void voice.setDevice(voiceDevice.value); else setPreferredMicrophone(voiceDevice.value);
+});
+navigator.mediaDevices?.addEventListener?.('devicechange', refreshVoiceDevices);
 let worldRegistry: WorldRegistry | undefined;
 let renderedMap = '';
 let renderingMap = '';
@@ -72,6 +81,7 @@ function setUnread(count: number) {
   chatUnread.textContent = count > 99 ? '99+' : String(count);
 }
 setChatCollapsed(readPreference('virtual-workspace-chat-collapsed') === 'true');
+const headOverlay = new HeadOverlay(element('head-overlay'));
 const chatLayout = new ChatLayout(chatCard, element('chat-drag'), element('chat-resize'), element('messages'));
 element<HTMLButtonElement>('chat-reset').addEventListener('click', event => {
   chatLayout.reset();
@@ -115,6 +125,7 @@ settingsToggle.addEventListener('click', () => {
   const panel = element('settings-panel');
   panel.hidden = !panel.hidden;
   settingsToggle.setAttribute('aria-expanded', String(!panel.hidden));
+  if (!panel.hidden) refreshVoiceDevices();
 });
 
 function showScreen(id: string) {
@@ -234,6 +245,8 @@ function setConnected(value: boolean) {
 }
 function cleanup() {
   touchPad.clear();
+  resetTyping();
+  headOverlay.clear();
   renderGeneration++;
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
   interactions?.dispose();
@@ -254,8 +267,20 @@ function cleanup() {
   element<HTMLButtonElement>('identity-import').disabled = false;
   zone.textContent = '当前区域：无';
 }
-element<HTMLFormElement>('join-form').addEventListener('submit', async event => {
+const prejoin = mountPrejoin({
+  dialog: element<HTMLDialogElement>('prejoin-dialog'), worldLabels: [element('prejoin-world'), element('prejoin-enter-world')],
+  micSwitch: element<HTMLButtonElement>('prejoin-mic'), options: element('prejoin-mic-options'),
+  device: element<HTMLSelectElement>('prejoin-device'), level: element('prejoin-level'),
+  muted: element<HTMLInputElement>('prejoin-muted'), status: element('prejoin-status'),
+  enter: element<HTMLButtonElement>('prejoin-enter'), cancel: element<HTMLButtonElement>('prejoin-cancel'),
+}, plan => { void enterWorld(plan); });
+element<HTMLFormElement>('join-form').addEventListener('submit', event => {
   event.preventDefault();
+  if (join.disabled) return;
+  joinFeedback.textContent = '';
+  prejoin.open(selectedWorld);
+});
+async function enterWorld(plan: VoicePlan) {
   showScreen('map-screen');
   join.disabled = true;
   joinFeedback.textContent = '';
@@ -276,6 +301,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
       10_000, '空间已连接，但没有收到地图角色数据');
     interactions = createInteractions(room);
     voice = new ProximityVoice(room, voiceToggle, voiceMute, element('voice-status'));
+    voice.onDeviceChange = refreshVoiceDevices;
     const actionRoom = room;
     actions = createCharacterActions(room, () => {
       const mapId = actionRoom.state.players.get(actionRoom.sessionId)?.mapId;
@@ -308,13 +334,19 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     leave.disabled = false;
     status.textContent = `已进入空间 · ${room.sessionId}`;
     join.blur();
+    if (plan.enabled) {
+      const stream = plan.stream;
+      plan.stream = undefined;
+      void voice.enable({ ...(stream ? { stream } : {}), muted: plan.muted });
+    }
   } catch (error) {
+    plan.stream?.getTracks().forEach(track => track.stop());
     void room?.leave().catch(() => {});
     cleanup();
     showScreen('avatar-screen');
     joinFeedback.textContent = `进入失败：${error instanceof Error ? error.message : String(error)}`;
   }
-});
+}
 const renderMapSchema = z.object({ tilesets: z.array(z.object({ name: z.string(), image: z.string().optional() }).passthrough()).default([]) }).passthrough();
 async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   const entry = worldRegistry?.maps.find(map => map.id === mapId);
@@ -345,6 +377,8 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
       virtualInput: () => touchPad.read(),
       chatInput: readChatInput,
       namesVisible: () => namesVisible,
+      speaking: id => voice?.isSpeaking(id) ?? false,
+      overlay: headOverlay,
     });
     game = new Phaser.Game({
       type: Phaser.AUTO, parent: 'game', width: entry.world.width, height: entry.world.height,
@@ -386,6 +420,48 @@ window.addEventListener('keydown', event => {
   if (chatCard.classList.contains('collapsed')) setChatCollapsed(false);
   messageInput.focus();
 });
+// "Typing…" hint: sent while the chat box has text and focus, refreshed while keys keep coming,
+// and dropped after a pause. The server expires it too, so a lost "false" never sticks.
+const TYPING_REFRESH_MS = 3000;
+const TYPING_IDLE_MS = 5000;
+let shareTyping = readPreference('virtual-workspace-share-typing') !== 'false';
+let typingSent = false;
+let typingSentAt = 0;
+let typingIdle: number | undefined;
+function sendTyping(typing: boolean) {
+  if (typing === typingSent && (!typing || performance.now() - typingSentAt < TYPING_REFRESH_MS)) return;
+  typingSent = typing;
+  typingSentAt = performance.now();
+  if (connected && room?.connection.isOpen) room.send('typing', { typing });
+}
+function resetTyping() {
+  window.clearTimeout(typingIdle);
+  typingIdle = undefined;
+  typingSent = false;
+}
+function stopTyping() {
+  window.clearTimeout(typingIdle);
+  typingIdle = undefined;
+  sendTyping(false);
+}
+messageInput.addEventListener('input', () => {
+  if (!shareTyping || !messageInput.value.trim()) { stopTyping(); return; }
+  sendTyping(true);
+  window.clearTimeout(typingIdle);
+  typingIdle = window.setTimeout(stopTyping, TYPING_IDLE_MS);
+});
+messageInput.addEventListener('blur', stopTyping);
+function setShareTyping(value: boolean) {
+  shareTyping = value;
+  writePreference('virtual-workspace-share-typing', String(value));
+  element('typing-switch').setAttribute('aria-checked', String(value));
+  if (!value) stopTyping();
+}
+setShareTyping(shareTyping);
+element<HTMLButtonElement>('typing-switch').addEventListener('click', event => {
+  setShareTyping(!shareTyping);
+  (event.currentTarget as HTMLButtonElement).blur();
+});
 element<HTMLFormElement>('chat-form').addEventListener('submit', event => {
   event.preventDefault();
   if (!connected || !room) return;
@@ -393,4 +469,8 @@ element<HTMLFormElement>('chat-form').addEventListener('submit', event => {
   if (!payload.success) return;
   room.send('chat', payload.data);
   messageInput.value = '';
+  // The server clears typing when it accepts the message; keep local state in step.
+  window.clearTimeout(typingIdle);
+  typingIdle = undefined;
+  typingSent = false;
 });

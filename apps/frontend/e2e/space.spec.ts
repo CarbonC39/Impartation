@@ -19,6 +19,7 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
     await page.locator('#appearance-choices [data-appearance-item="shirt"]').click();
   }
   await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
@@ -71,7 +72,7 @@ test('voice reports missing WebRTC separately from microphone support', async ({
 });
 
 test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave', async ({ page, browser }) => {
-  test.setTimeout(30000);
+  test.setTimeout(90000);
   const bob = await browser.newPage();
   const microphone = () => {
     const typedWindow = window as Window & { voiceAudioContexts?: AudioContext[] };
@@ -89,7 +90,7 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
   try {
     await page.addInitScript(microphone);
     await bob.addInitScript(microphone);
-    await enter(page, 'VoicePeerA');
+    await enter(page, 'VoicePeerA', 'mint', () => captureRenderedScene(page));
     await enter(bob, 'VoicePeerB');
     await page.locator('#settings-toggle').click();
     await bob.locator('#settings-toggle').click();
@@ -101,8 +102,12 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
       elements.some(element => (element as HTMLAudioElement).srcObject instanceof MediaStream &&
         ((element as HTMLAudioElement).srcObject as MediaStream).getAudioTracks().length > 0)),
     { timeout: 10000 }).toBe(true);
+    // Both test tones count as speech: this browser shows a mic over itself and over the remote peer.
+    const visibleMics = () => page.locator('#head-overlay .head-mic:not([hidden])').count();
+    await expect.poll(visibleMics, { timeout: 10000 }).toBe(2);
     await bob.locator('#leave').click();
     await expect(page.locator('audio[data-voice-peer]')).toHaveCount(0, { timeout: 5000 });
+    await expect.poll(visibleMics).toBe(1);
   } finally { await bob.close(); }
 });
 
@@ -121,6 +126,65 @@ async function captureRenderedScene(page: Page) {
     };
   }, '/src/SpaceScene.ts');
 }
+
+test('pre-join check opens the microphone once, enters muted, and shows a mic over the speaking character', async ({ page }) => {
+  test.setTimeout(30000);
+  await page.addInitScript(() => {
+    const typedWindow = window as Window & { voiceCaptureCalls?: number };
+    typedWindow.voiceCaptureCalls = 0;
+    // A steady tone stands in for speech, so the level meter crosses the speaking threshold.
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => {
+      typedWindow.voiceCaptureCalls = (typedWindow.voiceCaptureCalls ?? 0) + 1;
+      const context = new AudioContext();
+      const destination = context.createMediaStreamDestination();
+      const oscillator = context.createOscillator();
+      oscillator.connect(destination);
+      oscillator.start();
+      return destination.stream;
+    } });
+  });
+  const captures = () => page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls);
+  await page.goto('/');
+  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await captureRenderedScene(page);
+  await openAvatarScreen(page);
+  await page.locator('#name').fill('VoicePrejoin');
+  await page.locator('#join').click();
+  await expect(page.locator('#prejoin-dialog')).toBeVisible();
+  expect(await captures()).toBe(0);
+  await page.locator('#prejoin-mic').click();
+  await expect(page.locator('#prejoin-mic-options')).toBeVisible();
+  await expect(page.locator('#prejoin-status')).toContainText('对着麦克风说话');
+  await expect(page.locator('#prejoin-device option')).not.toHaveCount(0);
+  await page.locator('#prejoin-muted').check();
+  await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#voice-status')).toContainText('语音已开启 · 已静音');
+  expect(await captures()).toBe(1);
+
+  const micVisible = () => page.locator('#head-overlay .head-mic:not([hidden])').count().then(count => count > 0);
+  expect(await micVisible()).toBe(false);
+  await page.locator('#settings-toggle').click();
+  await page.locator('#voice-mute').click();
+  await expect(page.locator('#voice-status')).not.toContainText('已静音');
+  await expect.poll(micVisible).toBe(true);
+  await page.locator('#voice-mute').click();
+  await expect.poll(micVisible).toBe(false);
+  await page.locator('#leave').click();
+  await expect(page.locator('#voice-status')).toContainText('语音已关闭');
+});
+
+test('pre-join check without the microphone enters with voice off and can go back', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await openAvatarScreen(page);
+  await page.locator('#join').click();
+  await expect(page.locator('#prejoin-mic')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('#prejoin-mic-options')).toBeHidden();
+  await page.locator('#prejoin-cancel').click();
+  await expect(page.locator('#prejoin-dialog')).toBeHidden();
+  await expect(page.locator('#avatar-screen')).toBeVisible();
+});
 
 test('character atlas uses configured camera zoom and seat anchors have no default furniture', async ({ page }, testInfo) => {
   const seatVisualRequests: string[] = [];
@@ -264,6 +328,7 @@ async function openAvatarScreen(page: Page) {
 async function joinSavedProfile(page: Page) {
   await openAvatarScreen(page);
   await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
@@ -542,6 +607,7 @@ test('mobile seat activation renders the character and releases occupancy when w
 });
 
 test('two browser guests render their avatars and exchange plain-text chat through the Vite proxy', async ({ page, browser }) => {
+  test.setTimeout(120000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   const bob = await browser.newPage();
@@ -554,17 +620,23 @@ test('two browser guests render their avatars and exchange plain-text chat throu
       JSON.parse(player.appearance).hair.assetId === 'hair2')).toBe(true);
     await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EBob' &&
       JSON.parse(player.appearance).top.assetId === 'shirt')).toBe(true);
-    await page.locator('#message').fill('<b>你好</b>');
+    // Typing shows three dots over Alice for Bob, and sending clears them.
+    const aliceId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const aliceTyping = bob.locator(`#head-overlay [data-session-id="${aliceId}"] .head-typing`);
+    await page.locator('#message').pressSequentially('<b>你好</b>');
+    await expect(aliceTyping).toBeVisible();
+    await expect(page.locator(`#head-overlay [data-session-id="${aliceId}"] .head-typing`)).toBeHidden();
     await page.locator('#send').click();
     await expect(bob.locator('#messages')).toContainText('E2EAlice：<b>你好</b>');
+    await expect(aliceTyping).toBeHidden();
     await expect(bob.locator('#messages b')).toHaveCount(0);
     await expect(page.locator('#message')).toHaveValue('');
     await bob.locator('#message').fill('收到');
     await bob.locator('#send').click();
     await expect(page.locator('#messages')).toContainText('E2EBob：收到');
-    // Speech bubbles render above the speaker as plain Phaser text.
-    await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.children.list
-      .some(child => child instanceof Object && 'text' in child && child.text === '收到'))).toBe(true);
+    // Speech bubbles render above the speaker as plain HTML text, crisp on high-DPI screens.
+    await expect(page.locator('#head-overlay .head-bubble', { hasText: '收到' })).toBeVisible();
+    await expect(page.locator('#head-overlay .head-bubble b')).toHaveCount(0);
     await page.locator('#chat-toggle').click();
     await expect(page.locator('#chat-body')).toBeHidden();
     await expect(page.locator('#chat-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -576,6 +648,14 @@ test('two browser guests render their avatars and exchange plain-text chat throu
     await expect(page.locator('#chat-body')).toBeVisible();
     await expect(page.locator('#chat-unread')).toBeHidden();
     await expect(page.locator('#messages')).toContainText('E2EBob：折叠时');
+
+    // Turning off "let others see I'm typing" stops sending the hint.
+    await page.locator('#settings-toggle').click();
+    await page.locator('#typing-switch').click();
+    await expect(page.locator('#typing-switch')).toHaveAttribute('aria-checked', 'false');
+    await page.locator('#message').pressSequentially('悄悄打字');
+    await bob.waitForTimeout(800);
+    await expect(aliceTyping).toBeHidden();
     expect(errors).toEqual([]);
   } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
@@ -956,6 +1036,7 @@ test('wardrobe previews items, keeps three named outfit slots and remembers disp
   await page.keyboard.press('Escape');
 
   await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'half');
   await page.locator('#settings-toggle').click();
