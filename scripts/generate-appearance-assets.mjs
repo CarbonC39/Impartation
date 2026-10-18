@@ -15,7 +15,9 @@ for (const category of categories) {
   try { files = await readdir(folder); } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
-  const pngFiles = files.filter(file => file.toLowerCase().endsWith('.png')).sort();
+  // Numeric-aware order, so hair10 follows hair9 in the wardrobe.
+  const pngFiles = files.filter(file => file.toLowerCase().endsWith('.png'))
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   const ids = pngFiles.map(file => file.slice(0, -4));
   for (const [index, id] of ids.entries()) {
     if (!/^[\p{L}\p{N}_-]+$/u.test(id)) throw new Error(`Invalid character asset filename: ${category}/${id}.png`);

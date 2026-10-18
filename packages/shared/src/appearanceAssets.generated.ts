@@ -15,7 +15,9 @@ export const APPEARANCE_ASSETS = {
     "hair6",
     "hair7",
     "hair8",
-    "hair9"
+    "hair9",
+    "hair10",
+    "hair11"
   ],
   "top": [
     "none",
@@ -40,7 +42,8 @@ export const APPEARANCE_ASSETS = {
   "accessories": [
     "none",
     "accessories",
-    "beanie"
+    "beanie",
+    "glasses"
   ]
 } as const;
 export const APPEARANCE_ASSET_PATHS = {
@@ -55,6 +58,8 @@ export const APPEARANCE_ASSET_PATHS = {
   "hair7": "/characters/hair/hair7.png",
   "hair8": "/characters/hair/hair8.png",
   "hair9": "/characters/hair/hair9.png",
+  "hair10": "/characters/hair/hair10.PNG",
+  "hair11": "/characters/hair/hair11.PNG",
   "priest": "/characters/top/priest.PNG",
   "school_uniform": "/characters/top/school_uniform.png",
   "shirt": "/characters/top/shirt.png",
@@ -67,5 +72,6 @@ export const APPEARANCE_ASSET_PATHS = {
   "skirt": "/characters/bottom/skirt.png",
   "shoes": "/characters/shoes/shoes.png",
   "accessories": "/characters/accessories/accessories.png",
-  "beanie": "/characters/accessories/beanie.PNG"
+  "beanie": "/characters/accessories/beanie.PNG",
+  "glasses": "/characters/accessories/glasses.PNG"
 } as const;
