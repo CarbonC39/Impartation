@@ -16,8 +16,9 @@ for (const category of categories) {
     if (error?.code !== 'ENOENT') throw error;
   }
   // Numeric-aware order, so hair10 follows hair9 in the wardrobe.
-  const pngFiles = files.filter(file => file.toLowerCase().endsWith('.png'))
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  const pngFiles = files.filter(file =>
+    file.toLowerCase().endsWith('.png') && /^[\p{L}\p{N}_-]+\.png$/iu.test(file)
+  ).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   const ids = pngFiles.map(file => file.slice(0, -4));
   for (const [index, id] of ids.entries()) {
     if (!/^[\p{L}\p{N}_-]+$/u.test(id)) throw new Error(`Invalid character asset filename: ${category}/${id}.png`);

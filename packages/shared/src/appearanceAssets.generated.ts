@@ -38,7 +38,8 @@ export const APPEARANCE_ASSETS = {
   ],
   "shoes": [
     "none",
-    "shoes"
+    "shoes",
+    "shortshoe"
   ],
   "accessories": [
     "none",
@@ -73,6 +74,7 @@ export const APPEARANCE_ASSET_PATHS = {
   "shorts": "/characters/bottom/shorts.png",
   "skirt": "/characters/bottom/skirt.png",
   "shoes": "/characters/shoes/shoes.png",
+  "shortshoe": "/characters/shoes/shortshoe.png",
   "accessories": "/characters/accessories/accessories.png",
   "beanie": "/characters/accessories/beanie.PNG",
   "glasses": "/characters/accessories/glasses.PNG"
