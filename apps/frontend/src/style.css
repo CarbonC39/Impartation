@@ -199,11 +199,13 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .map-topbar > * { pointer-events: auto; }
 .map-topbar strong { font-size: 18px; font-weight: 900; }
 #status { color: var(--ink2); overflow-wrap: anywhere; }
+#voice-status { color: var(--ink2); overflow-wrap: anywhere; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 #toggle-names { display: inline-flex; align-items: center; gap: 6px; }
 .zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
 .settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .settings-panel h2 { font-size: 16px; }
+.voice-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .chat-modes { display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700; }
 .chat-modes > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .chat-modes button { min-height: 36px; padding: 4px; font-size: 13px; }
@@ -276,6 +278,7 @@ button[data-key]::before { content: attr(data-key); position: absolute; left: 4p
   .theme-custom-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .avatar-actions .big { flex: 1; }
   .map-topbar { top: 10px; left: 10px; right: 10px; flex-direction: column; }
+  .map-topbar > .hud-chip { max-width: calc(100vw - 20px); flex-wrap: wrap; gap: 6px 10px; }
   .hud-buttons { justify-content: flex-start; }
   .zone-chip { top: 118px; left: 10px; }
   .settings-panel { top: 118px; right: 10px; }

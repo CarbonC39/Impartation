@@ -23,6 +23,78 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
   await expect(page.locator('#game canvas')).toBeVisible();
 }
 
+test('voice requests microphone only after opt-in and clears controls on leave', async ({ page }) => {
+  await page.addInitScript(() => {
+    const typedWindow = window as Window & { voiceCaptureCalls?: number };
+    typedWindow.voiceCaptureCalls = 0;
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => {
+      typedWindow.voiceCaptureCalls = (typedWindow.voiceCaptureCalls ?? 0) + 1;
+      return new MediaStream();
+    } });
+  });
+  await enter(page, 'VoiceBrowser');
+  expect(await page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls)).toBe(0);
+  await expect(page.locator('#voice-status')).toContainText('语音已关闭');
+  await page.locator('#settings-toggle').click();
+  await page.locator('#voice-toggle').click();
+  await expect(page.locator('#voice-status')).toContainText('语音已开启');
+  expect(await page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls)).toBe(1);
+  await page.locator('#voice-mute').click();
+  await expect(page.locator('#voice-status')).toContainText('已静音');
+  await page.locator('#leave').click();
+  await expect(page.locator('#voice-status')).toContainText('语音已关闭');
+  await expect(page.locator('#voice-toggle')).toBeDisabled();
+});
+
+test('voice shows microphone permission errors and stays disabled', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true,
+      value: async () => { throw new DOMException('Permission denied', 'NotAllowedError'); } });
+  });
+  await enter(page, 'VoiceDenied');
+  await page.locator('#settings-toggle').click();
+  await page.locator('#voice-toggle').click();
+  await expect(page.locator('#voice-status')).toContainText('语音错误：Permission denied');
+  await expect(page.locator('#voice-toggle')).toBeEnabled();
+  await expect(page.locator('#voice-mute')).toBeDisabled();
+});
+
+test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave', async ({ page, browser }) => {
+  test.setTimeout(30000);
+  const bob = await browser.newPage();
+  const microphone = () => {
+    const typedWindow = window as Window & { voiceAudioContexts?: AudioContext[] };
+    typedWindow.voiceAudioContexts = [];
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => {
+      const context = new AudioContext();
+      const destination = context.createMediaStreamDestination();
+      const oscillator = context.createOscillator();
+      oscillator.connect(destination);
+      oscillator.start();
+      typedWindow.voiceAudioContexts?.push(context);
+      return destination.stream;
+    } });
+  };
+  try {
+    await page.addInitScript(microphone);
+    await bob.addInitScript(microphone);
+    await enter(page, 'VoicePeerA');
+    await enter(bob, 'VoicePeerB');
+    await page.locator('#settings-toggle').click();
+    await bob.locator('#settings-toggle').click();
+    await page.locator('#voice-toggle').click();
+    await bob.locator('#voice-toggle').click();
+    await expect(page.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
+    await expect(bob.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
+    await expect.poll(() => page.locator('audio[data-voice-peer]').evaluateAll(elements =>
+      elements.some(element => (element as HTMLAudioElement).srcObject instanceof MediaStream &&
+        ((element as HTMLAudioElement).srcObject as MediaStream).getAudioTracks().length > 0)),
+    { timeout: 10000 }).toBe(true);
+    await bob.locator('#leave').click();
+    await expect(page.locator('audio[data-voice-peer]')).toHaveCount(0, { timeout: 5000 });
+  } finally { await bob.close(); }
+});
+
 type RenderingWindow = Window & { sceneUnderTest?: SpaceScene };
 
 async function captureRenderedScene(page: Page) {
