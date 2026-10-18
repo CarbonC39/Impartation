@@ -295,7 +295,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 项目 `/api` JSON parser 的请求体限制为 16KB；auth 路由在它之前交给 Better Auth 处理。Colyseus 自身提供 matchmaking 与 WebSocket 路由。`VITE_SERVER_URL` 仅改变 Colyseus 连接目标，身份、地图和工具 API 始终请求当前页面同源 `/api`；改变连接地址时需确保两侧服务使用一致的身份和地图配置。
 
-开发时 [vite.config.ts](../apps/frontend/vite.config.ts) 代理 `/api`、`/health`、`/matchmake` 和 Colyseus WebSocket。Vite 的 publicDir 指向根 assets，构建也会复制其中的资源；运行时地图选择仍通过后端目录。生产环境 `npm start` 只启动 backend，前端静态产物需单独托管；registry、地图、tileset 和图片文件也必须随后端部署。
+开发时 [vite.config.ts](../apps/frontend/vite.config.ts) 代理 `/api`、`/health`、`/matchmake` 和 Colyseus WebSocket。Vite 的 publicDir 指向根 assets，构建也会复制其中的资源；运行时地图选择仍通过后端目录。生产环境默认由独立服务托管前端；设置 `FRONTEND_DIST_PATH` 后，backend 同端口提供该目录中的静态文件，Docker 镜像采用此方式。registry、地图、tileset 和图片文件必须随后端部署。
 
 当前部署模型为单后端实例和本地 SQLite。房间状态、BoardStore 通知和配置索引都在进程内；直接增加多个进程无法保留现有跨房间共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
 
@@ -313,6 +313,6 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | interaction handler | `space.test.ts` / `db.test.ts`；身份、权限、位置、限流和持久化范围 |
 | presentation / 清理 | `architecture.test.ts` / `web-tools.test.ts` / 浏览器用例；显式打开、策略选择、手动外链和离开清理 |
 
-`npm run check` 执行类型检查、Node 测试和构建；`npm run test:e2e` 使用独立开发服务、内存数据库和临时多地图 fixture。测试世界不向默认示例地图添加测试 Portal。第三方页面用替身验证展示契约，不验证真实编辑、绘画或同步播放。浏览器测试当前只覆盖 Chromium，触屏移动、其它浏览器和弱网络压力仍需额外验证；仓库尚无 CI 配置。
+`npm run check` 执行类型检查、Node 测试和构建；GitHub Actions 在每次 push 上运行此命令，`main` 检查通过后构建并发布多架构镜像和 Release。`npm run test:e2e` 使用独立开发服务、内存数据库和临时多地图 fixture，尚未纳入 CI。测试世界不向默认示例地图添加测试 Portal。第三方页面用替身验证展示契约，不验证真实编辑、绘画或同步播放。浏览器测试当前只覆盖 Chromium，触屏移动、其它浏览器和弱网络压力仍需额外验证。
 
 排查时沿数据流定位：启动失败先检查 config、迁移和 registry；画面与碰撞不一致时分别检查渲染 JSON 与 `WorldMap`；请求被拒绝时检查已验证身份、真实 mapId/位置、资源匹配和限流；切换后出现旧界面时检查 handler 清理与异步 generation 检查。工具页面自身的登录或协作问题应在对应服务中定位。

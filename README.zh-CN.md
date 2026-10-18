@@ -49,7 +49,20 @@ npm run dev
 
 根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。地图契约与渲染边界见[地图制作](docs/tiled.md)。
 
-生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。前端单独托管，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
+生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。单独托管前端时，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket；下方 Docker 镜像则在同一端口提供前后端。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
+
+[GitHub Actions 工作流](.github/workflows/build-release.yml)在每次 push 后执行 `npm run check`。`main` 分支检查通过后，以该提交创建并标记为 **Latest** 的 Release，附带 `virtual-workspace.tar.gz`；同时发布 `ghcr.io/carbonc39/virtualworkspace:latest` 和 `sha-<提交哈希>` 镜像，支持 `linux/amd64` 与 `linux/arm64`。压缩包包含编译后的代码与资源；解压后执行 `npm ci --omit=dev`，配置生产环境变量，将 `FRONTEND_DIST_PATH` 指向解压目录下的 `apps/frontend/dist`，再执行 `npm start`。仓库 Actions 需要 Release 和 GHCR 的写入权限；若镜像包为私有，部署主机还需拉取权限。
+
+Docker 镜像在 `2567` 端口同时提供前端、API 和 WebSocket。配置自己的 HTTPS 反向代理后，可用持久化 SQLite 卷运行：
+
+```sh
+docker run -d --name virtual-workspace --restart unless-stopped \
+  -p 127.0.0.1:2567:2567 -v virtual-workspace-data:/app/data \
+  --env-file .env.production \
+  ghcr.io/carbonc39/virtualworkspace:latest
+```
+
+按上文要求在 `.env.production` 中设置 `IDENTITY_SECRET`、`IDENTITY_BASE_URL` 和 `IDENTITY_TRUSTED_ORIGINS`，后两者填写实际公开的 HTTPS 来源。替换容器时保持 secret 不变。镜像包含仓库中的地图和角色资源；外部工具仍需单独运行。
 
 SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，需持久化并备份。HTTP Basic Auth 由部署者的代理提供。
 

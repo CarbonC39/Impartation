@@ -66,6 +66,7 @@ export const server = defineServer({
       db.prepare('SELECT 1').get();
       res.json({ status: 'ok' });
     });
+    if (config.FRONTEND_DIST_PATH) app.use(express.static(config.FRONTEND_DIST_PATH));
   },
 });
 export default server;

@@ -18,6 +18,8 @@ npm run test:e2e
 | `npm run test:e2e` | Chromium 浏览器测试 |
 | `npm run check:all` | `check` 后执行浏览器测试 |
 
+GitHub Actions 对每次 push 执行 `npm run check`；`main` 通过后发布 Release 与 amd64/arm64 Docker 镜像。浏览器测试和容器在目标主机的运行验证不在该工作流中。
+
 Playwright 自动启动独立开发服务和临时地图 registry；测试使用 5174/2569 端口，与开发服务的 5173/2567 分开。Linux 缺系统依赖时按 Playwright 提示安装，或通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定现有 Chromium。NixOS 可使用：
 
 ```sh

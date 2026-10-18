@@ -49,7 +49,20 @@ Before the first browser test run, install Chromium with `npx playwright install
 
 The root [`.env.example`](.env.example) contains configuration examples. The backend and Vite both read the root `.env`; restart services after changing it. `MAP_REGISTRY_PATH` defaults to `assets/maps/registry.json`, and map files are resolved relative to the registry. See [Tiled maps](docs/tiled.md) for the map contract and rendering limits.
 
-In production, set a random `IDENTITY_SECRET` of at least 32 characters, the public site URL in `IDENTITY_BASE_URL`, and the deployed frontend origins in `IDENTITY_TRUSTED_ORIGINS`. Host the frontend separately and use a same-origin reverse proxy for `/api`, `/matchmake`, and the Colyseus WebSocket. `VITE_SERVER_URL` only controls the Colyseus connection; identity, map, and tool configuration APIs always use same-origin `/api`.
+In production, set a random `IDENTITY_SECRET` of at least 32 characters, the public site URL in `IDENTITY_BASE_URL`, and the deployed frontend origins in `IDENTITY_TRUSTED_ORIGINS`. For a separate frontend host, use a same-origin reverse proxy for `/api`, `/matchmake`, and the Colyseus WebSocket. The Docker image below serves both frontend and backend on one port. `VITE_SERVER_URL` only controls the Colyseus connection; identity, map, and tool configuration APIs always use same-origin `/api`.
+
+The [GitHub Actions workflow](.github/workflows/build-release.yml) runs `npm run check` on every push. Successful pushes to `main` create a commit-tagged GitHub Release marked **Latest** with `virtual-workspace.tar.gz`, and publish `ghcr.io/carbonc39/virtualworkspace:latest` plus a `sha-<commit>` tag for `linux/amd64` and `linux/arm64`. The archive contains compiled code and assets; extract it, run `npm ci --omit=dev`, configure production environment variables, set `FRONTEND_DIST_PATH` to the extracted `apps/frontend/dist`, then run `npm start`. GitHub Actions needs repository permissions to write releases and GHCR packages; a private package also needs pull access on the deployment host.
+
+The Docker image serves the frontend, API, and WebSocket on port `2567`. For example, after configuring HTTPS on your own reverse proxy, run it with a persistent SQLite volume:
+
+```sh
+docker run -d --name virtual-workspace --restart unless-stopped \
+  -p 127.0.0.1:2567:2567 -v virtual-workspace-data:/app/data \
+  --env-file .env.production \
+  ghcr.io/carbonc39/virtualworkspace:latest
+```
+
+Create `.env.production` with `IDENTITY_SECRET`, `IDENTITY_BASE_URL`, and `IDENTITY_TRUSTED_ORIGINS` as described above. Use the actual public HTTPS origin for both URL variables and keep the secret stable across container replacements. The image includes the repository maps and sprites; external tools still run as separate services.
 
 Deploy SQLite with a single backend instance. The default database is `data/world.sqlite`; persist and back it up. HTTP Basic Auth, if needed, is provided by the deployer's proxy.
 

@@ -1,0 +1,94 @@
+name: Build and release
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Package compiled application
+        if: github.ref == 'refs/heads/main'
+        run: bash scripts/package-release.sh
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: compiled-application
+          path: release/virtual-workspace.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: compiled-application
+          path: release
+      - name: Image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push multi-platform image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          build-args: |
+            REPOSITORY_URL=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: |
+          tag="build-${GITHUB_SHA}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest
+          else
+            cat > release-notes.md <<EOF
+          Built from commit ${GITHUB_SHA}.
+
+          Multi-platform Docker image (linux/amd64 and linux/arm64):
+
+          ${IMAGE}:sha-${GITHUB_SHA}
+
+          The attached archive contains the compiled frontend and backend, map assets, and npm manifests. Install production dependencies with npm ci --omit=dev after extraction.
+          EOF
+            gh release create "$tag" release/virtual-workspace.tar.gz \
+              --target "$GITHUB_SHA" \
+              --title "Build ${GITHUB_SHA:0:12}" \
+              --notes-file release-notes.md \
+              --latest
+          fi
