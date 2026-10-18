@@ -190,6 +190,8 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 body.map-open .masthead, body.map-open #theme-panel { display: none !important; }
 body.map-open #app-shell { max-width: none; padding: 0; }
 .map-screen { position: fixed; inset: 0; overflow: hidden; background: #2b423e; }
+.map-screen { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.map-screen :is(input, textarea, select, #messages, .feature-panel) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 #map-layout, .map-stage, #game { position: absolute; inset: 0; }
 #game canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; }
 #game:has(canvas) .empty-room { display: none; }
@@ -238,7 +240,21 @@ button[data-key]::before { content: attr(data-key); position: absolute; left: 4p
 .animated-toggle { flex-direction: row; align-items: center; gap: 6px; padding: 6px 10px; background: var(--panel); box-shadow: var(--px-sm); font-size: 13px; }
 .animated-toggle input { width: 16px; min-height: 16px; height: 16px; box-shadow: none; }
 #object-feedback { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; color: #fff; font-size: 12px; text-shadow: 0 1px 3px #14202dcc; }
-.touch-controls { display: none; }
+/* On-screen direction pad: one pointer steers the whole pad; the centre grip drags it. */
+.touch-controls { --key: 52px; position: fixed; z-index: 5; display: none; grid-template-columns: repeat(3, var(--key)); grid-template-rows: repeat(3, var(--key)); gap: 4px;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.touch-controls * { pointer-events: none; }
+.touch-key { width: var(--key); height: var(--key); display: flex; align-items: center; justify-content: center; color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 80%, transparent); box-shadow: var(--px-sm); pointer-events: auto; }
+.touch-key.pressed { background: var(--sel); color: var(--sel-ink); transform: translateY(2px); }
+.touch-key svg { width: 20px; height: 20px; }
+.touch-up { grid-area: 1 / 2; } .touch-left { grid-area: 2 / 1; } .touch-right { grid-area: 2 / 3; } .touch-down { grid-area: 3 / 2; }
+.touch-left svg { transform: rotate(-90deg); } .touch-right svg { transform: rotate(90deg); } .touch-down svg { transform: rotate(180deg); }
+.touch-center { grid-area: 2 / 2; cursor: grab; color: var(--ink2); background: color-mix(in srgb, var(--panel) 45%, transparent); box-shadow: none; }
+.touch-center svg { width: 14px; height: 14px; }
+.touch-controls.dragging .touch-center { cursor: grabbing; background: var(--sel); }
+.touch-controls.dragging .touch-key:not(.touch-center) { opacity: .6; }
+.touch-only { display: none; }
 
 /* Zone hint, positioned in canvas pixels by the scene. */
 .zone-anchor { position: absolute; z-index: 4; top: 0; left: 0; width: 0; height: 0; pointer-events: none; }
@@ -287,20 +303,14 @@ button[data-key]::before { content: attr(data-key); position: absolute; left: 4p
   #messages { height: min(20vh, 150px); }
   .positional-controls { left: auto; right: 10px; bottom: auto; top: 118px; transform: none; flex-direction: column; align-items: flex-end; }
   #object-feedback { position: static; transform: none; }
-  .touch-controls { position: absolute; z-index: 5; left: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); gap: 4px; }
-  .touch-key { width: 48px; min-height: 48px; padding: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--panel) 80%, transparent); }
-  .touch-key svg { width: 20px; height: 20px; }
-  .touch-up { grid-area: 1 / 2; } .touch-left { grid-area: 2 / 1; } .touch-center { grid-area: 2 / 2; box-shadow: none; }
-  .touch-right { grid-area: 2 / 3; } .touch-down { grid-area: 3 / 2; }
-  .touch-left svg { transform: rotate(-90deg); } .touch-right svg { transform: rotate(90deg); } .touch-down svg { transform: rotate(180deg); }
+  .touch-controls { --key: 48px; left: 12px; bottom: 12px; display: grid; }
+  .touch-only { display: block; }
+  .compose input { font-size: 16px; } /* iOS zooms into inputs below 16px on focus. */
   .tv-window { width: calc(100vw - 16px); } .tv-bezel { padding: 8px; } .tv-knobs { display: none; } .tv-screen { height: min(60vh, calc(100vh - 140px)); }
 }
 @media (pointer: coarse) and (min-width: 701px) {
-  .touch-controls { position: absolute; z-index: 5; right: 16px; bottom: 16px; display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); gap: 4px; }
-  .touch-key { width: 52px; min-height: 52px; padding: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--panel) 80%, transparent); }
-  .touch-key svg { width: 20px; height: 20px; }
-  .touch-up { grid-area: 1 / 2; } .touch-left { grid-area: 2 / 1; } .touch-center { grid-area: 2 / 2; box-shadow: none; }
-  .touch-right { grid-area: 2 / 3; } .touch-down { grid-area: 3 / 2; }
-  .touch-left svg { transform: rotate(-90deg); } .touch-right svg { transform: rotate(90deg); } .touch-down svg { transform: rotate(180deg); }
+  .touch-controls { --key: 52px; right: 16px; bottom: 16px; display: grid; }
+  .touch-only { display: block; }
+  .compose input { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { button, .switch-track::after { transition: none; } }

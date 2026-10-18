@@ -17,6 +17,7 @@ import { mountThemePanel } from './theme';
 import { Wardrobe } from './wardrobe';
 import { mountOutfitSlots } from './outfitSlots';
 import { ProximityVoice } from './voice';
+import { TouchPad } from './touchPad';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -117,7 +118,7 @@ function showScreen(id: string) {
     screen.hidden = !active;
   });
   document.body.classList.toggle('map-open', id === 'map-screen');
-  if (id === 'map-screen') { element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
+  if (id === 'map-screen') { touchPad.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
   if (id === 'login-screen') renderWelcome();
 }
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -175,25 +176,13 @@ const outfits = mountOutfitSlots(element<HTMLDialogElement>('outfit-dialog'), el
 });
 element<HTMLButtonElement>('save-appearance').addEventListener('click', () => outfits.open());
 renderWelcome();
-const virtualDirections = new Set<string>();
-window.addEventListener('blur', () => virtualDirections.clear());
-document.addEventListener('visibilitychange', () => { if (document.hidden) virtualDirections.clear(); });
-document.querySelectorAll<HTMLButtonElement>('[data-move]').forEach(button => {
-  const direction = button.dataset.move;
-  button.addEventListener('pointerdown', event => {
-    event.preventDefault();
-    if (direction) virtualDirections.add(direction);
-    button.setPointerCapture(event.pointerId);
-  });
-  const release = () => { if (direction) virtualDirections.delete(direction); };
-  button.addEventListener('pointerup', release);
-  button.addEventListener('pointercancel', release);
-  button.addEventListener('lostpointercapture', release);
+const touchPad = new TouchPad(element('touch-controls'), element('touch-grip'));
+window.addEventListener('blur', () => touchPad.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) touchPad.clear(); });
+element<HTMLButtonElement>('touch-reset').addEventListener('click', event => {
+  touchPad.resetPosition();
+  (event.currentTarget as HTMLButtonElement).blur();
 });
-function readVirtualInput(): MovementInput {
-  return { x:Number(virtualDirections.has('right'))-Number(virtualDirections.has('left')),
-    y:Number(virtualDirections.has('down'))-Number(virtualDirections.has('up')) };
-}
 
 function showIdentity(value: Profile) {
   element('identity-status').textContent = `身份：${value.id} · ${value.role === 'admin' ? '管理员' : '成员'}`;
@@ -238,7 +227,7 @@ function setConnected(value: boolean) {
   actions?.refresh();
 }
 function cleanup() {
-  virtualDirections.clear();
+  touchPad.clear();
   renderGeneration++;
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
   interactions?.dispose();
@@ -347,7 +336,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
         if (point) zoneAnchor.style.transform = `translate(${point.x}px, ${point.y}px)`;
       },
       activate: () => { void actions?.activate(); },
-      virtualInput: readVirtualInput,
+      virtualInput: () => touchPad.read(),
       namesVisible: () => namesVisible,
     });
     game = new Phaser.Game({

@@ -669,6 +669,40 @@ test('mobile direction controls move the authoritative player and release on poi
   }
 });
 
+test('mobile direction pad steers diagonally by sliding and its grip moves the pad persistently', async ({ page }) => {
+  test.setTimeout(30000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enter(page, 'E2ETouchPad');
+  const pad = page.locator('#touch-controls');
+  const pressed = () => pad.locator('.pressed').evaluateAll(keys => keys.map(key => (key as HTMLElement).dataset.move).sort().join('+'));
+  const box = (await pad.boundingBox())!;
+  const centerX = box.x + box.width / 2, centerY = box.y + box.height / 2;
+  await page.mouse.move(centerX + 50, centerY);
+  await page.mouse.down();
+  await expect.poll(pressed).toBe('right');
+  await page.mouse.move(centerX + 50, centerY + 50);
+  await expect.poll(pressed).toBe('down+right');
+  await page.mouse.up();
+  await expect.poll(pressed).toBe('');
+  expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
+
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(200, 300, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(pressed).toBe('');
+  const moved = (await pad.boundingBox())!;
+  expect(Math.round(moved.x + moved.width / 2)).toBe(200);
+  expect(Math.round(moved.y + moved.height / 2)).toBe(300);
+  await page.locator('#leave').click();
+  await joinSavedProfile(page);
+  const restored = (await pad.boundingBox())!;
+  expect(Math.abs(restored.x - moved.x)).toBeLessThanOrEqual(1);
+  await page.locator('#settings-toggle').click();
+  await page.locator('#touch-reset').click();
+  expect((await pad.boundingBox())!.x).toBeCloseTo(box.x, 0);
+});
+
 // The browser tests deliberately use the same-origin endpoint, including its WS query string.
 test('health and Tiled assets are reachable through the dev server', async ({ request }) => {
   const response = await request.get('/health');
