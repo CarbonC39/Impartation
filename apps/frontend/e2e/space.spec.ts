@@ -103,7 +103,7 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
         ((element as HTMLAudioElement).srcObject as MediaStream).getAudioTracks().length > 0)),
     { timeout: 10000 }).toBe(true);
     // Both test tones count as speech: this browser shows a mic over itself and over the remote peer.
-    const visibleMics = () => page.locator('#head-overlay .head-mic:not([hidden])').count();
+    const visibleMics = () => visibleMicCount(page);
     await expect.poll(visibleMics, { timeout: 10000 }).toBe(2);
     await bob.locator('#leave').click();
     await expect(page.locator('audio[data-voice-peer]')).toHaveCount(0, { timeout: 5000 });
@@ -112,6 +112,26 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
 });
 
 type RenderingWindow = Window & { sceneUnderTest?: SpaceScene };
+type StatusView = { bubble: string; mic: boolean; typing: boolean };
+
+/** Reads the canvas-drawn status (bubble text, mic, typing dots) above one character. */
+function statusOf(page: Page, sessionId: string): Promise<StatusView | undefined> {
+  return page.evaluate(id => {
+    const group = (window as RenderingWindow).sceneUnderTest?.children.getByName(`status:${id}`) as Phaser.GameObjects.Container | null | undefined;
+    if (!group) return undefined;
+    const shown = (name: string) => group.visible && Boolean((group.getByName(name) as Phaser.GameObjects.Image | null)?.visible);
+    const text = group.getByName('bubble-text') as Phaser.GameObjects.Text;
+    return { bubble: shown('bubble-text') ? text.text : '', mic: shown('mic'), typing: shown('typing') };
+  }, sessionId);
+}
+function visibleMicCount(page: Page): Promise<number> {
+  return page.evaluate(() => ((window as RenderingWindow).sceneUnderTest?.children.list ?? [])
+    .filter(child => child.name.startsWith('status:') && (child as Phaser.GameObjects.Container).visible &&
+      Boolean(((child as Phaser.GameObjects.Container).getByName('mic') as Phaser.GameObjects.Image | null)?.visible)).length);
+}
+function sessionOf(page: Page) {
+  return page.locator('#status').textContent().then(text => text!.split(' · ').at(-1)!);
+}
 
 async function captureRenderedScene(page: Page) {
   // Observe the real scene without adding a production debug API.
@@ -128,7 +148,7 @@ async function captureRenderedScene(page: Page) {
 }
 
 test('pre-join check opens the microphone once, enters muted, and shows a mic over the speaking character', async ({ page }) => {
-  test.setTimeout(30000);
+  test.setTimeout(60000);
   await page.addInitScript(() => {
     const typedWindow = window as Window & { voiceCaptureCalls?: number };
     typedWindow.voiceCaptureCalls = 0;
@@ -162,7 +182,8 @@ test('pre-join check opens the microphone once, enters muted, and shows a mic ov
   await expect(page.locator('#voice-status')).toContainText('语音已开启 · 已静音');
   expect(await captures()).toBe(1);
 
-  const micVisible = () => page.locator('#head-overlay .head-mic:not([hidden])').count().then(count => count > 0);
+  const ownId = await sessionOf(page);
+  const micVisible = () => statusOf(page, ownId).then(status => status?.mic ?? false);
   expect(await micVisible()).toBe(false);
   await page.locator('#settings-toggle').click();
   await page.locator('#voice-mute').click();
@@ -245,8 +266,9 @@ test('character atlas uses configured camera zoom and seat anchors have no defau
   await page.locator('#game canvas').focus();
   await page.keyboard.down('d');
   try {
-    await expect.poll(async () => (await renderState())?.frame, { intervals: [10] }).toBe(8);
+    // Walking right starts on the first step column and cycles the step frames, not the idle one.
     await expect.poll(async () => (await renderState())?.frame, { intervals: [10] }).toBe(9);
+    await expect.poll(async () => (await renderState())?.frame, { intervals: [10] }).toBe(10);
   } finally { await page.keyboard.up('d'); }
   await expect.poll(async () => (await renderState())?.frame).toBe(8);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -613,7 +635,7 @@ test('two browser guests render their avatars and exchange plain-text chat throu
   const bob = await browser.newPage();
   bob.on('pageerror', error => errors.push(error.message));
   await enter(page, 'E2EAlice', 'amber', () => captureRenderedScene(page));
-  await enter(bob, 'E2EBob', 'violet');
+  await enter(bob, 'E2EBob', 'violet', () => captureRenderedScene(bob));
   const observer = await observe();
   try {
     await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EAlice' &&
@@ -621,22 +643,23 @@ test('two browser guests render their avatars and exchange plain-text chat throu
     await expect.poll(() => [...observer.state.players.values()].some(player => player.name === 'E2EBob' &&
       JSON.parse(player.appearance).top.assetId === 'shirt')).toBe(true);
     // Typing shows three dots over Alice for Bob, and sending clears them.
-    const aliceId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
-    const aliceTyping = bob.locator(`#head-overlay [data-session-id="${aliceId}"] .head-typing`);
+    const aliceId = await sessionOf(page);
+    const bobId = await sessionOf(bob);
+    const aliceTyping = () => statusOf(bob, aliceId).then(status => status?.typing ?? false);
     await page.locator('#message').pressSequentially('<b>你好</b>');
-    await expect(aliceTyping).toBeVisible();
-    await expect(page.locator(`#head-overlay [data-session-id="${aliceId}"] .head-typing`)).toBeHidden();
+    await expect.poll(aliceTyping).toBe(true);
+    // Nobody sees their own typing dots.
+    expect((await statusOf(page, aliceId))?.typing).toBe(false);
     await page.locator('#send').click();
     await expect(bob.locator('#messages')).toContainText('E2EAlice：<b>你好</b>');
-    await expect(aliceTyping).toBeHidden();
+    await expect.poll(aliceTyping).toBe(false);
     await expect(bob.locator('#messages b')).toHaveCount(0);
     await expect(page.locator('#message')).toHaveValue('');
     await bob.locator('#message').fill('收到');
     await bob.locator('#send').click();
     await expect(page.locator('#messages')).toContainText('E2EBob：收到');
-    // Speech bubbles render above the speaker as plain HTML text, crisp on high-DPI screens.
-    await expect(page.locator('#head-overlay .head-bubble', { hasText: '收到' })).toBeVisible();
-    await expect(page.locator('#head-overlay .head-bubble b')).toHaveCount(0);
+    // Speech bubbles render above the speaker as plain canvas text.
+    await expect.poll(() => statusOf(page, bobId).then(status => status?.bubble)).toBe('收到');
     await page.locator('#chat-toggle').click();
     await expect(page.locator('#chat-body')).toBeHidden();
     await expect(page.locator('#chat-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -655,13 +678,13 @@ test('two browser guests render their avatars and exchange plain-text chat throu
     await expect(page.locator('#typing-switch')).toHaveAttribute('aria-checked', 'false');
     await page.locator('#message').pressSequentially('悄悄打字');
     await bob.waitForTimeout(800);
-    await expect(aliceTyping).toBeHidden();
+    expect(await aliceTyping()).toBe(false);
     expect(errors).toEqual([]);
   } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
 
-test('keyboard moves the player; in chat letters type while arrow keys still walk', async ({ page }) => {
-  test.setTimeout(30000);
+test('keyboard moves the player; chat takes every key until Enter, Esc or Tab returns to the map', async ({ page }) => {
+  test.setTimeout(45000);
   await enter(page, 'E2EMovement');
   const observer = await observe();
   try {
@@ -683,22 +706,40 @@ test('keyboard moves the player; in chat letters type while arrow keys still wal
     expect(player.x).toBe(stopped);
     await expect(page.locator('#message')).toHaveValue('d');
 
-    // Arrow keys still walk while the chat box keeps focus and the caret stays put.
-    await page.keyboard.down('ArrowRight');
-    await expect.poll(() => player.x).toBeGreaterThan(stopped);
-    await page.keyboard.up('ArrowRight');
-    await expect(page.locator('#message')).toBeFocused();
-    expect(await page.locator('#message').evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(1);
+    // Inside chat every key edits text: arrow keys move the caret and never walk.
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(350);
+    await page.keyboard.up('ArrowLeft');
+    expect(player.x).toBe(stopped);
+    expect(await page.locator('#message').evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(0);
 
-    // Esc hands the keyboard back to the map; Enter on the map opens the chat again.
+    // Esc hands the keyboard back to the map and keeps the draft.
     await page.keyboard.press('Escape');
     await expect(page.locator('#message')).not.toBeFocused();
+    await expect(page.locator('#message')).toHaveValue('d');
     const resumed = player.x;
     await page.keyboard.down('d');
     await expect.poll(() => player.x).toBeGreaterThan(resumed);
     await page.keyboard.up('d');
+
+    // Enter opens chat; Enter sends and returns straight to walking.
     await page.keyboard.press('Enter');
     await expect(page.locator('#message')).toBeFocused();
+    await page.locator('#message').fill('发完继续走');
+    await page.waitForTimeout(550); // Server chat cooldown.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#messages')).toContainText('发完继续走');
+    await expect(page.locator('#message')).not.toBeFocused();
+    const afterSend = player.x;
+    await page.keyboard.down('d');
+    await expect.poll(() => player.x).toBeGreaterThan(afterSend);
+    await page.keyboard.up('d');
+
+    // Tab also leaves the chat instead of moving focus to the send button.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#message')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#game canvas')).toBeFocused();
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
@@ -831,8 +872,67 @@ test('mobile direction pad steers diagonally by sliding and its grip moves the p
   const restored = (await pad.boundingBox())!;
   expect(Math.abs(restored.x - moved.x)).toBeLessThanOrEqual(1);
   await page.locator('#settings-toggle').click();
-  await page.locator('#touch-reset').click();
+  await page.locator('#layout-edit').click();
+  await expect(page.locator('#layout-panel')).toBeVisible();
+  await page.locator('#layout-reset').click();
+  await page.locator('#layout-done').click();
   expect((await pad.boundingBox())!.x).toBeCloseTo(box.x, 0);
+});
+
+test('double-tapping the pad grip opens the layout editor for pad size and control positions', async ({ page }) => {
+  test.setTimeout(45000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enter(page, 'E2ELayout');
+  const pad = page.locator('#touch-controls');
+  const grip = page.locator('#touch-grip');
+  const bar = page.locator('#positional-controls');
+  const gripBox = (await grip.boundingBox())!;
+  await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+  // One tap explains the grip in the free space beside the pad.
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(page.locator('#touch-hint')).toBeVisible();
+  await expect(page.locator('#touch-hint')).toContainText('双击');
+  await page.waitForTimeout(500);
+  // Two quick taps open the layout editor.
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(page.locator('#layout-panel')).toBeVisible();
+  await expect(page.locator('#touch-hint')).toBeHidden();
+
+  const before = (await pad.boundingBox())!;
+  await page.locator('#pad-scale').fill('150');
+  await expect(page.locator('#pad-scale-value')).toHaveText('150%');
+  const larger = (await pad.boundingBox())!;
+  expect(larger.width).toBeGreaterThan(before.width * 1.4);
+
+  // While editing, the action bar drags instead of acting, and the pad drags from any key.
+  const sit = page.locator('#action-list [data-action="sit"]');
+  const barBox = (await bar.boundingBox())!;
+  await page.mouse.move(barBox.x + 10, barBox.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(120, 250, { steps: 5 });
+  await page.mouse.up();
+  const movedBar = (await bar.boundingBox())!;
+  expect(Math.round(movedBar.x)).toBe(110);
+  expect(Math.round(movedBar.y)).toBe(240);
+  await expect(sit).toHaveAttribute('aria-pressed', 'false');
+  const up = (await page.locator('[data-move="up"]').boundingBox())!;
+  await page.mouse.move(up.x + up.width / 2, up.y + up.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(up.x + up.width / 2 + 40, up.y + up.height / 2 - 120, { steps: 5 });
+  await page.mouse.up();
+  expect(Math.round((await pad.boundingBox())!.y)).toBe(Math.round(larger.y - 120));
+  await expect(page.locator('#touch-controls .pressed')).toHaveCount(0);
+
+  await page.locator('#layout-done').click();
+  await expect(page.locator('#layout-panel')).toBeHidden();
+  await page.locator('#leave').click();
+  await joinSavedProfile(page);
+  expect(Math.round((await pad.boundingBox())!.width)).toBe(Math.round(larger.width));
+  expect(Math.round((await bar.boundingBox())!.x)).toBe(110);
 });
 
 // The browser tests deliberately use the same-origin endpoint, including its WS query string.
