@@ -43,6 +43,8 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 工具入口浏览器测试拦截 `/api/tools` 提供固定配置，以 HTML 替身模拟工具页面，并检查目标 URL、opener 和 referrer。真实 HTTP 配置响应由 Node 集成测试验证。它们不验证真实服务的编辑、绘画与播放功能。
 
+近距离语音的浏览器检查需要在 HTTPS 或 localhost 环境下授予麦克风权限，并使用实际 STUN/TURN 配置验证同地图距离变化、断线重连和离开清理。自动化检查不验证真实麦克风权限提示、NAT 穿透、音质或多种浏览器/网络组合；这些项目需在目标部署环境手动验收。
+
 ## 隔离与排查
 
 - Node 联机测试使用 2568 端口和内存数据库；SQLite 持久化及 CLI 测试使用临时目录。

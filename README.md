@@ -24,6 +24,8 @@ Move with WASD, the arrow keys, or the on-screen direction pad. Nicknames are dr
 
 Chat messages appear in a translucent, collapsible panel and as short-lived speech bubbles above the speaker. While the panel is collapsed, an unread count is shown.
 
+Proximity voice is browser opt-in and uses peer-to-peer WebRTC audio. The server supplies ICE server configuration through `GET /api/voice-config` and selects nearby connected players on the same map; the default connect radius is 160 map pixels, disconnect radius is 192 pixels, and each client is limited to 6 peers. The gap between radii prevents repeated connect/disconnect at the boundary. Voice requires microphone permission and a secure browser context (HTTPS, or localhost). ICE configuration is sent to browsers, so do not expose long-lived TURN credentials; use short-lived credentials from your TURN provider when relaying is needed. The project does not run an SFU or provide TURN service.
+
 Camera zoom is controlled by `VITE_CAMERA_ZOOM`, which defaults to `2` and accepts any finite positive number independently of tile size. Restart Vite after changing `.env`. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. Character sheets use 16×24 frames in four columns and eight rows. The first four rows are down/left/right/up walking poses; the next four are action poses. The first column is static and columns 2–4 animate. Every layer must keep the same layout and foot anchor; asset IDs in `appearance` are resolved by the frontend character asset manifest.
 
 The backend health check is at <http://localhost:2567/health>. The development server proxies `/api`, `/health`, Colyseus matchmaking, and WebSocket traffic.
@@ -52,6 +54,8 @@ In production, set a random `IDENTITY_SECRET` of at least 32 characters, the pub
 Deploy SQLite with a single backend instance. The default database is `data/world.sqlite`; persist and back it up. HTTP Basic Auth, if needed, is provided by the deployer's proxy.
 
 Use `EXTERNAL_TOOLS` to map Tiled `resourceId` values to `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`. `url` is required; `mode` defaults to `external`. An embed opens only after a click and closes on zone exit. `manualExternalOpen: true` adds a separate manual link beside an open iframe; it does not detect load failures. `allowSameOrigin` defaults to false and should be enabled only for trusted self-hosted tools. Legacy `fallback: "external"` remains accepted as a manual-link alias. The project does not start Docker containers, so deploy and validate tool services separately. `GET /api/world` publishes the map directory; the server also provides normalized Tiled JSON and explicitly referenced map assets.
+
+Proximity voice settings are in `.env.example`: `VOICE_ICE_SERVERS` is a JSON array of WebRTC ICE server entries (default `[]`), `VOICE_CONNECT_RADIUS` defaults to `160`, `VOICE_DISCONNECT_RADIUS` to `192`, `VOICE_MAX_PEERS` to `6`, and `VOICE_SCAN_INTERVAL_MS` to `1000`. The backend publishes the ICE list through `GET /api/voice-config`; restart it after changing these values. A STUN server can help peers discover direct paths; configure TURN when users behind restrictive networks need relaying. TURN credentials included in this public browser configuration are visible to clients.
 
 ## Documentation
 
