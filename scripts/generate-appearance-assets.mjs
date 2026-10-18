@@ -28,7 +28,7 @@ for (const category of categories) {
   assets[category] = ids;
 }
 
-for (const category of ['top', 'bottom', 'shoes', 'accessories']) assets[category].unshift('none');
+for (const category of ['hair', 'top', 'bottom', 'shoes', 'accessories']) assets[category].unshift('none');
 for (const required of ['body', 'face']) {
   if (!assets[required].length) throw new Error(`Add at least one PNG to assets/characters/${required}/`);
 }

@@ -13,7 +13,7 @@ const ITEM_LABELS: Record<string, string> = {
   't-shirt': '短袖', shirt: '衬衫', school_uniform: '校服', suit: '西装', priest: '长袍', sweater: '毛衣', bunny: '兔女郎', hoodie: '卫衣',
   pants: '长裤', shorts: '短裤', skirt: '裙子', shoes: '小皮鞋', shortshoe: '短鞋', accessories: '围巾', beanie: '毛线帽', glass: '浅色眼镜', glasses: '眼镜',
 };
-const NONE_LABELS: Partial<Record<Part, string>> = { top: '不穿', bottom: '不穿', shoes: '光脚', accessories: '不戴' };
+const NONE_LABELS: Partial<Record<Part, string>> = { hair: '光头', top: '不穿', bottom: '不穿', shoes: '光脚', accessories: '不戴' };
 /** Presets stay inside the soft range so random outfits always match the art. */
 export const CANDY_COLORS = ['#fff6e6', '#f6e1c3', '#e3c29d', '#c6a184', '#a3827a', '#7d6a83',
   '#ffdbe5', '#f9bccf', '#ee9dba', '#f6bfa8', '#ffd3a3', '#fff0b0',

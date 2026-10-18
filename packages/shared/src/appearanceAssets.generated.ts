@@ -7,6 +7,7 @@ export const APPEARANCE_ASSETS = {
     "eyes"
   ],
   "hair": [
+    "none",
     "hair1",
     "hair2",
     "hair3",
