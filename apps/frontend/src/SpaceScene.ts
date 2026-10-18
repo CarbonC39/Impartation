@@ -67,12 +67,28 @@ export class SpaceScene extends Phaser.Scene {
       const result = map.addTilesetImage(tileset.name, `tiles-${index}`);
       return result ? [result] : [];
     });
-    for (const [index, layer] of map.layers.entries()) {
+    // Blank row layers are appended to map.layers, so only visit the authored layers.
+    for (const [index, layer] of [...map.layers].entries()) {
+      const enabled = (name: string) => layer.properties.some(property =>
+        'name' in property && property.name === name && 'value' in property && property.value === true);
+      if (enabled('ySort')) {
+        for (const [row, cells] of layer.data.entries()) {
+          if (!cells.some(tile => tile && tile.index >= 0)) continue;
+          const sorted = map.createBlankLayer(`__ySort_${index}_${row}`, tiles,
+            layer.x, layer.y + row * map.tileHeight, layer.width, 1);
+          if (!sorted) throw new Error(`Unable to render Y-sorted Tiled layer: ${layer.name}`);
+          for (const [column, tile] of cells.entries()) {
+            if (tile && tile.index >= 0) sorted.putTileAt(tile, column, 0, false);
+          }
+          sorted.setAlpha(layer.alpha).setVisible(layer.visible)
+            .setDepth(layer.y + (row + 1) * map.tileHeight + index * 0.001);
+        }
+        continue;
+      }
       const rendered = map.createLayer(layer.name, tiles);
       if (!rendered) throw new Error(`Unable to render Tiled layer: ${layer.name}`);
       // Tiled custom properties survive Phaser's tile layer parser, including grouped layers.
-      if (layer.properties.some(property => 'name' in property && property.name === 'abovePlayers' &&
-        'value' in property && property.value === true)) {
+      if (enabled('abovePlayers')) {
         rendered.setDepth(this.mapEntry.world.height + 3 + index);
       }
     }
