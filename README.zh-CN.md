@@ -24,6 +24,8 @@ npm run dev
 
 聊天显示在可折叠的半透明面板中，同时以短暂的气泡显示在发言角色头顶；折叠时显示未读数。
 
+在地图“设置”→“附近语音”中开启、静音或关闭语音。语音使用浏览器间的 WebRTC 点对点音频。浏览器扫描已有玩家状态，服务端按连接状态、权威位置和地图 ID 校验每个信令连接，并通过 `GET /api/voice-config` 提供 ICE 配置；默认连接半径为 160 地图像素，断开半径为 192 像素，每个客户端最多连接 6 个语音节点。连接和断开半径之间的缓冲可避免在边界反复切换。语音需要麦克风权限和安全浏览器上下文（HTTPS 或 localhost）。ICE 配置会发送给浏览器，因此不要在其中放长期 TURN 凭据；需要中继时应使用 TURN 服务商签发的短期凭据。项目不运行 SFU，也不提供 TURN 服务。
+
 相机缩放由 `VITE_CAMERA_ZOOM` 控制，默认值为 `2`，接受任意有限正数且独立于 tile 尺寸；修改 `.env` 后重启 Vite。动作锚点定义角色位置、动作和可选朝向，不绘制家具；地图作者可在 Tiled 视觉层独立摆放家具。`assets/characters/body/walk.png` 目前只有行走帧，因此动作暂时显示对应方向的 idle 帧，等待动作帧图集。帧尺寸和帧内脚点单独配置；替换图集时要同步检查角色定义中的帧尺寸和 `groundAnchor`。
 
 后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
@@ -52,6 +54,10 @@ npm run dev
 SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，需持久化并备份。HTTP Basic Auth 由部署者的代理提供。
 
 用 `EXTERNAL_TOOLS` 将地图 `resourceId` 关联到 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`。URL 必填，mode 默认 `external`。embed 在点击后挂载，离开区域时移除；`manualExternalOpen: true` 在已打开的 iframe 旁提供手动外链，不检测加载失败。`allowSameOrigin` 默认 false，仅供可信自托管工具启用；旧 `fallback: "external"` 仍作为手动外链别名接受。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
+
+近距离语音配置见 `.env.example`：`VOICE_ICE_SERVERS` 是 WebRTC ICE server 条目的 JSON 数组（默认包含一个公共 STUN 服务）；`VOICE_CONNECT_RADIUS` 默认 `160`，`VOICE_DISCONNECT_RADIUS` 默认 `192`，`VOICE_MAX_PEERS` 默认 `6`，`VOICE_SCAN_INTERVAL_MS` 默认 `1000`。后端通过 `GET /api/voice-config` 发布 ICE 列表；修改配置后需重启后端。STUN 可帮助发现直连路径；受限网络下需要中继时应配置 TURN。浏览器可见这份公开配置中的任何 TURN 凭据。静态凭据轮换需更新环境变量并重启后端；当前版本不签发 TURN 凭据。
+
+如果在 `http://127.0.0.1:5173/` 仍提示浏览器 API 不可用，可在该页面的开发者工具 Console 运行 `({ secure: isSecureContext, mic: !!navigator.mediaDevices?.getUserMedia, rtc: !!window.RTCPeerConnection })`。三项都应为 `true`；若有 API 缺失，检查浏览器或内嵌预览的设置。其它设备访问需要 HTTPS。
 
 ## 文档
 

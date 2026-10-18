@@ -64,7 +64,7 @@ export type Pomodoro = SchemaType<typeof Pomodoro>;
 export const Player = schema({
   name: t.string(), avatar: t.string(), appearance: t.string().default('{}'), x: t.number(), y: t.number(),
   userId: t.string(), role: t.string().default('member'),
-  mapId: t.string(), connected: t.boolean().default(true), zoneId: t.string().default(''),
+  mapId: t.string(), connected: t.boolean().default(true), voiceEnabled: t.boolean().default(false), zoneId: t.string().default(''),
   facing: t.string().default('down'), motion: t.string().default('idle'),
   action: t.string().default('none'), actionAnimated: t.boolean().default(false), actionTargetId: t.string().default(''),
 }, 'Player');
@@ -106,4 +106,5 @@ export * from './world.js';
 export * from './interactions.js';
 export * from './character.js';
 export * from './color.js';
+export * from './voice.js';
 export type { SpaceProtocol } from './protocol.js';

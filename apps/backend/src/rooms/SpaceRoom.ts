@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
 import { SpaceState, Player, joinSchema, inputSchema, chatSchema, stepMovement, contains,
-  TICK_MS, movementFacing, facingSchema, type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
+  TICK_MS, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
+  voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
+  type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
 import { worldRegistry, worlds } from '../world.js';
 import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
 import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
-import { config } from '../config.js';
+import { config, voiceConfig } from '../config.js';
 import { cancelAction } from '../interactions/action/handler.js';
+import { VoiceSignaling } from './VoiceSignaling.js';
 
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> {
   state = new SpaceState();
@@ -17,6 +20,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
   private lastChat = new Map<string, number>();
   private lastInteraction = new Map<string, number>();
+  private voice = new VoiceSignaling(this.state, voiceConfig, id => this.clients.find(client => client.sessionId === id));
   private interactions = createInteractions({
     state: this.state, maps: worlds, worlds: worldRegistry.maps.map(map => map.world),
     authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkInteraction(client, kind, resource),
@@ -44,6 +48,23 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       this.lastChat.set(client.sessionId, now);
       const message: ChatMessage = { id: randomUUID(), sessionId: client.sessionId, name: player.name, text, sentAt: now };
       this.broadcast('chat', message);
+    }),
+    voiceEnabled: validate(voiceEnabledSchema, async (client: SpaceClient, input: { enabled: boolean }) => {
+      if (!await this.authorize(client)) return false;
+      this.voice.setEnabled(client.sessionId, input.enabled);
+      return true;
+    }),
+    voiceOffer: validate(voiceOfferSchema, async (client: SpaceClient, input: VoiceOffer) => {
+      return await this.authorize(client) ? this.voice.offer(client.sessionId, input) : false;
+    }),
+    voiceAnswer: validate(voiceAnswerSchema, async (client: SpaceClient, input: VoiceAnswer) => {
+      return await this.authorize(client) ? this.voice.answer(client.sessionId, input) : false;
+    }),
+    voiceIceCandidate: validate(voiceIceCandidateSchema, async (client: SpaceClient, input: VoiceIceCandidate) => {
+      if (await this.authorize(client)) this.voice.candidate(client.sessionId, input);
+    }),
+    voiceEnd: validate(voiceEndSchema, async (client: SpaceClient, input: VoiceEnd) => {
+      if (await this.authorize(client)) this.voice.end(client.sessionId, input);
     }),
     ...this.interactions.messages,
   };
@@ -74,6 +95,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.patchRate = TICK_MS;
     for (const handler of this.interactions.registry.values()) handler.initialize?.();
     this.clock.setInterval(() => {
+      this.voice.tick();
       for (const handler of this.interactions.registry.values()) handler.tick?.();
       for (const client of this.clients) void this.authorize(client).then(value => {
         if (!value) { this.movementInputs.delete(client.sessionId); client.leave(4003, 'Identity expired'); }
@@ -116,6 +138,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.state.players.set(client.sessionId, player);
   }
   onDrop(client: SpaceClient, code: number) {
+    this.voice.clear(client.sessionId);
     const player = this.state.players.get(client.sessionId);
     if (player) { player.connected = false; player.motion = 'idle'; }
     this.movementInputs.delete(client.sessionId);
@@ -132,6 +155,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     if (player) player.connected = true;
   }
   onLeave(client: SpaceClient) {
+    this.voice.clear(client.sessionId);
     const player = this.state.players.get(client.sessionId);
     if (player) cancelAction({ state: this.state }, player, client.sessionId);
     this.identities.delete(client.sessionId);
@@ -140,5 +164,5 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.lastChat.delete(client.sessionId);
     this.lastInteraction.delete(client.sessionId);
   }
-  onDispose() { for (const handler of this.interactions.registry.values()) handler.dispose?.(); }
+  onDispose() { this.voice.dispose(); for (const handler of this.interactions.registry.values()) handler.dispose?.(); }
 }

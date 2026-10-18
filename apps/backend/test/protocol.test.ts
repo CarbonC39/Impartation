@@ -1,7 +1,36 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, boardPostSchema,
-  boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES } from '@virtual-workspace/shared';
+  boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES,
+  canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema } from '@virtual-workspace/shared';
+
+test('voice payloads bound signaling size and reject malformed targets and ICE configuration', () => {
+  const connectionId = '550e8400-e29b-41d4-a716-446655440000';
+  assert.equal(voiceOfferSchema.safeParse({ peerId: 'peer', connectionId, sdp: 'offer' }).success, true);
+  for (const value of [{ peerId: '', connectionId, sdp: 'offer' },
+    { peerId: 'peer', connectionId: 'bad', sdp: 'offer' },
+    { peerId: 'peer', connectionId, sdp: 'x'.repeat(65_537) }]) {
+    assert.equal(voiceOfferSchema.safeParse(value).success, false);
+  }
+  assert.equal(voiceIceCandidateSchema.safeParse({ peerId: 'peer', connectionId, candidate: 'candidate:1',
+    sdpMid: null, sdpMLineIndex: 0 }).success, true);
+  assert.equal(voiceIceCandidateSchema.safeParse({ peerId: 'peer', connectionId, candidate: 'x'.repeat(4097),
+    sdpMid: null, sdpMLineIndex: 0 }).success, false);
+  assert.equal(voiceConfigSchema.safeParse({ iceServers: [{ urls: 'https://not-ice.example' }],
+    connectRadius: 160, disconnectRadius: 192, maxPeers: 6, scanIntervalMs: 1000 }).success, false);
+  assert.equal(voiceConfigSchema.safeParse({ iceServers: [], connectRadius: 192,
+    disconnectRadius: 160, maxPeers: 6, scanIntervalMs: 1000 }).success, false);
+});
+
+test('voice eligibility requires opt-in, connection, same map and authoritative distance', () => {
+  const a = { x: 0, y: 0, mapId: 'a', connected: true, voiceEnabled: true };
+  const b = { ...a, x: 159 };
+  assert.equal(canHear(a, b, 160), true);
+  assert.equal(canHear(a, { ...b, x: 161 }, 160), false);
+  assert.equal(canHear(a, { ...b, mapId: 'b' }, 160), false);
+  assert.equal(canHear(a, { ...b, connected: false }, 160), false);
+  assert.equal(canHear(a, { ...b, voiceEnabled: false }, 160), false);
+});
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {
   assert.deepEqual(joinSchema.parse({ name: ' Alice ' }), { name: 'Alice', avatar: 'mint', appearance: DEFAULT_APPEARANCE });

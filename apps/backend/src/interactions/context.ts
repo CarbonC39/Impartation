@@ -1,8 +1,14 @@
 import type { Client } from '@colyseus/core';
-import type { ChatMessage, SpaceState, WorldMap, Zone } from '@virtual-workspace/shared';
+import type { ChatMessage, SpaceState, WorldMap, Zone, VoiceAnswer, VoiceEnd, VoiceIceCandidate, VoiceOffer, VoiceSignal } from '@virtual-workspace/shared';
 import type { activeProfile } from '../identity.js';
 
-export type SpaceClient = Client<{ messages: { chat: ChatMessage } }>;
+export type SpaceClient = Client<{ messages: {
+  chat: ChatMessage;
+  voiceOffer: VoiceSignal<VoiceOffer>;
+  voiceAnswer: VoiceSignal<VoiceAnswer>;
+  voiceIceCandidate: VoiceSignal<VoiceIceCandidate>;
+  voiceEnd: VoiceSignal<VoiceEnd>;
+} }>;
 export type InteractionContext = {
   state: SpaceState;
   worlds: WorldMap[];

@@ -147,7 +147,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 | `serverTime` | 服务端时间戳 | 番茄钟显示使用的时间基准 |
 | `worldObjects` | map ID → `MapObjectState`（authored object ID → `{ variant, occupiedBy }`） | 房间内各地图对象的共享视觉变体和占用状态；动作锚点、区域及关联对象 ID 均预留状态 |
 
-Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
+Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`voiceEnabled`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
 
 消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal 和 activateAction，后者返回 `{ ok, message }`。activateAction 只接收 shared `CHARACTER_ACTIONS` 目录中的动作名和可选动画标记，目录外的名称被校验拒绝，动作不支持动画时服务端忽略动画标记；地图与玩家位置由服务端权威读取。服务端 chat 是实时广播；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
 
@@ -160,8 +160,13 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 | `pomodoro` | `{ resourceId, action, mode? }` | start/reset 要求 mode；pause/resume 不接收客户端剩余时间 |
 | `portal` | `{ zoneId }` | 使用服务端地图属性选择目标及出生点 |
 | `activateAction` | `{ action, animated? }` | 按当前位置所在格和动作名查找锚点；匹配后权威吸附并可覆盖朝向，否则原地执行 |
+| `voiceEnabled` | `{ enabled }` | 验证身份后更新该连接的语音意愿；断线时清除 |
+| `voiceOffer` / `voiceAnswer` | `{ peerId, connectionId, sdp }` | 检查双方已启用、同地图、在范围内且未超过节点数，然后转发 SDP |
+| `voiceIceCandidate` / `voiceEnd` | `{ peerId, connectionId, ... }` | 只转发已授权连接的 ICE，或关闭指定连接 |
 
 当前没有按地图或资源进行 Schema 的可见性过滤。客户端只绘制同 mapId 的玩家、只展示当前 resourceId 的留言；同房间客户端仍接收其它地图玩家和所有已同步 integration 数据。区域检查约束操作，不是读取隔离；地图转换也不隔离聊天。
+
+近距离语音仅把 `voiceEnabled` 意愿同步到 Player Schema，不同步音频或第二套位置。浏览器需主动启用并授予麦克风权限，每 1000ms 根据现有玩家位置扫描候选节点；服务端按同地图、连接状态和权威位置审核每条信令，默认 160 像素内连接、超过 192 像素断开，每客户端最多 6 个节点。共享 `canHear` 资格函数是以后加入私有区域语音上下文的扩展点。连接/断开半径的差值用于减少边界抖动。音频通过 WebRTC 点对点传输，Colyseus 负责房间状态和信令协调，不承载媒体流；项目不运行 SFU 或 TURN 服务。麦克风 API 需要安全上下文，即 HTTPS 或 localhost。
 
 ### 4.2 权威移动
 
@@ -281,6 +286,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | `GET /api/maps/:id/map.json` | 公开规范化 Tiled JSON；未知地图返回 404 |
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
 | `GET /api/tools` | 公开工具 resourceId、URL 和可选展示配置；不能放凭据 |
+| `GET /api/voice-config` | 发布浏览器建立 WebRTC 连接所需的 ICE server 配置；不要放长期 TURN 凭据 |
 | `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
 | `PATCH /api/me` | JSON 更新昵称/avatar/appearance，校验提供的 Origin，不接受 role 更新 |
 | `/api/auth/*` | 只开放匿名登录、session 查询、退出和绑定码生成/兑换的指定方法，其余返回 404 |
@@ -291,6 +297,8 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 开发时 [vite.config.ts](../apps/frontend/vite.config.ts) 代理 `/api`、`/health`、`/matchmake` 和 Colyseus WebSocket。Vite 的 publicDir 指向根 assets，构建也会复制其中的资源；运行时地图选择仍通过后端目录。生产环境 `npm start` 只启动 backend，前端静态产物需单独托管；registry、地图、tileset 和图片文件也必须随后端部署。
 
 当前部署模型为单后端实例和本地 SQLite。房间状态、BoardStore 通知和配置索引都在进程内；直接增加多个进程无法保留现有跨房间共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
+
+语音 ICE 配置来自 `VOICE_ICE_SERVERS` JSON 环境变量；连接半径、断开半径、最大节点数和扫描间隔分别由 `VOICE_CONNECT_RADIUS`（默认 160）、`VOICE_DISCONNECT_RADIUS`（192）、`VOICE_MAX_PEERS`（6）和 `VOICE_SCAN_INTERVAL_MS`（1000）控制。配置经公开 HTTP 接口返回给浏览器，TURN 用户名和凭据对客户端可见；部署时应使用受限且定期轮换的 TURN 凭据，更新环境变量并重启后端；项目不签发 TURN 凭据。STUN/TURN 服务由部署者提供。
 
 ## 8. 验证与定位问题
 

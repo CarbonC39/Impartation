@@ -16,6 +16,7 @@ import { readPreference, writePreference } from './preferences';
 import { mountThemePanel } from './theme';
 import { Wardrobe } from './wardrobe';
 import { mountOutfitSlots } from './outfitSlots';
+import { ProximityVoice } from './voice';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -38,6 +39,11 @@ let room: Room<SpaceProtocol> | undefined;
 let connected = false;
 let interactions: InteractionDispatcher | undefined;
 let actions: CharacterActions | undefined;
+let voice: ProximityVoice | undefined;
+const voiceToggle = element<HTMLButtonElement>('voice-toggle');
+const voiceMute = element<HTMLButtonElement>('voice-mute');
+voiceToggle.addEventListener('click', () => { void voice?.toggle(); voiceToggle.blur(); });
+voiceMute.addEventListener('click', () => { voice?.toggleMute(); voiceMute.blur(); });
 let worldRegistry: WorldRegistry | undefined;
 let renderedMap = '';
 let renderingMap = '';
@@ -225,6 +231,7 @@ element<HTMLFormElement>('identity-form').addEventListener('submit', async event
 
 function setConnected(value: boolean) {
   connected = value;
+  voice?.setConnected(value);
   send.disabled = !value;
   messageInput.disabled = !value;
   interactions?.setConnected(value);
@@ -235,6 +242,8 @@ function cleanup() {
   renderGeneration++;
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
   interactions?.dispose();
+  voice?.dispose();
+  voice = undefined;
   interactions = undefined;
   actions?.dispose();
   actions = undefined;
@@ -271,6 +280,7 @@ element<HTMLFormElement>('join-form').addEventListener('submit', async event => 
     if (!room.state?.players) await withTimeout(new Promise<void>(resolve => room!.onStateChange.once(() => resolve())),
       10_000, '空间已连接，但没有收到地图角色数据');
     interactions = createInteractions(room);
+    voice = new ProximityVoice(room, voiceToggle, voiceMute, element('voice-status'));
     const actionRoom = room;
     actions = createCharacterActions(room, () => {
       const mapId = actionRoom.state.players.get(actionRoom.sessionId)?.mapId;
@@ -315,6 +325,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   const entry = worldRegistry?.maps.find(map => map.id === mapId);
   if (!entry) throw new Error(`Unknown map: ${mapId}`);
   const generation = ++renderGeneration;
+  if (renderedMap && renderedMap !== mapId) voice?.mapChanged();
   renderingMap = mapId;
   interactions?.setZone(undefined);
   try {
