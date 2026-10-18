@@ -10,7 +10,7 @@ const CATEGORY_LABELS: Record<Part, string> = { body: '身体', face: '面部', 
 const ITEM_LABELS: Record<string, string> = {
   walk: '基础身体', eyes: '圆圆眼',
   hair1: '波波头', hair2: '偏分', hair3: '直短发', hair4: '长直发', hair5: '中分', hair6: '高马尾', hair7: '双马尾', hair8: 'M字刘海', hair9: '斜刘海', hair10: '长卷发', hair11: '总裁背头',
-  't-shirt': '短袖', shirt: '衬衫', school_uniform: '校服', suit: '西装', priest: '长袍', sweater: '毛衣',
+  't-shirt': '短袖', shirt: '衬衫', school_uniform: '校服', suit: '西装', priest: '长袍', sweater: '毛衣', bunny: '兔女郎', hoodie: '卫衣',
   pants: '长裤', shorts: '短裤', skirt: '裙子', shoes: '小皮鞋', shortshoe: '短鞋', accessories: '围巾', beanie: '毛线帽', glass: '浅色眼镜', glasses: '眼镜',
 };
 const NONE_LABELS: Partial<Record<Part, string>> = { top: '不穿', bottom: '不穿', shoes: '光脚', accessories: '不戴' };

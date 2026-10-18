@@ -27,8 +27,8 @@ export const APPEARANCE_ASSETS = {
     "suit",
     "sweater",
     "t-shirt",
-    "兔女郎",
-    "卫衣"
+    "bunny",
+    "hoodie"
   ],
   "bottom": [
     "none",
@@ -69,8 +69,8 @@ export const APPEARANCE_ASSET_PATHS = {
   "suit": "/characters/top/suit.PNG",
   "sweater": "/characters/top/sweater.PNG",
   "t-shirt": "/characters/top/t-shirt.png",
-  "兔女郎": "/characters/top/兔女郎.png",
-  "卫衣": "/characters/top/卫衣.png",
+  "bunny": "/characters/top/bunny.png",
+  "hoodie": "/characters/top/hoodie.png",
   "pants": "/characters/bottom/pants.png",
   "shorts": "/characters/bottom/shorts.png",
   "skirt": "/characters/bottom/skirt.png",
