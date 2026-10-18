@@ -28,7 +28,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 | 测试 | 覆盖行为 | 文件 |
 | --- | --- | --- |
-| 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
+| 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段；语音信令、ICE 配置和距离资格 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长；动作点朝向/偏移、同格动作匹配、非法动作锚点和方向输入朝向 | [world.test.ts](../apps/backend/test/world.test.ts) |
 | 角色帧选择 | 角色图集尺寸与方向帧索引有效性、走路帧选择、idle/动作姿态回退 | [character.test.ts](../apps/backend/test/character.test.ts) |
 | WebTool 配置 | 跨地图资源一致性、embed/external mode、手动外链与同源选项、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
@@ -36,14 +36,14 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | 多地图服务 | registry/API、多图层和外置 TSJ 资源、权威 Portal 转换、目标地图碰撞和身份保留；同名对象按地图隔离 | [portal.test.ts](../apps/backend/test/portal.test.ts) |
 | SQLite | v1-v3 迁移、旧留言保留、持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
 | 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
-| HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消 | [space.test.ts](../apps/backend/test/space.test.ts) |
-| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；衣橱单品预览、3 个造型槽位的保存/覆盖确认/刷新保留、自定义界面配色、昵称显隐和聊天背景偏好的保存；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+| HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消；语音 opt-in、地图/距离、节点容量、信令转发和范围退出 | [space.test.ts](../apps/backend/test/space.test.ts) |
+| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；衣橱单品预览、3 个造型槽位的保存/覆盖确认/刷新保留、自定义界面配色、昵称显隐和聊天背景偏好的保存；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理；语音点击授权、静音、双浏览器音轨交换和离开清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 
 工具入口浏览器测试拦截 `/api/tools` 提供固定配置，以 HTML 替身模拟工具页面，并检查目标 URL、opener 和 referrer。真实 HTTP 配置响应由 Node 集成测试验证。它们不验证真实服务的编辑、绘画与播放功能。
 
-近距离语音的浏览器检查需要在 HTTPS 或 localhost 环境下授予麦克风权限，并使用实际 STUN/TURN 配置验证同地图距离变化、断线重连和离开清理。自动化检查不验证真实麦克风权限提示、NAT 穿透、音质或多种浏览器/网络组合；这些项目需在目标部署环境手动验收。
+语音浏览器测试使用模拟麦克风检查点击后才捕获、静音、离开清理，以及两个附近浏览器间的真实 WebRTC 音轨交换。自动化检查不验证真实麦克风权限提示、NAT 穿透、音质或多种浏览器/网络组合；这些项目需在 HTTPS 或 localhost 与目标 STUN/TURN 配置下手动验收。
 
 ## 隔离与排查
 
