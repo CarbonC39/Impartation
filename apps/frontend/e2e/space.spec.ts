@@ -13,10 +13,10 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
   await page.locator('#name').fill(name);
   if (outfit === 'amber') {
     await page.locator('[data-appearance-category="hair"]').click();
-    await page.locator('#appearance-choices select').selectOption('hair2');
+    await page.locator('#appearance-choices [data-appearance-item="hair2"]').click();
   } else if (outfit === 'violet') {
     await page.locator('[data-appearance-category="top"]').click();
-    await page.locator('#appearance-choices select').selectOption('shirt');
+    await page.locator('#appearance-choices [data-appearance-item="shirt"]').click();
   }
   await page.locator('#join').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
@@ -120,7 +120,7 @@ test('in-place static and animated sit use distinct action columns and movement 
     }
     return canvas.toDataURL('image/png').split(',')[1];
   });
-  await page.route('**/characters/walk.png', route => route.fulfill({
+  await page.route('**/characters/body/walk.png', route => route.fulfill({
     contentType: 'image/png', body: Buffer.from(sheet, 'base64'),
   }));
   await enter(page, 'E2EActions', 'mint', () => captureRenderedScene(page));
@@ -173,9 +173,6 @@ test('in-place static and animated sit use distinct action columns and movement 
 
 async function openAvatarScreen(page: Page) {
   if (await page.locator('#login-screen').isVisible()) {
-    await page.locator('#start').click();
-  }
-  if (await page.locator('#world-screen').isVisible()) {
     await page.locator('#world-list [data-world="sunny-lobby"]').click();
   }
   await expect(page.locator('#avatar-screen')).toBeVisible();
@@ -381,7 +378,7 @@ test('mobile seat activation renders the character and releases occupancy when w
   await page.setViewportSize({ width: 390, height: 844 });
   const spriteResponse = page.waitForResponse(response => {
     const url = new URL(response.url());
-    return url.pathname === '/characters/walk.png' && response.ok();
+    return url.pathname === '/characters/body/walk.png' && response.ok();
   });
   await enter(page, 'E2ESeat');
   await spriteResponse;
@@ -529,7 +526,7 @@ test('leaving clears controls and canvas, and the same page can join again', asy
   await expect(page.locator('#status')).toContainText('已离开');
   await expect(page.locator('#game canvas')).toHaveCount(0);
   await expect(page.locator('#message')).toBeDisabled();
-  await expect(page.locator('#world-screen [data-world="sunny-lobby"]')).toBeEnabled();
+  await expect(page.locator('#login-screen [data-world="sunny-lobby"]')).toBeEnabled();
   await joinSavedProfile(page);
   await expect(page.locator('#game canvas')).toHaveCount(1);
 });
@@ -618,7 +615,6 @@ test('binding a second browser restores the same identity, profile and note perm
     await expect(page.locator('#feature-status')).toContainText('留言已发布');
     await page.locator('#leave').click();
     await expect(page.locator('#status')).toContainText('已离开');
-    await page.locator('#world-screen [data-back="login-screen"]').click();
     await page.locator('#login-screen summary').click();
     await page.locator('#identity-export').click();
     await expect(page.locator('#identity-code')).toHaveValue(/.{32}/);
@@ -749,4 +745,57 @@ test('Portal switches rendered maps, loads multiple tilesets and preserves the c
   } finally {
     if (observer.connection.isOpen) await observer.leave();
   }
+});
+
+test('wardrobe previews items, keeps three named outfit slots and remembers display preferences', async ({ page }) => {
+  test.setTimeout(45000); // Two reloads plus a profile save and a room join.
+  await page.goto('/');
+  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await page.locator('#theme-toggle').click();
+  await page.locator('.theme-option', { hasText: '自定义' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'custom');
+  await expect(page.locator('.theme-slot')).toHaveCount(4);
+  await page.locator('#theme-toggle').click();
+  await openAvatarScreen(page);
+  await page.locator('#name').fill('E2EWardrobe');
+  await expect(page.locator('#avatar-name-tag')).toHaveText('E2EWardrobe');
+  await page.locator('[data-appearance-category="top"]').click();
+  await expect(page.locator('#appearance-choices [data-appearance-item] canvas')).toHaveCount(await page.locator('#appearance-choices [data-appearance-item]').count());
+  await page.locator('#appearance-choices [data-appearance-item="shirt"]').click();
+  await expect(page.locator('#appearance-choices [data-appearance-item="shirt"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#appearance-swatches .swatch').nth(7).click();
+  await expect(page.locator('#undo-appearance')).toBeEnabled();
+
+  await page.locator('#save-appearance').click();
+  const slots = page.locator('#outfit-slots .slot-card');
+  await expect(slots).toHaveCount(3);
+  await expect(page.locator('#outfit-slots [data-filled="true"]')).toHaveCount(0);
+  await slots.nth(0).locator('input').fill('上班');
+  await slots.nth(0).getByRole('button', { name: '存到这里' }).click();
+  await expect(page.locator('#outfit-status')).toContainText('已存到槽位 1「上班」');
+  await expect(slots.nth(0)).toHaveAttribute('data-filled', 'true');
+  await slots.nth(0).getByRole('button', { name: '覆盖' }).click();
+  await expect(slots.nth(0).getByRole('button', { name: '确认覆盖？' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'custom');
+  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await openAvatarScreen(page);
+  await page.locator('#save-appearance').click();
+  await expect(page.locator('#outfit-slots .slot-card').nth(0).locator('input')).toHaveValue('上班');
+  await page.keyboard.press('Escape');
+
+  await page.locator('#join').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'half');
+  await page.locator('#settings-toggle').click();
+  await page.locator('[data-chat-mode="solid"]').click();
+  await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'solid');
+  await page.locator('#toggle-names').click();
+  await expect(page.locator('#names-switch')).toHaveAttribute('aria-checked', 'false');
+  await page.locator('#leave').click();
+  await page.reload();
+  await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'solid');
+  await expect(page.locator('#toggle-names')).toHaveAttribute('aria-pressed', 'false');
 });

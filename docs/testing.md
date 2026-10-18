@@ -37,7 +37,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | SQLite | v1-v3 迁移、旧留言保留、持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
 | 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
 | HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消 | [space.test.ts](../apps/backend/test/space.test.ts) |
-| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+| 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；衣橱单品预览、3 个造型槽位的保存/覆盖确认/刷新保留、自定义界面配色、昵称显隐和聊天背景偏好的保存；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 

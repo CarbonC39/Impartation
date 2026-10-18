@@ -5,7 +5,7 @@ import { FACINGS } from '@virtual-workspace/shared';
 import { avatars, avatarDefinition, characterFrame } from '../../frontend/src/characters.js';
 
 test('configured character frames fit the supplied sheet and are independent from map tiles', () => {
-  const image = readFileSync(new URL('../../../assets/characters/walk.png', import.meta.url));
+  const image = readFileSync(new URL('../../../assets/characters/body/walk.png', import.meta.url));
   const width = image.readUInt32BE(16), height = image.readUInt32BE(20);
   for (const avatar of Object.values(avatars)) {
     assert.ok(avatar.frameWidth > 0); assert.ok(avatar.frameHeight > 0);

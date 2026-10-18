@@ -81,6 +81,8 @@ sequenceDiagram
 
 打开页面只尝试恢复已有资料；提交进入表单时才按需创建匿名身份并保存资料。客户端校验 `/api/world` 响应，等待房间初始状态后，用本玩家 `mapId` 选择地图；`initialMap` 是目录中的初始入口。
 
+界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 在浏览器中保存 3 个命名造型。界面配色、造型槽位、柔和区锁定、昵称显隐和聊天背景都只存在 localStorage，不进入身份资料或房间状态，也不跨设备同步；服务端仍只按 `appearanceSchema` 校验六位 RGB，不强制柔和区。保存造型槽位时会同时调用 `PATCH /api/me` 保存当前造型。
+
 当前只有公共 `space` 房间类型，每房间最多 32 个连接。房间包含整个已登记地图集合；地图 ID 不是房间 ID。客户端调用 `joinOrCreate`，没有私密房间、成员名单或按地图创建房间的机制。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
@@ -129,7 +131,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 
 当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和 tile object 没有相应的客户端绘制实现。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
 
-地图逻辑尺寸来自 registry 中的 world。浏览器相机缩放由 `VITE_CAMERA_ZOOM` 单独配置，默认值为 2；仅接受有限且大于零的数字，其它值回退到 2。该值不依赖地图 tile 尺寸。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
+地图逻辑尺寸来自 registry 中的 world。浏览器相机缩放由 `VITE_CAMERA_ZOOM` 单独配置，默认值为 2；仅接受有限且大于零的数字，其它值回退到 2。该值不依赖地图 tile 尺寸。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读；昵称绘制在角色脚点下方，不随动作改变文字。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
 
 ## 4. 实时状态、移动与地图切换
 

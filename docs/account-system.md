@@ -19,7 +19,7 @@ Better Auth 管理匿名用户、session cookie 和一次性令牌。Better Auth
 
 认证端点由 Better Auth 执行可信来源/CSRF 检查。`PATCH /api/me` 要求 JSON，并在提供 `Origin` 时校验它属于 `IDENTITY_TRUSTED_ORIGINS`；Colyseus 入房也检查提供的 Origin。原生客户端须携带当前 session cookie，并按所用接口的要求发送可信 Origin。
 
-在“跨设备身份”区域生成或输入绑定码；绑定前需要先离开空间。进入空间前会载入已有昵称、角色原型和换装配置。
+在开始页“在其他设备继续”区域生成或输入绑定码；绑定前需要先离开空间。进入空间前会载入已有昵称、角色原型和换装配置。
 
 ## 权限角色
 

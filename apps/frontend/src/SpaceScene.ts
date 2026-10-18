@@ -15,6 +15,8 @@ export type SceneHooks = {
   zoneAnchor(point: ScreenPoint | undefined): void;
   activate(): void;
   virtualInput(): MovementInput;
+  /** Local display preference; read every frame so toggling needs no scene restart. */
+  namesVisible(): boolean;
 };
 const BUBBLE_MS = 5000;
 const BUBBLE_CHARS = 60;
@@ -96,6 +98,7 @@ export class SpaceScene extends Phaser.Scene {
     const players = this.room.state?.players;
     if (!players) return;
     this.objectVisuals?.update(this.room.state.worldObjects.get(this.mapEntry.id));
+    const namesVisible = this.hooks.namesVisible();
     for (const [id, player] of players) {
       if (player.mapId !== this.mapEntry.id) continue;
       let sprite = this.sprites.get(id);
@@ -105,9 +108,11 @@ export class SpaceScene extends Phaser.Scene {
           .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight));
         const character = layers[0]!.setName(id);
         if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
-        const label = this.add.text(player.x, player.y - avatar.groundAnchor.y - 4, player.name,
-          { fontSize: '12px', color: id === this.room.sessionId ? '#fff2a3' : '#ffffff' })
-          .setOrigin(0.5, 1).setScale(1 / this.cameras.main.zoom);
+        // Name sits under the feet as outlined text, so it never covers the character or speech bubble.
+        const label = this.add.text(player.x, player.y + 1, player.name, {
+          fontSize: '12px', fontStyle: 'bold', color: id === this.room.sessionId ? '#b0507a' : '#4a3d60',
+          stroke: '#ffffff', strokeThickness: 3,
+        }).setOrigin(0.5, 0).setScale(1 / this.cameras.main.zoom);
         sprite = { sprite: character, layers, label, animation: '', elapsed: 0 };
         this.sprites.set(id, sprite);
       }
@@ -133,10 +138,10 @@ export class SpaceScene extends Phaser.Scene {
           .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
           .setDepth(sprite.sprite.y + index * 0.001);
       }
-      const name = action === 'sit' ? `${player.name} · 坐` : player.name;
-      if (sprite.label.text !== name) sprite.label.setText(name);
-      sprite.label.setPosition(sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 4).setDepth(this.mapEntry.world.height + 1);
-      this.updateBubble(id, sprite.label);
+      if (sprite.label.text !== player.name) sprite.label.setText(player.name);
+      sprite.label.setVisible(namesVisible).setAlpha(player.connected ? 1 : 0.5)
+        .setPosition(sprite.sprite.x, sprite.sprite.y + 1).setDepth(this.mapEntry.world.height + 1);
+      this.updateBubble(id, sprite.sprite.x, sprite.sprite.y - avatar.groundAnchor.y - 2);
     }
     const now = performance.now();
     for (const [id, bubble] of this.bubbles) {
@@ -175,14 +180,14 @@ export class SpaceScene extends Phaser.Scene {
       this.inputElapsed = 0;
     }
   }
-  private updateBubble(id: string, label: Phaser.GameObjects.Text) {
+  private updateBubble(id: string, x: number, headY: number) {
     const bubble = this.bubbles.get(id);
     if (!bubble) return;
     bubble.view ??= this.add.text(0, 0, bubble.text, {
-      fontSize: '12px', color: '#25384c', backgroundColor: '#fffdf4e6', padding: { x: 6, y: 3 },
+      fontSize: '12px', color: '#4a3d60', backgroundColor: '#fffaf3f0', padding: { x: 6, y: 3 },
       align: 'center', wordWrap: { width: 180, useAdvancedWrap: true },
     }).setOrigin(0.5, 1).setScale(1 / this.cameras.main.zoom);
-    bubble.view.setPosition(label.x, label.y - label.displayHeight - 2).setDepth(this.mapEntry.world.height + 2);
+    bubble.view.setPosition(x, headY).setDepth(this.mapEntry.world.height + 2);
   }
   private updateZoneAnchor(zoneId: string) {
     const zone = zoneId ? this.mapEntry.world.zones.find(item => item.id === zoneId) : undefined;
