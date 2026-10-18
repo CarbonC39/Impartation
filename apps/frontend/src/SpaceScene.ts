@@ -67,8 +67,14 @@ export class SpaceScene extends Phaser.Scene {
       const result = map.addTilesetImage(tileset.name, `tiles-${index}`);
       return result ? [result] : [];
     });
-    for (const layer of map.layers) {
-      if (!map.createLayer(layer.name, tiles)) throw new Error(`Unable to render Tiled layer: ${layer.name}`);
+    for (const [index, layer] of map.layers.entries()) {
+      const rendered = map.createLayer(layer.name, tiles);
+      if (!rendered) throw new Error(`Unable to render Tiled layer: ${layer.name}`);
+      // Tiled custom properties survive Phaser's tile layer parser, including grouped layers.
+      if (layer.properties.some(property => 'name' in property && property.name === 'abovePlayers' &&
+        'value' in property && property.value === true)) {
+        rendered.setDepth(this.mapEntry.world.height + 3 + index);
+      }
     }
     for (const zone of this.mapEntry.world.zones) {
       this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
