@@ -54,8 +54,19 @@ test('voice shows microphone permission errors and stays disabled', async ({ pag
   await enter(page, 'VoiceDenied');
   await page.locator('#settings-toggle').click();
   await page.locator('#voice-toggle').click();
-  await expect(page.locator('#voice-status')).toContainText('语音错误：Permission denied');
+  await expect(page.locator('#voice-status')).toContainText('语音错误：麦克风权限被拒绝');
   await expect(page.locator('#voice-toggle')).toBeEnabled();
+  await expect(page.locator('#voice-mute')).toBeDisabled();
+});
+
+test('voice reports missing WebRTC separately from microphone support', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, value: undefined });
+  });
+  await enter(page, 'VoiceNoWebRTC');
+  await page.locator('#settings-toggle').click();
+  await page.locator('#voice-toggle').click();
+  await expect(page.locator('#voice-status')).toContainText('未提供 WebRTC（RTCPeerConnection）');
   await expect(page.locator('#voice-mute')).toBeDisabled();
 });
 

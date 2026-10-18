@@ -57,6 +57,8 @@ Use `EXTERNAL_TOOLS` to map Tiled `resourceId` values to `{ url, mode?, manualEx
 
 Proximity voice settings are in `.env.example`: `VOICE_ICE_SERVERS` is a JSON array of WebRTC ICE server entries (by default one public STUN server), `VOICE_CONNECT_RADIUS` defaults to `160`, `VOICE_DISCONNECT_RADIUS` to `192`, `VOICE_MAX_PEERS` to `6`, and `VOICE_SCAN_INTERVAL_MS` to `1000`. The backend publishes the ICE list through `GET /api/voice-config`; restart it after changing these values. A STUN server can help peers discover direct paths; configure TURN when users behind restrictive networks need relaying. TURN credentials included in this public browser configuration are visible to clients. Rotate static credentials by updating the environment and restarting the backend; this version does not mint TURN credentials.
 
+If voice reports a missing browser API on `http://127.0.0.1:5173/`, run `({ secure: isSecureContext, mic: !!navigator.mediaDevices?.getUserMedia, rtc: !!window.RTCPeerConnection })` in that page's browser console. All three values should be `true`; a missing API needs a browser or embedded-preview setting change. Use HTTPS when opening the site from another device.
+
 ## Documentation
 
 | Document | Contents |

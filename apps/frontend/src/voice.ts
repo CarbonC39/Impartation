@@ -5,6 +5,29 @@ import { canHear, voiceConfigSchema, type SpaceProtocol, type VoiceConfig, type 
 type Peer = { id: string; connectionId: string; connection: RTCPeerConnection; audio: HTMLAudioElement;
   candidates: RTCIceCandidateInit[]; localCandidates: RTCIceCandidateInit[]; ready: boolean };
 
+function voiceCapabilityError(): string | undefined {
+  if (!window.isSecureContext) {
+    return `当前地址 ${window.location.origin} 不是安全上下文；本机请用 http://127.0.0.1:5173/ 或 http://localhost:5173/，其它设备需 HTTPS`;
+  }
+  if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
+    return '当前浏览器未提供麦克风 API（getUserMedia）；请检查浏览器或内嵌预览的麦克风设置';
+  }
+  if (typeof window.RTCPeerConnection !== 'function') {
+    return '当前浏览器未提供 WebRTC（RTCPeerConnection）；请检查浏览器或内嵌预览的 WebRTC 设置';
+  }
+}
+
+function captureErrorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      return '麦克风权限被拒绝；请在地址栏的站点权限中允许麦克风后重试';
+    }
+    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') return '未找到麦克风设备';
+    if (error.name === 'NotReadableError' || error.name === 'TrackStartError') return '麦克风无法读取，请检查设备是否被其它程序占用';
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 export class ProximityVoice {
   private configPromise?: Promise<VoiceConfig>;
   private config?: VoiceConfig;
@@ -43,9 +66,8 @@ export class ProximityVoice {
   async toggle() {
     if (this.stream) { this.disable(); return; }
     if (this.disposed || !this.room.connection.isOpen) return;
-    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
-      this.error = '浏览器不支持麦克风或 WebRTC，请使用 HTTPS 或 localhost'; this.render(); return;
-    }
+    const capabilityError = voiceCapabilityError();
+    if (capabilityError) { this.error = capabilityError; this.render(); return; }
     const generation = ++this.generation;
     this.error = '';
     this.status.textContent = '正在请求麦克风…';
@@ -80,7 +102,7 @@ export class ProximityVoice {
       if (captured && captured !== this.stream) captured.getTracks().forEach(track => track.stop());
       if (generation === this.generation && !this.disposed) {
         this.disable();
-        this.error = error instanceof Error ? error.message : String(error);
+        this.error = captureErrorMessage(error);
       }
     }
     this.render();

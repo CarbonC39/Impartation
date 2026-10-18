@@ -57,6 +57,8 @@ SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，�
 
 近距离语音配置见 `.env.example`：`VOICE_ICE_SERVERS` 是 WebRTC ICE server 条目的 JSON 数组（默认包含一个公共 STUN 服务）；`VOICE_CONNECT_RADIUS` 默认 `160`，`VOICE_DISCONNECT_RADIUS` 默认 `192`，`VOICE_MAX_PEERS` 默认 `6`，`VOICE_SCAN_INTERVAL_MS` 默认 `1000`。后端通过 `GET /api/voice-config` 发布 ICE 列表；修改配置后需重启后端。STUN 可帮助发现直连路径；受限网络下需要中继时应配置 TURN。浏览器可见这份公开配置中的任何 TURN 凭据。静态凭据轮换需更新环境变量并重启后端；当前版本不签发 TURN 凭据。
 
+如果在 `http://127.0.0.1:5173/` 仍提示浏览器 API 不可用，可在该页面的开发者工具 Console 运行 `({ secure: isSecureContext, mic: !!navigator.mediaDevices?.getUserMedia, rtc: !!window.RTCPeerConnection })`。三项都应为 `true`；若有 API 缺失，检查浏览器或内嵌预览的设置。其它设备访问需要 HTTPS。
+
 ## 文档
 
 | 文档 | 内容 |
