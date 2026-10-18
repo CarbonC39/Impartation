@@ -18,6 +18,7 @@ import { Wardrobe } from './wardrobe';
 import { mountOutfitSlots } from './outfitSlots';
 import { ProximityVoice } from './voice';
 import { TouchPad } from './touchPad';
+import { ChatLayout } from './chatLayout';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -71,6 +72,11 @@ function setUnread(count: number) {
   chatUnread.textContent = count > 99 ? '99+' : String(count);
 }
 setChatCollapsed(readPreference('virtual-workspace-chat-collapsed') === 'true');
+const chatLayout = new ChatLayout(chatCard, element('chat-drag'), element('chat-resize'), element('messages'));
+element<HTMLButtonElement>('chat-reset').addEventListener('click', event => {
+  chatLayout.reset();
+  (event.currentTarget as HTMLButtonElement).blur();
+});
 chatToggle.addEventListener('click', () => {
   setChatCollapsed(!chatCard.classList.contains('collapsed'));
   chatToggle.blur(); // Return keyboard movement to the map.
@@ -118,7 +124,7 @@ function showScreen(id: string) {
     screen.hidden = !active;
   });
   document.body.classList.toggle('map-open', id === 'map-screen');
-  if (id === 'map-screen') { touchPad.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
+  if (id === 'map-screen') { touchPad.refresh(); chatLayout.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
   if (id === 'login-screen') renderWelcome();
 }
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -337,6 +343,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
       },
       activate: () => { void actions?.activate(); },
       virtualInput: () => touchPad.read(),
+      chatInput: readChatInput,
       namesVisible: () => namesVisible,
     });
     game = new Phaser.Game({
@@ -351,6 +358,34 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
 }
 
 leave.addEventListener('click', () => { leavingIntentionally = true; leave.disabled = true; void room?.leave(); showScreen('login-screen'); });
+// Enter opens the chat from the map; while typing, arrow keys still walk (handled by the scene),
+// and Esc or Enter on an empty line hands the keyboard back to the map.
+function focusMap() {
+  messageInput.blur();
+  document.querySelector<HTMLCanvasElement>('#game canvas')?.focus();
+}
+const arrowKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const chatArrows = new Set<string>();
+function readChatInput(): MovementInput {
+  return { x: Number(chatArrows.has('ArrowRight')) - Number(chatArrows.has('ArrowLeft')),
+    y: Number(chatArrows.has('ArrowDown')) - Number(chatArrows.has('ArrowUp')) };
+}
+messageInput.addEventListener('keydown', event => {
+  if (event.isComposing) return;
+  if (arrowKeys.has(event.key)) { event.preventDefault(); chatArrows.add(event.key); }
+  else if (event.key === 'Escape' || (event.key === 'Enter' && !messageInput.value.trim())) { event.preventDefault(); focusMap(); }
+});
+messageInput.addEventListener('keyup', event => { chatArrows.delete(event.key); });
+messageInput.addEventListener('blur', () => chatArrows.clear());
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.isComposing || event.repeat || !connected || messageInput.disabled) return;
+  if (!document.body.classList.contains('map-open')) return;
+  const target = event.target;
+  if (target instanceof HTMLElement && target !== document.body && !(target instanceof HTMLCanvasElement)) return;
+  event.preventDefault();
+  if (chatCard.classList.contains('collapsed')) setChatCollapsed(false);
+  messageInput.focus();
+});
 element<HTMLFormElement>('chat-form').addEventListener('submit', event => {
   event.preventDefault();
   if (!connected || !room) return;

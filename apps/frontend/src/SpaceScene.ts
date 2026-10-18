@@ -15,6 +15,8 @@ export type SceneHooks = {
   zoneAnchor(point: ScreenPoint | undefined): void;
   activate(): void;
   virtualInput(): MovementInput;
+  /** Arrow keys held while the chat box has focus (the box swallows them, so Phaser never sees them). */
+  chatInput(): MovementInput;
   /** Local display preference; read every frame so toggling needs no scene restart. */
   namesVisible(): boolean;
 };
@@ -162,15 +164,20 @@ export class SpaceScene extends Phaser.Scene {
     const activatePressed = Phaser.Input.Keyboard.JustDown(this.keys.E);
     // Never queue movement during automatic reconnection.
     if (!ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) { this.lastInput = ''; return; }
-    const typing = document.activeElement instanceof HTMLElement &&
-      ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) &&
-      !(document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'checkbox');
+    const focused = document.activeElement;
+    const typing = focused instanceof HTMLElement &&
+      (['INPUT', 'TEXTAREA', 'SELECT'].includes(focused.tagName) || focused.isContentEditable) &&
+      !(focused instanceof HTMLInputElement && focused.type === 'checkbox');
+    // The chat box keeps letters for text; its arrow keys arrive through chatInput instead.
+    const textInput = typing ? this.hooks.chatInput() : { x: 0, y: 0 };
     const touchInput = document.hidden ? { x: 0, y: 0 } : this.hooks.virtualInput();
-    const active = !document.hidden && ((document.hasFocus() && !typing) || touchInput.x !== 0 || touchInput.y !== 0);
-    if (active && !typing && activatePressed) this.hooks.activate();
+    const keyboard = !document.hidden && document.hasFocus() && !typing;
+    const active = keyboard || (!document.hidden && [touchInput, textInput].some(value => value.x !== 0 || value.y !== 0));
+    if (keyboard && activatePressed) this.hooks.activate();
+    const key = (letter: string, arrow: string) => keyboard && (this.keys[letter]!.isDown || this.keys[arrow]!.isDown);
     const input: MovementInput = active ? {
-      x: Phaser.Math.Clamp(Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown) + touchInput.x, -1, 1),
-      y: Phaser.Math.Clamp(Number(this.keys.S.isDown || this.keys.DOWN.isDown) - Number(this.keys.W.isDown || this.keys.UP.isDown) + touchInput.y, -1, 1),
+      x: Phaser.Math.Clamp(Number(key('D', 'RIGHT')) - Number(key('A', 'LEFT')) + touchInput.x + textInput.x, -1, 1),
+      y: Phaser.Math.Clamp(Number(key('S', 'DOWN')) - Number(key('W', 'UP')) + touchInput.y + textInput.y, -1, 1),
     } : { x: 0, y: 0 };
     this.inputElapsed += delta;
     const serialized = JSON.stringify(input);

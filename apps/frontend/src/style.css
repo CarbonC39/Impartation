@@ -214,17 +214,21 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .chat-modes button[aria-checked="true"] { background: var(--sel); color: var(--sel-ink); }
 
 /* Chat overlay: transparent, half (default) or solid. */
-.chat-card { position: absolute; z-index: 5; left: 16px; bottom: 16px; width: min(340px, calc(100vw - 32px)); display: flex; flex-direction: column; padding: 6px 10px; color: #4a3d60; }
+.chat-card { position: absolute; z-index: 5; left: 16px; bottom: 16px; width: var(--chat-width, min(340px, calc(100vw - 32px))); display: flex; flex-direction: column; padding: 6px 10px; color: #4a3d60; }
 .chat-card[data-mode="half"] { background: color-mix(in srgb, var(--panel) 62%, transparent); backdrop-filter: blur(3px); }
 .chat-card[data-mode="solid"] { background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); }
 .chat-card:not([data-mode="solid"]) { --outline: 1px 0 0 #fff, -1px 0 0 #fff, 0 1px 0 #fff, 0 -1px 0 #fff, 1px 1px 0 #fff, -1px -1px 0 #fff; text-shadow: var(--outline); }
 .chat-card.collapsed { width: auto; }
-.chat-heading { display: flex; align-items: center; gap: 8px; }
+.chat-heading { display: flex; align-items: center; gap: 8px; cursor: move; touch-action: none; }
+.chat-card.adjusting { user-select: none; -webkit-user-select: none; }
+.chat-resize { position: absolute; top: -6px; right: -6px; z-index: 1; width: 20px; height: 20px; cursor: nesw-resize; touch-action: none;
+  background: linear-gradient(45deg, transparent 45%, var(--line) 45% 55%, transparent 55% 70%, var(--line) 70% 80%, transparent 80%); }
+.chat-card.collapsed .chat-resize { display: none; }
 .chat-heading h2 { font-size: 16px; }
 .chat-toggle { margin-left: auto; min-height: 32px; padding: 0 8px; background: none; box-shadow: none; font-size: 13px; }
 .chat-unread { min-width: 20px; padding: 1px 6px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 900; text-align: center; text-shadow: none; }
 .chat-body { display: flex; flex-direction: column; min-height: 0; }
-#messages { list-style: none; margin: 4px 0; padding: 0; height: min(28vh, 220px); overflow: auto; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+#messages { list-style: none; margin: 4px 0; padding: 0; height: var(--chat-height, min(28vh, 220px)); overflow: auto; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
 #messages li:first-child { margin-top: auto; }
 #chat-form > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .compose { display: flex; gap: 8px; padding: 4px 0; }
@@ -299,8 +303,8 @@ button[data-key]::before { content: attr(data-key); position: absolute; left: 4p
   .zone-chip { top: 118px; left: 10px; }
   .settings-panel { top: 118px; right: 10px; }
   #interaction-panels { top: 168px; left: 10px; }
-  .chat-card { left: auto; right: 10px; bottom: 10px; width: min(240px, 60vw); }
-  #messages { height: min(20vh, 150px); }
+  .chat-card { left: auto; right: 10px; bottom: 10px; width: var(--chat-width, min(240px, 60vw)); }
+  #messages { height: var(--chat-height, min(20vh, 150px)); }
   .positional-controls { left: auto; right: 10px; bottom: auto; top: 118px; transform: none; flex-direction: column; align-items: flex-end; }
   #object-feedback { position: static; transform: none; }
   .touch-controls { --key: 48px; left: 12px; bottom: 12px; display: grid; }

@@ -580,7 +580,8 @@ test('two browser guests render their avatars and exchange plain-text chat throu
   } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
 });
 
-test('keyboard moves the authoritative player while typing pauses movement', async ({ page }) => {
+test('keyboard moves the player; in chat letters type while arrow keys still walk', async ({ page }) => {
+  test.setTimeout(30000);
   await enter(page, 'E2EMovement');
   const observer = await observe();
   try {
@@ -600,7 +601,58 @@ test('keyboard moves the authoritative player while typing pauses movement', asy
     await page.waitForTimeout(350);
     await page.keyboard.up('d');
     expect(player.x).toBe(stopped);
+    await expect(page.locator('#message')).toHaveValue('d');
+
+    // Arrow keys still walk while the chat box keeps focus and the caret stays put.
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(() => player.x).toBeGreaterThan(stopped);
+    await page.keyboard.up('ArrowRight');
+    await expect(page.locator('#message')).toBeFocused();
+    expect(await page.locator('#message').evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(1);
+
+    // Esc hands the keyboard back to the map; Enter on the map opens the chat again.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#message')).not.toBeFocused();
+    const resumed = player.x;
+    await page.keyboard.down('d');
+    await expect.poll(() => player.x).toBeGreaterThan(resumed);
+    await page.keyboard.up('d');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#message')).toBeFocused();
   } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+test('chat box drags by its heading, resizes from its corner, and keeps the layout', async ({ page }) => {
+  test.setTimeout(30000);
+  await enter(page, 'E2EChatLayout');
+  const card = page.locator('#chat-card');
+  const before = (await card.boundingBox())!;
+  await page.mouse.move(before.x + 30, before.y + 14);
+  await page.mouse.down();
+  await page.mouse.move(before.x + 230, before.y + 14 - 100, { steps: 5 });
+  await page.mouse.up();
+  const moved = (await card.boundingBox())!;
+  expect(Math.round(moved.x - before.x)).toBe(200);
+  expect(Math.round(moved.y - before.y)).toBe(-100);
+
+  const grip = (await page.locator('#chat-resize').boundingBox())!;
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 80, grip.y + grip.height / 2 - 60, { steps: 5 });
+  await page.mouse.up();
+  const resized = (await card.boundingBox())!;
+  expect(Math.round(resized.width - moved.width)).toBe(80);
+  expect(Math.round(resized.height - moved.height)).toBe(60);
+  expect(Math.round(resized.y + resized.height)).toBe(Math.round(moved.y + moved.height));
+
+  await page.locator('#leave').click();
+  await joinSavedProfile(page);
+  const restored = (await card.boundingBox())!;
+  expect(Math.round(restored.x)).toBe(Math.round(resized.x));
+  expect(Math.round(restored.width)).toBe(Math.round(resized.width));
+  await page.locator('#settings-toggle').click();
+  await page.locator('#chat-reset').click();
+  expect(Math.round((await card.boundingBox())!.x)).toBe(Math.round(before.x));
 });
 
 test('leaving clears controls and canvas, and the same page can join again', async ({ page }) => {

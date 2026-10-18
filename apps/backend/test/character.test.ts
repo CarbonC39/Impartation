@@ -13,7 +13,9 @@ test('configured character frames fit the supplied sheet and are independent fro
     const count = width / avatar.frameWidth * height / avatar.frameHeight;
     const walkingFrames = FACINGS.flatMap(facing => avatar.walk[facing]);
     assert.equal(walkingFrames.length, 16);
-    assert.equal(new Set(walkingFrames).size, walkingFrames.length);
+    // Each direction cycles three distinct columns of its own row and never shows the idle column.
+    assert.equal(new Set(walkingFrames).size, 12);
+    for (const facing of FACINGS) assert.ok(!(avatar.walk[facing] as readonly number[]).includes(avatar.idle[facing]));
     assert.ok(Math.max(...walkingFrames) < count);
     assert.ok(Number.isFinite(avatar.groundAnchor.x) && avatar.groundAnchor.x >= 0 && avatar.groundAnchor.x <= avatar.frameWidth);
     assert.ok(Number.isFinite(avatar.groundAnchor.y) && avatar.groundAnchor.y >= 0 && avatar.groundAnchor.y <= avatar.frameHeight);
@@ -25,13 +27,13 @@ test('configured character frames fit the supplied sheet and are independent fro
   assert.equal(avatarDefinition('missing'), avatars.mint);
 });
 
-test('walk frames loop locally and idle stays on the directional first frame', () => {
+test('walk frames start on the first step, loop locally, and idle stays on the directional first frame', () => {
   for (const facing of FACINGS) {
     const avatar = avatars.mint;
     assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 0), avatar.walk[facing][0]);
-    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 120), avatar.walk[facing][1]);
-    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 360), avatar.walk[facing][3]);
-    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 480), avatar.walk[facing][0]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 100), avatar.walk[facing][1]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 300), avatar.walk[facing][3]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 400), avatar.walk[facing][0]);
     assert.equal(characterFrame('mint', facing, 'idle', 'none', false, 9999), avatar.idle[facing]);
   }
 });
