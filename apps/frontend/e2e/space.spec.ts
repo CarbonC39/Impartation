@@ -36,15 +36,25 @@ test('voice requests microphone only after opt-in and clears controls on leave',
   await enter(page, 'VoiceBrowser');
   expect(await page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls)).toBe(0);
   await expect(page.locator('#voice-status')).toContainText('语音已关闭');
-  await page.locator('#settings-toggle').click();
-  await page.locator('#voice-toggle').click();
+  await page.locator('#voice-mic').click();
   await expect(page.locator('#voice-status')).toContainText('语音已开启');
+  await expect(page.locator('#voice-mic')).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls)).toBe(1);
-  await page.locator('#voice-mute').click();
-  await expect(page.locator('#voice-status')).toContainText('已静音');
+  await page.locator('#voice-mic').click();
+  await expect(page.locator('#voice-status')).toContainText('麦克风已关');
+  await expect(page.locator('#voice-mic')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#voice-mic').click();
+  await expect(page.locator('#voice-status')).not.toContainText('麦克风已关');
+  expect(await page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls)).toBe(1);
+  await page.locator('#settings-toggle').click();
+  await page.locator('#voice-disconnect').click();
+  await expect(page.locator('#voice-status')).toContainText('语音已关闭');
+  await expect(page.locator('#voice-disconnect')).toBeHidden();
+  await page.locator('#voice-mic').click();
+  await expect(page.locator('#voice-status')).toContainText('语音已开启');
   await page.locator('#leave').click();
   await expect(page.locator('#voice-status')).toContainText('语音已关闭');
-  await expect(page.locator('#voice-toggle')).toBeDisabled();
+  await expect(page.locator('#voice-mic')).toBeDisabled();
 });
 
 test('voice shows microphone permission errors and stays disabled', async ({ page }) => {
@@ -53,11 +63,10 @@ test('voice shows microphone permission errors and stays disabled', async ({ pag
       value: async () => { throw new DOMException('Permission denied', 'NotAllowedError'); } });
   });
   await enter(page, 'VoiceDenied');
-  await page.locator('#settings-toggle').click();
-  await page.locator('#voice-toggle').click();
+  await page.locator('#voice-mic').click();
   await expect(page.locator('#voice-status')).toContainText('语音错误：麦克风权限被拒绝');
-  await expect(page.locator('#voice-toggle')).toBeEnabled();
-  await expect(page.locator('#voice-mute')).toBeDisabled();
+  await expect(page.locator('#voice-mic')).toBeEnabled();
+  await expect(page.locator('#voice-mic')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('voice reports missing WebRTC separately from microphone support', async ({ page }) => {
@@ -65,10 +74,9 @@ test('voice reports missing WebRTC separately from microphone support', async ({
     Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, value: undefined });
   });
   await enter(page, 'VoiceNoWebRTC');
-  await page.locator('#settings-toggle').click();
-  await page.locator('#voice-toggle').click();
+  await page.locator('#voice-mic').click();
   await expect(page.locator('#voice-status')).toContainText('未提供 WebRTC（RTCPeerConnection）');
-  await expect(page.locator('#voice-mute')).toBeDisabled();
+  await expect(page.locator('#voice-mic')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave', async ({ page, browser }) => {
@@ -92,10 +100,8 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
     await bob.addInitScript(microphone);
     await enter(page, 'VoicePeerA', 'mint', () => captureRenderedScene(page));
     await enter(bob, 'VoicePeerB');
-    await page.locator('#settings-toggle').click();
-    await bob.locator('#settings-toggle').click();
-    await page.locator('#voice-toggle').click();
-    await bob.locator('#voice-toggle').click();
+    await page.locator('#voice-mic').click();
+    await bob.locator('#voice-mic').click();
     await expect(page.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
     await expect(bob.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
     await expect.poll(() => page.locator('audio[data-voice-peer]').evaluateAll(elements =>
@@ -105,6 +111,15 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
     // Both test tones count as speech: this browser shows a mic over itself and over the remote peer.
     const visibleMics = () => visibleMicCount(page);
     await expect.poll(visibleMics, { timeout: 10000 }).toBe(2);
+    // The speaker button silences incoming voices without closing the connection.
+    const peerAudioMuted = () => page.locator('audio[data-voice-peer]').evaluateAll(elements =>
+      elements.every(element => (element as HTMLAudioElement).muted));
+    await page.locator('#sound-toggle').click();
+    await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#voice-status')).toContainText('声音已关');
+    expect(await peerAudioMuted()).toBe(true);
+    await page.locator('#sound-toggle').click();
+    expect(await peerAudioMuted()).toBe(false);
     await bob.locator('#leave').click();
     await expect(page.locator('audio[data-voice-peer]')).toHaveCount(0, { timeout: 5000 });
     await expect.poll(visibleMics).toBe(1);
@@ -179,17 +194,16 @@ test('pre-join check opens the microphone once, enters muted, and shows a mic ov
   await page.locator('#prejoin-muted').check();
   await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
-  await expect(page.locator('#voice-status')).toContainText('语音已开启 · 已静音');
+  await expect(page.locator('#voice-status')).toContainText('语音已开启 · 麦克风已关');
   expect(await captures()).toBe(1);
 
   const ownId = await sessionOf(page);
   const micVisible = () => statusOf(page, ownId).then(status => status?.mic ?? false);
   expect(await micVisible()).toBe(false);
-  await page.locator('#settings-toggle').click();
-  await page.locator('#voice-mute').click();
-  await expect(page.locator('#voice-status')).not.toContainText('已静音');
+  await page.locator('#voice-mic').click();
+  await expect(page.locator('#voice-status')).not.toContainText('麦克风已关');
   await expect.poll(micVisible).toBe(true);
-  await page.locator('#voice-mute').click();
+  await page.locator('#voice-mic').click();
   await expect.poll(micVisible).toBe(false);
   await page.locator('#leave').click();
   await expect(page.locator('#voice-status')).toContainText('语音已关闭');
@@ -1142,10 +1156,10 @@ test('wardrobe previews items, keeps three named outfit slots and remembers disp
   await page.locator('#settings-toggle').click();
   await page.locator('[data-chat-mode="solid"]').click();
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'solid');
-  await page.locator('#toggle-names').click();
+  await page.locator('#names-switch').click();
   await expect(page.locator('#names-switch')).toHaveAttribute('aria-checked', 'false');
   await page.locator('#leave').click();
   await page.reload();
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'solid');
-  await expect(page.locator('#toggle-names')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#names-switch')).toHaveAttribute('aria-checked', 'false');
 });

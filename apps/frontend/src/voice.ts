@@ -24,6 +24,7 @@ export class ProximityVoice {
   private timer?: number;
   private generation = 0;
   private muted = false;
+  private deafened = false;
   private disposed = false;
   private error = '';
   private unsubscribers: (() => void)[] = [];
@@ -33,8 +34,8 @@ export class ProximityVoice {
   /** Called after the device or enabled state changes, so pickers can follow the real device. */
   onDeviceChange?: (deviceId: string) => void;
 
-  constructor(private room: Room<SpaceProtocol>, private toggleButton: HTMLButtonElement,
-    private muteButton: HTMLButtonElement, private status: HTMLElement) {
+  constructor(private room: Room<SpaceProtocol>, private micButton: HTMLButtonElement,
+    private disconnectButton: HTMLButtonElement, private status: HTMLElement) {
     this.unsubscribers.push(
       room.onMessage('voiceOffer', signal => { void this.onOffer(signal); }),
       room.onMessage('voiceAnswer', signal => { void this.onAnswer(signal); }),
@@ -46,18 +47,32 @@ export class ProximityVoice {
 
   private render() {
     const enabled = Boolean(this.stream);
-    this.toggleButton.textContent = enabled ? '关闭语音' : '开启语音';
-    this.toggleButton.disabled = this.disposed || !this.room.connection.isOpen;
-    this.muteButton.disabled = !enabled;
-    this.muteButton.textContent = this.muted ? '取消静音' : '静音';
-    this.muteButton.setAttribute('aria-pressed', String(this.muted));
+    const live = enabled && !this.muted;
+    this.micButton.disabled = this.disposed || !this.room.connection.isOpen;
+    this.micButton.setAttribute('aria-pressed', String(live));
+    const micLabel = live ? '关闭麦克风' : '开启麦克风';
+    this.micButton.setAttribute('aria-label', micLabel);
+    this.micButton.title = micLabel;
+    this.disconnectButton.hidden = !enabled;
+    const extras = `${this.muted ? ' · 麦克风已关' : ''}${this.deafened ? ' · 声音已关' : ''}`;
     this.status.textContent = this.error ? `语音错误：${this.error}` : enabled ?
-      `语音已开启${this.muted ? ' · 已静音' : ''} · 附近 ${this.peers.size} 人` : '语音已关闭';
+      `语音已开启${extras} · 附近 ${this.peers.size} 人` : '语音已关闭';
   }
 
-  async toggle() {
-    if (this.stream) { this.disable(); return; }
+  /** Mic button: starts voice on first use, then switches the microphone on and off while staying connected. */
+  async toggleMic() {
+    if (this.stream) { this.toggleMute(); return; }
     await this.enable();
+  }
+
+  /** Silences every incoming voice without touching the microphone. */
+  setDeafened(deafened: boolean) {
+    this.deafened = deafened;
+    for (const peer of this.peers.values()) {
+      peer.audio.muted = deafened;
+      if (!deafened) void peer.audio.play().catch(() => {});
+    }
+    this.render();
   }
 
   /**
@@ -71,7 +86,7 @@ export class ProximityVoice {
     const generation = ++this.generation;
     this.error = '';
     this.status.textContent = '正在请求麦克风…';
-    this.toggleButton.disabled = true;
+    this.micButton.disabled = true;
     let captured: MediaStream | undefined = options.stream;
     try {
       // Call from the user gesture before waiting for network configuration.
@@ -220,6 +235,7 @@ export class ProximityVoice {
     const connection = new RTCPeerConnection({ iceServers: this.config!.iceServers });
     const audio = document.createElement('audio');
     audio.autoplay = true;
+    audio.muted = this.deafened;
     audio.setAttribute('playsinline', '');
     audio.dataset.voicePeer = id;
     audio.style.display = 'none';
@@ -234,7 +250,7 @@ export class ProximityVoice {
       audioContext();
       this.setMeter(id, audio.srcObject);
       void audio.play().then(() => { if (this.error.startsWith('浏览器阻止播放')) { this.error = ''; this.render(); } })
-        .catch(() => { this.error = '浏览器阻止播放，请点击静音按钮重试'; this.render(); });
+        .catch(() => { this.error = '浏览器阻止播放，请点击麦克风或喇叭按钮重试'; this.render(); });
     };
     connection.onicecandidate = event => {
       if (!event.candidate || this.peers.get(id) !== peer || !this.room.connection.isOpen) return;

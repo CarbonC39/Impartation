@@ -41,7 +41,9 @@ button.danger { background: #ffd2c2; color: #4a3d60; }
 button.big { min-height: 56px; padding: 10px 30px; font-size: 20px; font-weight: 900; box-shadow: var(--px); }
 button[aria-pressed="true"], button[aria-selected="true"] { background: var(--sel); color: var(--sel-ink); }
 .icon-button { width: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-.icon-button svg, .chip-button svg, #toggle-names svg { width: 16px; height: 16px; }
+.icon-button svg, .chip-button svg { width: 16px; height: 16px; }
+.state-icon[aria-pressed="true"] .icon-off, .state-icon[aria-pressed="false"] .icon-on { display: none; }
+.state-icon svg { width: 20px; height: 20px; }
 :focus-visible { outline: 3px dashed var(--accent); outline-offset: 5px; }
 input, select, textarea { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 0; background: var(--field); color: var(--ink); box-shadow: var(--px-flat); font-size: 15px; }
 input::placeholder, textarea::placeholder { color: var(--ink2); opacity: .8; }
@@ -218,11 +220,9 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 #status { color: var(--ink2); overflow-wrap: anywhere; }
 #voice-status { color: var(--ink2); overflow-wrap: anywhere; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-#toggle-names { display: inline-flex; align-items: center; gap: 6px; }
 .zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
 .settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .settings-panel h2 { font-size: 16px; }
-.voice-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .chat-modes { display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700; }
 .chat-modes > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .chat-modes button { min-height: 36px; padding: 4px; font-size: 13px; }
