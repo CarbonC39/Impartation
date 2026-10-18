@@ -25,6 +25,7 @@ export const APPEARANCE_ASSETS = {
     "suit",
     "sweater",
     "t-shirt",
+    "兔女郎",
     "卫衣"
   ],
   "bottom": [
@@ -48,7 +49,7 @@ export const APPEARANCE_ASSET_PATHS = {
   "hair1": "/characters/hair/hair1.png",
   "hair2": "/characters/hair/hair2.png",
   "hair3": "/characters/hair/hair3.png",
-  "hair4": "/characters/hair/hair4.PNG",
+  "hair4": "/characters/hair/hair4.png",
   "hair5": "/characters/hair/hair5.png",
   "hair6": "/characters/hair/hair6.png",
   "hair7": "/characters/hair/hair7.png",
@@ -57,9 +58,10 @@ export const APPEARANCE_ASSET_PATHS = {
   "priest": "/characters/top/priest.PNG",
   "school_uniform": "/characters/top/school_uniform.png",
   "shirt": "/characters/top/shirt.png",
-  "suit": "/characters/top/suit.PNG",
+  "suit": "/characters/top/suit.png",
   "sweater": "/characters/top/sweater.PNG",
   "t-shirt": "/characters/top/t-shirt.png",
+  "兔女郎": "/characters/top/兔女郎.png",
   "卫衣": "/characters/top/卫衣.png",
   "pants": "/characters/bottom/pants.png",
   "skirt": "/characters/bottom/skirt.png",

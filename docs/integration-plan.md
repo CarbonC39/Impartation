@@ -22,6 +22,16 @@ EXTERNAL_TOOLS='{"shared-document":{"url":"https://docs.example.com/p/workspace"
 
 URL 必须是绝对 HTTP(S) 地址，不得嵌入用户名或密码。不要配置 token、项目 user id、role 或邀请凭据。手机的 `localhost` 指向手机自身，Docker 内部服务名也不是公开页面地址。Drawpile 应配置其浏览器 Web 客户端入口，而非 TCP 服务端口。配置变更后重启后端。
 
+### 本机启动 WBO 白板
+
+仓库提供 `compose.wbo.yml`，使用官方 `lovasoa/wbo` 镜像，并用 Docker 命名卷持久化白板。启动后，在根目录 `.env` 设置已有的 `shared-canvas` 地图资源：
+
+```dotenv
+EXTERNAL_TOOLS='{"shared-canvas":{"url":"http://localhost:5001/boards/workspace","mode":"embed","manualExternalOpen":true,"allowSameOrigin":true}}'
+```
+
+执行 `docker compose -f compose.wbo.yml up -d` 后，确认 `http://localhost:5001/boards/workspace` 可打开，再重启后端。此配置只适用于同一台电脑上的本地开发；Docker 端口绑定到 `127.0.0.1`。手机或其他电脑不能访问主机的 `localhost`；正式部署需把 WBO 放到有 HTTPS 的主机，通过反向代理公开，再将 URL 改为该域名。未配置 WBO 的 JWT 认证时，知道白板链接的人都可能访问白板，因此不要把本机调试地址直接暴露到公网。
+
 现有示例资源可在自定义地图中复用。预期接入服务如下；名称只说明用途，前端不包含服务适配代码，具体页面由 URL 决定：
 
 | resourceId | 预期服务 | 用途 |
