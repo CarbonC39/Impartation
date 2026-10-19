@@ -384,14 +384,29 @@ async function enterWorld(plan: VoicePlan) {
       return worldRegistry?.maps.find(map => map.id === mapId)?.world;
     });
     messages.replaceChildren();
-    room.onMessage('chat', message => {
+    const appendChat = (text: string, className?: string) => {
       const li = document.createElement('li');
-      li.textContent = `${message.name}：${message.text}`;
+      li.textContent = text;
+      if (className) li.className = className;
       messages.append(li);
       if (messages.children.length > 100) messages.firstElementChild?.remove();
       messages.scrollTop = messages.scrollHeight;
+    };
+    room.onMessage('chat', message => {
+      appendChat(`${message.privateAreaId ? '［房间］' : ''}${message.name}：${message.text}`, message.privateAreaId ? 'chat-private' : undefined);
       if (chatCard.classList.contains('collapsed')) setUnread(unread + 1);
       scene?.showBubble(message.sessionId, message.text);
+    });
+    // The server routes chat and voice by private area; tell the player when their audience changes.
+    let audience = '';
+    const chatRoom = room;
+    room.onStateChange(() => {
+      const own = chatRoom.state.players.get(chatRoom.sessionId);
+      if (!own?.connected) return; // Disconnects clear privateAreaId; that is not a move to public.
+      const next = own.privateAreaId ? `${own.mapId}/${own.privateAreaId}` : '';
+      if (next === audience) return;
+      audience = next;
+      appendChat(next ? '已进入私密房间：聊天和语音只在房间内互通。' : '已回到公共区域：聊天和语音恢复公共范围。', 'chat-system');
     });
     room.onDrop(() => { setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
     room.onReconnect(() => { setConnected(true); status.textContent = '连接已恢复'; });

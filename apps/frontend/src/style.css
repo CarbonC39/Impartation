@@ -244,6 +244,8 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .chat-body { display: flex; flex-direction: column; min-height: 0; }
 #messages { list-style: none; margin: 4px 0; padding: 0; height: var(--chat-height, min(28vh, 220px)); overflow: auto; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
 #messages li:first-child { margin-top: auto; }
+#messages .chat-private { font-weight: 700; }
+#messages .chat-system { opacity: .7; font-size: 12px; }
 #chat-form > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .compose { display: flex; gap: 8px; padding: 4px 0; }
 .compose input { min-height: 40px; padding: 8px 10px; font-size: 14px; background: color-mix(in srgb, var(--field) 75%, transparent); text-shadow: none; }

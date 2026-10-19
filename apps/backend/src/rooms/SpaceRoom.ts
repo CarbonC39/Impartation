@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
 import { SpaceState, Player, joinSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
-  TICK_MS, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
+  TICK_MS, sameAudience, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
   type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
 import { worldRegistry, worlds } from '../world.js';
@@ -48,8 +48,12 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       if (!player || now - (this.lastChat.get(client.sessionId) ?? 0) < 500) return;
       this.lastChat.set(client.sessionId, now);
       this.setTyping(client.sessionId, false);
-      const message: ChatMessage = { id: randomUUID(), sessionId: client.sessionId, name: player.name, text, sentAt: now };
-      this.broadcast('chat', message);
+      const message: ChatMessage = { id: randomUUID(), sessionId: client.sessionId, name: player.name, text, sentAt: now,
+        privateAreaId: player.privateAreaId };
+      for (const target of this.clients) {
+        const listener = this.state.players.get(target.sessionId);
+        if (listener?.connected && sameAudience(player, listener)) target.send('chat', message);
+      }
     }),
     typing: validate(typingSchema, async (client: SpaceClient, { typing }: { typing: boolean }) => {
       if (!await this.authorize(client)) return;
@@ -129,7 +133,10 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
         player.x = next.x;
         player.y = next.y;
         player.zoneId = currentZone(world, player)?.id ?? '';
+        const privateAreaId = player.privateAreaId;
         this.interactions.access.syncPlayer(id, player);
+        // Crossing a private-area border ends voice pairs now instead of on the next 1 s tick.
+        if (player.privateAreaId !== privateAreaId) this.voice.tick();
       }
     }, TICK_MS);
   }
