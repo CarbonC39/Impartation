@@ -45,7 +45,7 @@ export class CharacterStatus {
   private typing: Phaser.GameObjects.Graphics;
   private shownBubble = '';
 
-  constructor(scene: Phaser.Scene, id: string, own: boolean, private zoom: number) {
+  constructor(scene: Phaser.Scene, id: string, own: boolean, zoom: number) {
     // Name sits under the feet as outlined text, so it never covers the character or speech bubble.
     this.label = scene.add.text(0, 0, '', {
       fontSize: '12px', fontStyle: 'bold', color: own ? '#b0507a' : '#4a3d60',
@@ -59,6 +59,11 @@ export class CharacterStatus {
     this.typing = scene.add.graphics().setName('typing');
     this.group = scene.add.container(0, 0, [this.bubbleShape, this.bubbleText, this.mic, this.typing])
       .setScale(1 / zoom).setName(`status:${id}`);
+  }
+
+  setZoom(zoom: number) {
+    this.label.setScale(1 / zoom);
+    this.group.setScale(1 / zoom);
   }
 
   /** `x`/`footY`/`headY` are world coordinates; `time` drives the small animations. */

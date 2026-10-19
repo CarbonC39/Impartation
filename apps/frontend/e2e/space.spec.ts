@@ -221,7 +221,7 @@ test('pre-join check without the microphone enters with voice off and can go bac
   await expect(page.locator('#avatar-screen')).toBeVisible();
 });
 
-test('character atlas uses configured camera zoom and seat anchors have no default furniture', async ({ page }, testInfo) => {
+test('camera zoom defaults to map tiles and settings apply integer zoom', async ({ page }, testInfo) => {
   const seatVisualRequests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname === '/objects/seat.svg') seatVisualRequests.push(request.url());
@@ -265,8 +265,11 @@ test('character atlas uses configured camera zoom and seat anchors have no defau
   await expect.poll(async () => (await renderState())?.frame).toBe(0);
   const initial = (await renderState())!;
   const avatar = avatars.mint;
-  const cameraZoom = Number(process.env.VITE_CAMERA_ZOOM ?? 2);
+  const cameraZoom = 3;
   expect(initial.zoom).toBe(cameraZoom);
+  await page.locator('#settings-toggle').click();
+  await expect(page.locator('#camera-zoom')).toHaveValue('auto');
+  await expect(page.locator('#camera-zoom option:first-child')).toHaveText('自动（3x）');
   expect(initial.objectImages).toBe(0);
   expect(seatVisualRequests).toEqual([]);
   expect(initial.origin).toEqual([avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight]);
@@ -277,6 +280,12 @@ test('character atlas uses configured camera zoom and seat anchors have no defau
   expect(initial.visibleFootOffset).toBeCloseTo(0);
   expect(initial.frames).toEqual(Array.from({ length: 16 }, (_, index) => [index % 4 * avatar.frameWidth,
     Math.floor(index / 4) * avatar.frameHeight, avatar.frameWidth, avatar.frameHeight]));
+  await page.locator('#camera-zoom').selectOption('5');
+  await expect.poll(async () => (await renderState())?.zoom).toBe(5);
+  await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * 5, avatar.frameHeight * 5]);
+  await page.locator('#camera-zoom').selectOption('auto');
+  await expect.poll(async () => (await renderState())?.zoom).toBe(cameraZoom);
+  await page.locator('#settings-toggle').click();
   await page.locator('#game canvas').focus();
   await page.keyboard.down('d');
   try {
@@ -289,6 +298,21 @@ test('character atlas uses configured camera zoom and seat anchors have no defau
   await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * cameraZoom, avatar.frameHeight * cameraZoom]);
   await page.screenshot({ path: testInfo.outputPath('character-zoom-mobile.png'), fullPage: true });
   await page.locator('#leave').click();
+});
+
+test('map zoom choice persists across visits', async ({ page }) => {
+  await enter(page, 'ZoomPreference');
+  await page.locator('#settings-toggle').click();
+  await page.locator('#camera-zoom').selectOption('6');
+  await page.reload();
+  await expect(page.locator('#camera-zoom')).toHaveValue('6');
+  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await captureRenderedScene(page);
+  await openAvatarScreen(page);
+  await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.cameras.main.zoom)).toBe(6);
 });
 
 test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
