@@ -1,8 +1,10 @@
 import { BoardNote, boardPostSchema, boardDeleteSchema, type BoardPostInput, type BoardDeleteInput, type InteractionResult } from '@virtual-workspace/shared';
-import { boards } from './store.js';
+import { BoardStore } from './store.js';
+import { db } from '../../db.js';
 import type { InteractionContext, SpaceClient } from '../context.js';
 
 export function createBoardInteraction(context: InteractionContext) {
+  let boards: BoardStore;
   let unsubscribe: (() => void) | undefined;
   function syncBoard() {
     const notes = context.worlds.flatMap(world => world.zones).filter(zone => zone.kind === 'board').flatMap(zone => boards.list(zone.resourceId));
@@ -12,7 +14,7 @@ export function createBoardInteraction(context: InteractionContext) {
   }
 
   return {
-    initialize() { syncBoard(); unsubscribe = boards.subscribe(syncBoard); },
+    initialize() { boards = new BoardStore(db, context.state.spaceId); syncBoard(); unsubscribe = boards.subscribe(syncBoard); },
     dispose() { unsubscribe?.(); },
     messages: {
       boardPost: { format: boardPostSchema, handler: async (client: SpaceClient, { resourceId, text }: BoardPostInput): Promise<InteractionResult> => {

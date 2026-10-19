@@ -1,17 +1,28 @@
 # Tiled 地图契约
 
-Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数据。`assets/maps/registry.json` 选择地图集合的初始地图和每张地图的默认出生点：
+Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数据。`assets/maps/registry.json` 定义可复用地图和有序 Space 列表；每个 Space 选择初始地图和成员地图：
 
 ```json
 {
-  "initialMap": "lobby",
   "maps": [
     { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" }
+  ],
+  "spaces": [
+    {
+      "id": "main",
+      "name": "Main",
+      "description": "Optional description",
+      "cover": "/covers/main.png",
+      "initialMap": "lobby",
+      "maps": ["lobby"]
+    }
   ]
 }
 ```
 
-`file` 相对于 registry 文件。地图 registry 是服务端加载配置；新增地图要在此登记，并确保所有 Portal 目标均能解析。客户端从 `GET /api/world` 读取地图目录，再取对应地图和资源，不硬编码 `lobby.tmj`。服务端以相同 `.tmj` 提取权威语义，并发布规范化后的渲染 JSON 和该地图显式引用的资源。
+`file` 相对于 registry 文件。`maps` 保存地图定义，每个条目包含 `id`、`file`、`defaultSpawn`；`spaces` 数组顺序就是开始页显示顺序。默认产品 Space 的稳定 ID 为 `main`。Space 的 `id` 必须匹配 `/^[a-z0-9][a-z0-9_-]*$/`，创建后应保持稳定；`name` 是展示名，`description` 可选，`cover` 是普通静态图片路径。每个 Space 的 `initialMap` 和 `maps` 都必须引用已登记地图，初始地图必须属于该 Space。地图可以被多个 Space 复用。Portal 的目标地图必须属于当前 Space，目标出生点也必须存在。
+
+客户端从 `GET /api/world` 读取 `{ maps, spaces }`：`spaces` 提供列表元数据，`maps` 是规范化地图目录；再按地图 URL 请求对应渲染 JSON 和显式资源。服务端以源 `.tmj` 提取权威语义。单进程中每个 Space 最多有一个 live Colyseus room；`spaceJoinSchema` 要求客户端提交 `spaceId`，服务端按它匹配该 Space。满员时明确拒绝加入，不会再创建第二个 room。`SPACE_MAX_CLIENTS` 对所有 Space 共用，默认 32。
 
 ## 交互试验场
 
@@ -182,7 +193,7 @@ Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 }
 ```
 
-服务端校验 Portal 指向 registry 中存在的地图和出生点。客户端仅提交当前 Portal 的 `zoneId`；服务端还会检查身份、玩家所在地图和实际位置，再在同一房间内切换玩家 `mapId` 并放置到目标出生点。交互显示和客户端碰撞都不能授权地图切换。
+服务端校验 Portal 指向当前 Space 中存在的地图和出生点。客户端仅提交当前 Portal 的 `zoneId`；服务端还会检查身份、玩家所在地图和实际位置，再在同一 Space room 内切换玩家 `mapId` 并放置到目标出生点。交互显示和客户端碰撞都不能授权地图切换。
 
 ## Integration 接入
 

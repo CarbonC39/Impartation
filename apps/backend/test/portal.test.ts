@@ -30,9 +30,9 @@ const seat = { name: 'same-seat', class: 'action', point: true, x: 88, y: 40,
   properties: [{ name: 'action', value: 'sit' }, { name: 'facing', value: 'left' }] };
 writeFileSync(join(directory, 'home.tmj'), JSON.stringify(makeMap('entry', [portal('door', 'studio', 'arrival'), seat])));
 writeFileSync(join(directory, 'studio.tmj'), JSON.stringify(makeMap('arrival', [portal('return', 'home', 'entry'), seat], [{ x: 48, y: 16, width: 16, height: 48 }])));
-writeFileSync(join(directory, 'registry.json'), JSON.stringify({ initialMap: 'home', maps: [
+writeFileSync(join(directory, 'registry.json'), JSON.stringify({ maps: [
   { id: 'home', file: 'home.tmj', defaultSpawn: 'entry' }, { id: 'studio', file: 'studio.tmj', defaultSpawn: 'arrival' },
-] }));
+], spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'home', maps: ['home', 'studio'] }] }));
 process.env.DATABASE_PATH = ':memory:';
 process.env.EXTERNAL_TOOLS = '{}';
 process.env.MAP_REGISTRY_PATH = join(directory, 'registry.json');
@@ -52,7 +52,7 @@ async function connect(name: string) {
   assert.equal(response.status, 200);
   const cookie = response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; ');
   const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
-    { name, avatar: 'mint', appearance: DEFAULT_APPEARANCE });
+    { name, avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'main' });
   room.onMessage('chat', () => {});
   await room.waitForInitialState(); connections.push(room);
   return room;
@@ -62,7 +62,7 @@ test('world API publishes the registered Tiled source, multiple layers and resol
   const response = await fetch(endpoint + '/api/world');
   assert.deepEqual(response.headers.getSetCookie(), []);
   const registry = worldRegistryResponseSchema.parse(await response.json());
-  assert.equal(registry.initialMap, 'home');
+  assert.deepEqual(registry.spaces.map(space => [space.id, space.initialMap]), [['main', 'home']]);
   assert.deepEqual(registry.maps.map(map => [map.id, map.defaultSpawn]), [['home', 'entry'], ['studio', 'arrival']]);
   const render = await (await fetch(endpoint + registry.maps[0].url)).json() as { layers: { name: string }[]; tilesets: { image: string; source?: string }[] };
   assert.deepEqual(render.layers.slice(0, 2).map(layer => layer.name), ['floor', 'details']);
@@ -122,6 +122,6 @@ test('object ids are scoped by map and a Portal releases the old seat and action
 
 test('registry loader rejects unresolved destinations before exposing maps', () => {
   const file = join(directory, 'broken.json');
-  writeFileSync(file, JSON.stringify({ initialMap: 'home', maps: [{ id: 'home', file: 'home.tmj', defaultSpawn: 'entry' }] }));
+  writeFileSync(file, JSON.stringify({ maps: [{ id: 'home', file: 'home.tmj', defaultSpawn: 'entry' }], spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'home', maps: ['home'] }] }));
   assert.throws(() => loadWorldRegistry(file), /Portal/);
 });

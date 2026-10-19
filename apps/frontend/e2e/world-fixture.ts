@@ -56,8 +56,8 @@ export function createWorldFixture(): string {
   };
   writeFileSync(join(directory, 'studio.tmj'), JSON.stringify(studio));
   const registryPath = join(directory, 'registry.json');
-  writeFileSync(registryPath, JSON.stringify({ initialMap: 'workspace', maps: [
+  writeFileSync(registryPath, JSON.stringify({ maps: [
     { id: 'workspace', file: 'entry.tmj', defaultSpawn: 'entry' }, { id: 'studio', file: 'studio.tmj', defaultSpawn: 'arrival' },
-  ] }));
+  ], spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'workspace', maps: ['workspace', 'studio'] }, { id: 'other', name: 'Other', cover: '/maps/tiles.png', initialMap: 'studio', maps: ['workspace', 'studio'] }] }));
   return registryPath;
 }

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
+import { matchMaker } from '@colyseus/core';
 import { DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, type SpaceProtocol } from '@virtual-workspace/shared';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
@@ -43,7 +44,8 @@ const makeMap = () => ({
   ],
 });
 for (const id of ['home', 'studio']) writeFileSync(join(directory, `${id}.tmj`), JSON.stringify(makeMap()));
-writeFileSync(join(directory, 'registry.json'), JSON.stringify({ initialMap: 'home', maps: ['home', 'studio'].map(id => ({ id, file: `${id}.tmj`, defaultSpawn: 'entry' })) }));
+writeFileSync(join(directory, 'registry.json'), JSON.stringify({ maps: ['home', 'studio'].map(id => ({ id, file: `${id}.tmj`, defaultSpawn: 'entry' })), spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'home', maps: ['home', 'studio'] }, { id: 'other', name: 'Other', cover: '/maps/tiles.png', initialMap: 'studio', maps: ['home', 'studio'] }] }));
+process.env.SPACE_MAX_CLIENTS = '3';
 process.env.DATABASE_PATH = ':memory:';
 process.env.EXTERNAL_TOOLS = '{}';
 process.env.MAP_REGISTRY_PATH = join(directory, 'registry.json');
@@ -62,10 +64,10 @@ after(async () => {
   await Promise.all(connections.filter(room => room.connection.isOpen).map(room => room.leave()));
   await harness.shutdown(); db.close(); rmSync(directory, { recursive: true, force: true });
 });
-async function connect(name: string) {
+async function connect(name: string, spaceId = 'main') {
   const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name, avatar: 'mint', appearance: DEFAULT_APPEARANCE });
+  const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name, avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId });
   room.onMessage('chat', () => {}); room.onError(() => {}); room.reconnection.minUptime = 0;
   await room.waitForInitialState(); connections.push(room); return room;
 }
@@ -339,10 +341,10 @@ test('map loader rejects missing atlas GIDs before publishing variant targets', 
   const invalid = { ...source, tilesets: [{ ...source.tilesets[0], tilecount: 2 }] };
   writeFileSync(join(directory, 'invalid.tmj'), JSON.stringify(invalid));
   const registryPath = join(directory, 'invalid-registry.json');
-  writeFileSync(registryPath, JSON.stringify({ initialMap: 'home', maps: [
+  writeFileSync(registryPath, JSON.stringify({ maps: [
     { id: 'home', file: 'invalid.tmj', defaultSpawn: 'entry' },
     { id: 'studio', file: 'studio.tmj', defaultSpawn: 'entry' },
-  ] }));
+  ], spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'home', maps: ['home', 'studio'] }] }));
   assert.throws(() => loadWorldRegistry(registryPath), /Too big/);
 });
 
@@ -360,10 +362,55 @@ test('external JSON tilesets resolve local variant IDs before atlas validation',
   writeFileSync(join(directory, 'variant-atlas.tsj'), JSON.stringify({ ...source.tilesets[0], name: 'props' }));
   writeFileSync(join(directory, 'external-variants.tmj'), JSON.stringify(external));
   const registryPath = join(directory, 'external-variants.json');
-  writeFileSync(registryPath, JSON.stringify({ initialMap: 'home', maps: [
+  writeFileSync(registryPath, JSON.stringify({ maps: [
     { id: 'home', file: 'external-variants.tmj', defaultSpawn: 'entry' },
     { id: 'studio', file: 'studio.tmj', defaultSpawn: 'entry' },
-  ] }));
+  ], spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'home', maps: ['home', 'studio'] }] }));
   const loaded = loadWorldRegistry(registryPath);
   assert.deepEqual(loaded.registry.maps[0]?.world.variantTargets[0]?.variants, { computer: 101, book: 101, 'drawing-board': 101 });
+});
+
+
+test('Spaces reuse map geometry but isolate initial map, selector claims and private-area locks', async () => {
+  const alice = await connect('Alice'); const bob = await connect('Bob', 'other');
+  const first = roomFor(alice); const second = roomFor(bob);
+  assert.notEqual(alice.roomId, bob.roomId);
+  assert.equal(first.state.spaceId, 'main'); assert.equal(second.state.spaceId, 'other');
+  assert.equal(first.state.players.get(alice.sessionId)?.mapId, 'home');
+  const b = second.state.players.get(bob.sessionId)!;
+  assert.equal(b.mapId, 'studio');
+  // Both Spaces enter the same map and authored selector; neither claim blocks the other.
+  b.x = 280; b.y = 88;
+  assert.equal((await bob.request('portal', { zoneId: 'local-door' })).ok, true);
+  const a = first.state.players.get(alice.sessionId)!;
+  a.x = b.x = 64; a.y = b.y = 68; a.facing = b.facing = 'up';
+  await pause();
+  for (const client of [alice, bob]) assert.equal((await client.request('activateAction', { action: 'sit' })).ok, true);
+  await pause();
+  assert.equal((await alice.request('selectVariant', { selectorId: '20', variant: 'book' })).ok, true);
+  assert.equal(first.state.worldObjects.get('home')?.objects.get('90')?.variant, 'book');
+  assert.equal(second.state.worldObjects.get('home')?.objects.get('90')?.variant, '');
+  assert.equal(second.state.worldObjects.get('home')?.objects.get('20')?.occupiedBy, bob.sessionId);
+  for (const client of [alice, bob]) await client.request('cancelAction', {});
+  a.x = b.x = 176; a.y = b.y = 160;
+  first['interactions'].access.tick(); second['interactions'].access.tick();
+  await pause();
+  assert.equal((await alice.request('privateArea', { areaId: '30', operation: 'lock', locked: true })).ok, true);
+  assert.equal(first.state.privateAreas.get('home')?.areas.get('30')?.locked, true);
+  assert.equal(second.state.privateAreas.get('home')?.areas.get('30')?.locked, false);
+  assert.equal(first.state.players.has(bob.sessionId), false);
+  assert.equal(second.state.players.has(alice.sessionId), false);
+});
+
+test('runtime capacity applies to every Space and concurrent joins never create overflow instances', async () => {
+  const results = await Promise.allSettled(Array.from({ length: 7 }, (_, index) => connect(`Guest${index}`)));
+  const joined = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  assert.equal(joined.length, 3);
+  assert.equal(new Set(joined.map(room => room.roomId)).size, 1);
+  for (const result of results) if (result.status === 'rejected') assert.match(String(result.reason), /Space is full/);
+  assert.equal(roomFor(joined[0]).maxClients, 3);
+  const other = await connect('Other', 'other');
+  assert.equal(roomFor(other).maxClients, 3);
+  assert.equal((await matchMaker.query({ name: 'space' })).length, 2);
+  assert.equal(roomFor(joined[0]).state.players.size, 3);
 });

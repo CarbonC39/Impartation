@@ -15,7 +15,7 @@ test('SQLite migration is idempotent and data survives reopen', () => {
   const path = join(directory, 'world.sqlite');
   let database = openDatabase(path);
   try {
-    assert.equal(database.pragma('user_version', { simple: true }), 4);
+    assert.equal(database.pragma('user_version', { simple: true }), 5);
     assert.equal(database.pragma('journal_mode', { simple: true }), 'wal');
     assert.equal(database.pragma('foreign_keys', { simple: true }), 1);
     database.prepare('INSERT INTO profiles (user_id, avatar_id, updated_at) VALUES (?, ?, ?)').run('test-profile', 'violet', 123);
@@ -25,7 +25,7 @@ test('SQLite migration is idempotent and data survives reopen', () => {
     assert.deepEqual(database.prepare('SELECT * FROM profiles').get(), {
       user_id: 'test-profile', avatar_id: 'violet', updated_at: 123, name: '', role: 'member', appearance_json: '{}',
     });
-    assert.equal(database.pragma('user_version', { simple: true }), 4);
+    assert.equal(database.pragma('user_version', { simple: true }), 5);
     const notes = new BoardStore(database).list('message-wall');
     assert.equal(notes.length, 1);
     assert.equal(notes[0].text, '<b>saved</b>');
@@ -40,7 +40,7 @@ test('a database from a newer application is rejected', () => {
   const directory = mkdtempSync(join(tmpdir(), 'virtual-space-new-db-'));
   const path = join(directory, 'world.sqlite');
   const database = openDatabase(path);
-  database.pragma('user_version = 5');
+  database.pragma('user_version = 6');
   database.close();
   try { assert.throws(() => openDatabase(path), /newer/); }
   finally { rmSync(directory, { recursive: true, force: true }); }
@@ -58,7 +58,7 @@ test('version 1 databases migrate without losing existing profiles', () => {
     old.close();
     const upgraded = openDatabase(path);
     try {
-      assert.equal(upgraded.pragma('user_version', { simple: true }), 4);
+      assert.equal(upgraded.pragma('user_version', { simple: true }), 5);
       assert.deepEqual(upgraded.prepare('SELECT user_id FROM profiles').get(), { user_id: 'existing' });
       assert.equal(new BoardStore(upgraded).post('wall', 'guest', 'Guest', 'works'), true);
     } finally { upgraded.close(); }
@@ -88,6 +88,41 @@ test('version 2 migration preserves legacy notes without assigning them to a new
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('version 4 notes migrate into main and do not appear in another Space', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'virtual-space-v4-db-'));
+  const path = join(directory, 'world.sqlite');
+  try {
+    const old = new Database(path);
+    old.exec(`CREATE TABLE profiles (
+        user_id TEXT PRIMARY KEY, avatar_id TEXT NOT NULL DEFAULT 'mint', updated_at INTEGER NOT NULL,
+        name TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin')),
+        appearance_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE TABLE board_notes (
+        id TEXT PRIMARY KEY, resource_id TEXT NOT NULL, author_session_id TEXT NOT NULL,
+        name TEXT NOT NULL, text TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 500),
+        created_at INTEGER NOT NULL, author_user_id TEXT
+      );
+      CREATE INDEX board_notes_resource ON board_notes(resource_id, created_at);
+      INSERT INTO board_notes VALUES ('legacy-v4', 'wall', 'old-session', 'Legacy', 'keep in main', 123, NULL);
+      PRAGMA user_version = 4;`);
+    old.close();
+
+    const upgraded = openDatabase(path);
+    try {
+      assert.equal(upgraded.pragma('user_version', { simple: true }), 5);
+      const main = new BoardStore(upgraded);
+      const other = new BoardStore(upgraded, 'studio');
+      assert.deepEqual(main.list('wall'), [{ id: 'legacy-v4', resourceId: 'wall', authorSessionId: 'old-session',
+        authorUserId: '', name: 'Legacy', text: 'keep in main', createdAt: 123 }]);
+      assert.deepEqual(other.list('wall'), []);
+      assert.equal(other.post('wall', 'studio-user', 'Studio guest', 'new Space note'), true);
+      assert.equal(main.list('wall').length, 1);
+      assert.equal(other.list('wall').length, 1);
+    } finally { upgraded.close(); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('boards enforce capacity, resource separation, identity ownership and unsubscribe', () => {
   const database = openDatabase(':memory:');
   try {
@@ -107,5 +142,25 @@ test('boards enforce capacity, resource separation, identity ownership and unsub
     assert.equal(changes, 102);
     assert.equal(store.list('wall').length, 100);
     assert.equal(store.list('other-wall').length, 1);
+  } finally { database.close(); }
+});
+
+test('board capacity, listing and deletion are isolated by Space for the same resource', () => {
+  const database = openDatabase(':memory:');
+  try {
+    const main = new BoardStore(database, 'main');
+    const studio = new BoardStore(database, 'studio');
+    for (let i = 0; i < 100; i++) assert.equal(main.post('wall', 'alice', 'Alice', `main ${i}`), true);
+    assert.equal(main.post('wall', 'alice', 'Alice', 'main is full'), false);
+
+    assert.equal(studio.post('wall', 'bob', 'Bob', 'studio has its own capacity'), true);
+    const studioNote = studio.list('wall')[0]!;
+    const mainNote = main.list('wall')[0]!;
+    assert.equal(main.delete('wall', studioNote.id, 'bob', true), false);
+    assert.equal(studio.delete('wall', mainNote.id, 'alice', true), false);
+    assert.equal(main.list('wall').length, 100);
+    assert.equal(studio.list('wall').length, 1);
+    assert.equal(studio.delete('wall', studioNote.id, 'bob'), true);
+    assert.equal(main.list('wall').length, 100);
   } finally { database.close(); }
 });

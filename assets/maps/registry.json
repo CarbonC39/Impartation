@@ -1,7 +1,37 @@
 {
-  "initialMap": "lobby",
   "maps": [
-    { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" },
-    { "id": "interaction-lab", "file": "interaction-lab.tmj", "defaultSpawn": "arrival" }
+    {
+      "id": "lobby",
+      "file": "lobby.tmj",
+      "defaultSpawn": "default"
+    },
+    {
+      "id": "interaction-lab",
+      "file": "interaction-lab.tmj",
+      "defaultSpawn": "arrival"
+    }
+  ],
+  "spaces": [
+    {
+      "id": "main",
+      "name": "阳光大厅",
+      "description": "大厅与交互试验场",
+      "cover": "/maps/tiles.png",
+      "initialMap": "lobby",
+      "maps": [
+        "lobby",
+        "interaction-lab"
+      ]
+    },
+    {
+      "id": "garden",
+      "name": "云朵花园",
+      "cover": "/maps/tiles.png",
+      "initialMap": "interaction-lab",
+      "maps": [
+        "lobby",
+        "interaction-lab"
+      ]
+    }
   ]
 }

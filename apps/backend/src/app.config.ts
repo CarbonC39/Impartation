@@ -14,7 +14,7 @@ const webTools = loadWebTools(config.EXTERNAL_TOOLS, worldRegistry.maps.map(map 
 
 export const server = defineServer({
   transport: new WebSocketTransport(),
-  rooms: { space: defineRoom(SpaceRoom) },
+  rooms: { space: defineRoom(SpaceRoom).filterBy(['spaceId']) },
   express: app => {
     app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
     const handleAuth = toNodeHandler(auth);

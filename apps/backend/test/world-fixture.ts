@@ -21,8 +21,9 @@ export function createRoomWorldFixture() {
   })) };
   writeFileSync(join(directory, 'lobby.tmj'), JSON.stringify(map));
   const registryPath = join(directory, 'registry.json');
-  writeFileSync(registryPath, JSON.stringify({ initialMap: 'lobby', maps: [
+  writeFileSync(registryPath, JSON.stringify({ maps: [
     { id: 'lobby', file: 'lobby.tmj', defaultSpawn: 'default' },
-  ] }));
+    { id: 'unused', file: 'lobby.tmj', defaultSpawn: 'default' },
+  ], spaces: [{ id: 'main', name: 'Main', cover: '/maps/tiles.png', initialMap: 'lobby', maps: ['lobby'] }, { id: 'other', name: 'Other', cover: '/maps/tiles.png', initialMap: 'lobby', maps: ['lobby'] }] }));
   return { directory, registryPath };
 }

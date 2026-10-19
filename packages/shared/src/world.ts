@@ -214,15 +214,23 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
   return world;
 }
 
+export const spaceIdSchema = z.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9_-]*$/);
+export const spaceDefinitionSchema = z.object({
+  id: spaceIdSchema, name: z.string().trim().min(1).max(128), description: z.string().optional(),
+  cover: z.string().min(1), initialMap: identifier, maps: z.array(identifier).min(1),
+}).strict();
+export type SpaceDefinition = z.infer<typeof spaceDefinitionSchema>;
+
 export const mapRegistrySchema = z.object({
-  initialMap: identifier,
+  spaces: z.array(spaceDefinitionSchema).min(1),
   maps: z.array(z.object({ id: identifier, file: z.string().min(1), defaultSpawn: identifier })).min(1),
 });
 export type MapRegistryConfig = z.infer<typeof mapRegistrySchema>;
 export type RegisteredMap = { id: string; url: string; defaultSpawn: string; world: WorldMap };
-export type WorldRegistry = { initialMap: string; maps: RegisteredMap[] };
+export type MapCollection = { initialMap: string; maps: RegisteredMap[] };
+export type WorldRegistry = { spaces: SpaceDefinition[]; maps: RegisteredMap[] };
 
-export function validateMapRegistry(registry: WorldRegistry): WorldRegistry {
+export function validateMapRegistry(registry: MapCollection): MapCollection {
   const maps = new Map(registry.maps.map(map => [map.id, map]));
   if (maps.size !== registry.maps.length || !maps.has(registry.initialMap)) throw new Error('Map IDs must be unique and initialMap must exist');
   for (const map of maps.values()) {
@@ -232,6 +240,25 @@ export function validateMapRegistry(registry: WorldRegistry): WorldRegistry {
       const destination = maps.get(target.targetMap);
       if (!destination || !Object.hasOwn(destination.world.spawns, target.targetSpawn)) throw new Error(`Invalid Portal destination: ${map.id}/${zone.id}`);
     }
+  }
+  return registry;
+}
+
+/** Validate every Space independently, including Portal destinations within its map set. */
+export function validateWorldRegistry(registry: WorldRegistry): WorldRegistry {
+  const maps = new Map(registry.maps.map(map => [map.id, map]));
+  if (maps.size !== registry.maps.length) throw new Error('Map IDs must be unique');
+  if (!registry.spaces.length || new Set(registry.spaces.map(space => space.id)).size !== registry.spaces.length)
+    throw new Error('Space IDs must be unique and at least one Space is required');
+  for (const space of registry.spaces) {
+    spaceDefinitionSchema.parse(space);
+    if (new Set(space.maps).size !== space.maps.length) throw new Error(`Duplicate map in Space: ${space.id}`);
+    const selected = space.maps.map(id => {
+      const map = maps.get(id);
+      if (!map) throw new Error(`Unknown map in Space ${space.id}: ${id}`);
+      return map;
+    });
+    validateMapRegistry({ initialMap: space.initialMap, maps: selected });
   }
   return registry;
 }
@@ -296,7 +323,7 @@ export function stepMovement(map: WorldMap, position: Point, input: MovementInpu
 const pointSchema = z.object({ x: z.number().finite(), y: z.number().finite() });
 const rectSchema = pointSchema.extend({ width: z.number().positive(), height: z.number().positive() });
 export const worldRegistryResponseSchema = z.object({
-  initialMap: identifier,
+  spaces: z.array(spaceDefinitionSchema).min(1),
   maps: z.array(z.object({
     id: identifier, url: z.string().min(1), defaultSpawn: identifier,
     world: z.object({

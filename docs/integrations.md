@@ -8,8 +8,8 @@
 
 | 功能 | 地图类型 | 默认 resourceId | 数据范围 |
 | --- | --- | --- | --- |
-| 留言板 | `board` | `message-wall` | SQLite 按资源保存，同一进程的所有房间共享 |
-| 共享番茄钟 | `pomodoro` | `focus-corner` | 每个房间按资源独立维护，不持久化 |
+| 留言板 | `board` | `message-wall` | SQLite 按 Space 与资源保存；同一 Space 内跨地图共享 |
+| 共享番茄钟 | `pomodoro` | `focus-corner` | 每个 Space 的唯一 live room 按资源维护，不持久化 |
 
 在 Tiled 的 `interactions` 对象层添加矩形，填写类型和需要的属性即可使用；地图制作见[地图说明](tiled.md)。两种工具都要求有效身份、当前连接且位于对应地图的对应区域，每连接操作间隔至少 500ms。身份来源见[匿名身份与权限](account-system.md)。
 
@@ -19,7 +19,7 @@
 
 作者可删除自己的留言；项目 `admin` 还可删除其他作者和无法关联作者的历史留言。管理员不绕过区域、身份有效性或速率限制。作者归属使用持久 user id，换设备或重新入房不改变归属。
 
-数据库 v3 增加 `board_notes.author_user_id`。旧留言只有临时 `author_session_id`，迁移后作者 user id 保持 NULL，不按昵称自动认领，可由管理员清理。
+数据库 v3 增加 `board_notes.author_user_id`；数据库 v5 增加 `space_id`，留言按 `(space_id, resource_id)` 隔离。同一 Space 中引用相同资源的地图共享留言，不同 Space 不共享。旧留言迁移时归入默认 Space `main`。旧留言只有临时 `author_session_id`，作者 user id 保持 NULL，不按昵称自动认领，可由管理员清理。
 
 存储实现见 [board/store.ts](../apps/backend/src/interactions/board/store.ts)，消息见 [留言板 handler](../apps/backend/src/interactions/board/handler.ts)，权限检查见 [SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts)。
 
@@ -27,7 +27,7 @@
 
 支持专注 25 分钟、休息 5 分钟，以及开始、暂停、继续和重置；完成后需手动开始下一轮。有效身份且位于对应区域的成员均可控制。计时以服务端截止时间为准，客户端结合服务端时间快照平滑显示。
 
-计时器不跨房间共享，房间销毁或后端重启后重置。计时与权限检查由[服务端番茄钟 handler](../apps/backend/src/interactions/pomodoro/handler.ts)执行；[前端面板 handler](../apps/frontend/src/interactions/pomodoro/handler.ts)接收用户操作并显示同步状态。
+计时器在同一 Space 的所有地图中共享；不同 Space 独立维护。房间销毁或后端重启后重置。计时与权限检查由[服务端番茄钟 handler](../apps/backend/src/interactions/pomodoro/handler.ts)执行；[前端面板 handler](../apps/frontend/src/interactions/pomodoro/handler.ts)接收用户操作并显示同步状态。
 
 ## 外置接入
 

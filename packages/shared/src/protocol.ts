@@ -4,7 +4,7 @@ import type {
   BoardPostInput,
   ChatMessage,
   InteractionResult,
-  JoinOptions,
+  SpaceJoinOptions,
   MovementInput,
   PomodoroActionInput,
   SpaceState,
@@ -15,7 +15,7 @@ import type {
 export type SpaceProtocol = {
   '~state': SpaceState;
   state: SpaceState;
-  onJoin?: (client: unknown, options?: JoinOptions) => unknown;
+  onJoin?: (client: unknown, options?: SpaceJoinOptions) => unknown;
   '~client': {
     '~messages': {
       chat: ChatMessage;

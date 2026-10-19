@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { z } from 'zod';
 import { createTestMap } from '../../../packages/shared/test-fixtures/world.js';
 import { parseWorldMap, stepMovement, canStand, contains, PLAYER_FOOTPRINT, PLAYER_SPEED, TICK_MS,
-  InteractionRegistry, validateMapRegistry, type InteractionDefinition } from '@virtual-workspace/shared';
+  InteractionRegistry, validateMapRegistry, validateWorldRegistry, spaceDefinitionSchema, type InteractionDefinition } from '@virtual-workspace/shared';
 import { standsOnAction, findActionAnchor, actionFacingMatches, canAlignAction, movementFacing } from '@virtual-workspace/shared';
 
 const raw: unknown = createTestMap();
@@ -320,3 +320,29 @@ for (const [name, change] of Object.entries({
   'missing web resource': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[3]); list[0].properties = []; layers[3].objects = list; },
   'out-of-bounds interaction': (_map: Record<string, unknown>, layers: Record<string, unknown>[]) => { const list = objects(layers[3]); list[0].width = 9999; layers[3].objects = list; },
 })) test(`project semantics reject ${name}`, () => assert.throws(() => parseWorldMap(mutate(change))));
+
+
+test('Space registry preserves display order and validates member maps and Portal boundaries', () => {
+  const maps = ['home', 'studio'].map(id => ({ id, url: `/${id}.json`, defaultSpawn: 'default', world }));
+  const spaces = [
+    { id: 'z-space', name: 'First', cover: '/covers/first.png', initialMap: 'studio', maps: ['studio', 'home'] },
+    { id: 'a-space', name: 'Second', description: 'Optional', cover: '/covers/second.png', initialMap: 'home', maps: ['home'] },
+  ];
+  const registry = { maps, spaces };
+  assert.equal(validateWorldRegistry(registry), registry);
+  assert.deepEqual(registry.spaces.map(space => space.id), ['z-space', 'a-space']);
+  assert.throws(() => validateWorldRegistry({ maps, spaces: [] }));
+  assert.throws(() => validateWorldRegistry({ maps, spaces: [spaces[0], spaces[0]] }));
+  for (const changes of [{ maps: ['missing'] }, { initialMap: 'studio' }, { maps: ['home', 'home'] }]) {
+    assert.throws(() => validateWorldRegistry({ maps, spaces: [{ ...spaces[1], ...changes }] }));
+  }
+  assert.throws(() => validateWorldRegistry({ maps: [...maps, maps[0]], spaces }));
+  for (const changes of [{ id: 'has spaces' }, { name: '' }, { cover: '' }, { maps: [] }]) {
+    assert.equal(spaceDefinitionSchema.safeParse({ ...spaces[0], ...changes }).success, false);
+  }
+  const home = { ...world, zones: [{ id: 'door', kind: 'Portal', resourceId: 'door', x: 16, y: 16, width: 32, height: 32,
+    properties: { targetMap: 'studio', targetSpawn: 'default' } }] };
+  const withPortal = [{ ...maps[0], world: home }, maps[1]];
+  assert.throws(() => validateWorldRegistry({ maps: withPortal, spaces: [spaces[1]] }), /Invalid Portal/);
+  assert.equal(validateWorldRegistry({ maps: withPortal, spaces: [spaces[0]] }).spaces.length, 1);
+});

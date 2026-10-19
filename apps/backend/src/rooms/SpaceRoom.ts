@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
-import { SpaceState, Player, joinSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
+import { Room, validate, CloseCode, ServerError, type AuthContext } from '@colyseus/core';
+import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
   TICK_MS, sameAudience, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
-  type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
-import { worldRegistry, worlds } from '../world.js';
+  type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
+import { worldRegistry, worlds as allMaps } from '../world.js';
 import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
 import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
@@ -12,9 +12,14 @@ import { config, voiceConfig } from '../config.js';
 import { cancelAction } from '../interactions/action/handler.js';
 import { VoiceSignaling } from './VoiceSignaling.js';
 
-export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> {
+export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; metadata: { spaceId: string } }> {
   state = new SpaceState();
-  maxClients = 32;
+  maxClients = config.SPACE_MAX_CLIENTS;
+  // The supported deployment is one backend process. Claim before the first await in onCreate.
+  private static instances = new Map<string, SpaceRoom>();
+  private maps = new Map<string, RegisteredMap>();
+  private worldMaps: WorldMap[] = [];
+  private initialMap = '';
   reconnectionSeconds = 20;
   private identities = new Map<string, Identity>();
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
@@ -23,7 +28,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
   private lastInteraction = new Map<string, number>();
   private voice = new VoiceSignaling(this.state, voiceConfig, id => this.clients.find(client => client.sessionId === id));
   private interactions = createInteractions({
-    state: this.state, maps: worlds, worlds: worldRegistry.maps.map(map => map.world),
+    state: this.state, maps: this.maps, worlds: this.worldMaps,
     authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkInteraction(client, kind, resource),
     resetMovement: client => this.movementInputs.delete(client.sessionId),
     throttle: client => this.throttleInteraction(client),
@@ -35,7 +40,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
       if (input.x || input.y) {
-        cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
+        cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
         player.facing = movementFacing(input, facingSchema.parse(player.facing));
       }
       if (!input.x && !input.y) player.motion = 'idle';
@@ -98,7 +103,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
 
   private checkInteraction(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
     const player = this.state.players.get(client.sessionId);
-    const map = player && worlds.get(player.mapId);
+    const map = player && this.maps.get(player.mapId);
     const current = player && map && currentZone(map.world, player);
     if (!player?.connected || current?.kind !== kind || current.resourceId !== resourceId) return '请先走进对应功能区';
     return this.throttleInteraction(client);
@@ -110,7 +115,21 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.lastInteraction.set(client.sessionId, now);
   }
 
-  onCreate() {
+  onCreate(options: { spaceId: string }) {
+    const spaceId = spaceIdSchema.parse(options.spaceId);
+    const space = worldRegistry.spaces.find(entry => entry.id === spaceId);
+    if (!space) throw new ServerError(404, 'Unknown Space');
+    const existing = SpaceRoom.instances.get(space.id);
+    if (existing) throw new ServerError(409, existing.locked ? 'Space is full' : 'Space already active; join the existing Space');
+    SpaceRoom.instances.set(space.id, this);
+    this.state.spaceId = space.id;
+    this.metadata = { spaceId: space.id };
+    this.initialMap = space.initialMap;
+    for (const id of space.maps) {
+      const map = allMaps.get(id)!;
+      this.maps.set(id, map);
+      this.worldMaps.push(map.world);
+    }
     this.patchRate = TICK_MS;
     for (const handler of this.interactions.registry.values()) handler.initialize?.();
     this.clock.setInterval(() => {
@@ -127,7 +146,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
         if (player.action !== 'none') { player.motion = 'idle'; continue; }
         const input = this.movementInputs.get(id);
         if (!input || !player.connected || Date.now() - input.receivedAt > 250) { player.motion = 'idle'; continue; }
-        const world = worlds.get(player.mapId)!.world;
+        const world = this.maps.get(player.mapId)!.world;
         const next = stepMovement(world, player, input, delta, point => this.interactions.access.canMove(player.mapId, id, player, point));
         player.motion = next.x !== player.x || next.y !== player.y ? 'walk' : 'idle';
         player.x = next.x;
@@ -140,22 +159,23 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       }
     }, TICK_MS);
   }
-  async onAuth(_client: SpaceClient, options: JoinOptions, context: AuthContext) {
+  async onAuth(_client: SpaceClient, options: SpaceJoinOptions, context: AuthContext) {
     const origin = context.headers.get('origin');
     if (origin && !config.IDENTITY_TRUSTED_ORIGINS.split(',').map(value => value.trim()).includes(origin)) {
       throw new Error('Untrusted connection origin');
     }
-    const parsed = joinSchema.parse(options);
+    const parsed = spaceJoinSchema.parse(options);
+    if (parsed.spaceId !== this.state.spaceId) throw new ServerError(403, 'Space does not match this room');
     const identity = await identityFromHeaders(context.headers);
     if (!identity) throw new Error('A valid anonymous identity is required');
     ensureProfile(identity.userId, parsed);
     return identity;
   }
-  onJoin(client: SpaceClient, _options: JoinOptions, auth: Identity) {
+  onJoin(client: SpaceClient, _options: SpaceJoinOptions, auth: Identity) {
     for (const handler of this.interactions.registry.values()) handler.tick?.();
     this.identities.set(client.sessionId, auth);
     const { name, avatar, appearance, role } = ensureProfile(auth.userId);
-    const map = worlds.get(worldRegistry.initialMap)!;
+    const map = this.maps.get(this.initialMap)!;
     const world = map.world;
     const preferred = world.spawns[map.defaultSpawn];
     const spawn = [preferred, ...Object.values(world.spawns)].find(point => this.interactions.access.canEnter(map.id, client.sessionId, point));
@@ -172,8 +192,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     if (player) {
       player.connected = false; player.motion = 'idle';
       // Legacy action seats retain their reconnect behavior; selectors release immediately.
-      if (worlds.get(player.mapId)?.world.selectors.some(selector => selector.id === player.actionTargetId))
-        cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
+      if (this.maps.get(player.mapId)?.world.selectors.some(selector => selector.id === player.actionTargetId))
+        cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
     }
     this.interactions.access.release(client.sessionId);
     this.movementInputs.delete(client.sessionId);
@@ -189,15 +209,15 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     const player = this.state.players.get(client.sessionId);
     if (player) {
       if (!this.interactions.access.canEnter(player.mapId, client.sessionId, player)) {
-        const map = worlds.get(player.mapId)!;
+        const map = this.maps.get(player.mapId)!;
         const spawn = [map.world.spawns[map.defaultSpawn], ...Object.values(map.world.spawns)]
           .find(point => this.interactions.access.canEnter(player.mapId, client.sessionId, point));
         if (!spawn) { client.leave(4003, 'No accessible spawn'); return; }
-        cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
+        cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
         player.x = spawn.x; player.y = spawn.y;
       }
       player.connected = true;
-      player.zoneId = currentZone(worlds.get(player.mapId)!.world, player)?.id ?? '';
+      player.zoneId = currentZone(this.maps.get(player.mapId)!.world, player)?.id ?? '';
       this.interactions.access.syncPlayer(client.sessionId, player);
     }
   }
@@ -205,7 +225,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.interactions.access.release(client.sessionId);
     this.voice.clear(client.sessionId);
     const player = this.state.players.get(client.sessionId);
-    if (player) cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
+    if (player) cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
     this.identities.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
@@ -213,5 +233,9 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     this.typingUntil.delete(client.sessionId);
     this.lastInteraction.delete(client.sessionId);
   }
-  onDispose() { this.voice.dispose(); for (const handler of this.interactions.registry.values()) handler.dispose?.(); }
+  onDispose() {
+    if (SpaceRoom.instances.get(this.state.spaceId) === this) SpaceRoom.instances.delete(this.state.spaceId);
+    this.voice.dispose();
+    for (const handler of this.interactions.registry.values()) handler.dispose?.();
+  }
 }

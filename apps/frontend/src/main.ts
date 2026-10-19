@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateMapRegistry, type WorldRegistry, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
+import { ROOM_NAME, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -85,7 +85,9 @@ voiceDevice.addEventListener('change', () => {
   if (voice) void voice.setDevice(voiceDevice.value); else setPreferredMicrophone(voiceDevice.value);
 });
 navigator.mediaDevices?.addEventListener?.('devicechange', refreshVoiceDevices);
-let worldRegistry: WorldRegistry | undefined;
+let worldRegistry: MapCollection | undefined;
+let spaceDirectory: WorldRegistry | undefined;
+let selectedSpaceId = '';
 let renderedMap = '';
 let renderingMap = '';
 let renderGeneration = 0;
@@ -176,21 +178,40 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
     promise.then(value => { window.clearTimeout(timer); resolve(value); }, error => { window.clearTimeout(timer); reject(error); });
   });
 }
-function chooseWorld(name: string, isNew = false) {
-  selectedWorld = name;
-  element('chosen-world-label').textContent = isNew ? `${name} · 新建` : name;
-  element('join-world-name').textContent = name;
-  element('map-world-name').textContent = name;
+function chooseWorld(spaceId: string) {
+  const space = spaceDirectory?.spaces.find(entry => entry.id === spaceId);
+  if (!space) return;
+  selectedSpaceId = space.id;
+  selectedWorld = space.name;
+  element('chosen-world-label').textContent = space.name;
+  element('join-world-name').textContent = space.name;
+  element('map-world-name').textContent = space.name;
   showScreen('avatar-screen');
 }
 element<HTMLDivElement>('world-list').addEventListener('click', event => {
   const tile = (event.target as HTMLElement).closest<HTMLButtonElement>('.world-tile[data-world]');
-  if (tile) chooseWorld(tile.dataset.world === 'cloud-garden' ? '云朵花园' : '阳光大厅');
+  if (tile?.dataset.world) chooseWorld(tile.dataset.world);
 });
-element<HTMLFormElement>('create-world-form').addEventListener('submit', event => {
-  event.preventDefault();
-  chooseWorld(element<HTMLInputElement>('world-name').value.trim() || '我的小世界', true);
-});
+async function loadSpaces() {
+  const list = element('world-list');
+  try {
+    const response = await fetch('/api/world', { signal: AbortSignal.timeout(12_000) });
+    if (!response.ok) throw new Error('空间目录加载失败');
+    spaceDirectory = validateWorldRegistry(worldRegistryResponseSchema.parse(await response.json()));
+    list.replaceChildren(...spaceDirectory.spaces.map(space => {
+      const tile = document.createElement('button');
+      tile.type = 'button'; tile.className = 'world-tile'; tile.dataset.world = space.id;
+      const cover = document.createElement('img');
+      cover.className = 'world-art'; cover.src = space.cover; cover.alt = '';
+      const name = document.createElement('span'); name.className = 'world-title'; name.textContent = space.name;
+      const action = document.createElement('span'); action.className = 'world-join'; action.textContent = '去换装';
+      if (space.description) tile.title = space.description;
+      tile.append(cover, name, action);
+      return tile;
+    }));
+  } catch (error) { list.textContent = `空间目录加载失败：${String(error)}`; }
+}
+void loadSpaces();
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
   button.addEventListener('click', () => {
     const target = button.dataset.back ?? 'login-screen';
@@ -354,10 +375,11 @@ async function enterWorld(plan: VoicePlan) {
     const options = joinSchema.parse({ name: nameInput.value, avatar: currentAvatar, appearance: wardrobe.value });
     showIdentity(await saveProfile(options));
     element<HTMLButtonElement>('identity-import').disabled = true;
-    const response = await fetch('/api/world', { signal: AbortSignal.timeout(12_000) });
-    if (!response.ok) throw new Error('地图目录加载失败');
-    worldRegistry = validateMapRegistry(worldRegistryResponseSchema.parse(await response.json()));
-    const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, options);
+    const space = spaceDirectory?.spaces.find(entry => entry.id === selectedSpaceId);
+    if (!space || !spaceDirectory) throw new Error('请先选择空间');
+    worldRegistry = { initialMap: space.initialMap, maps: spaceDirectory.maps.filter(map => space.maps.includes(map.id)) };
+    const roomOptions = spaceJoinSchema.parse({ ...options, spaceId: space.id });
+    const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, roomOptions);
     try { room = await withTimeout(pendingRoom, 15_000, '连接空间超时，请检查服务是否启动后重试'); }
     catch (error) { void pendingRoom.then(lateRoom => lateRoom.leave()).catch(() => {}); throw error; }
     room.reconnection.minUptime = 0;

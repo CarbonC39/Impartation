@@ -3,6 +3,7 @@ import { before, after, beforeEach, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
+import { matchMaker } from '@colyseus/core';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
@@ -54,8 +55,8 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     db.close();
     rmSync(fixture.directory, { recursive: true, force: true });
   });
-  async function join(name: string, avatar: 'mint' | 'amber' | 'violet' = 'mint', cookie?: string) {
-    const room = await sdk(cookie ?? await createIdentity()).joinOrCreate('space', { name, avatar });
+  async function join(name: string, avatar: 'mint' | 'amber' | 'violet' = 'mint', cookie?: string, spaceId = 'main') {
+    const room = await sdk(cookie ?? await createIdentity()).joinOrCreate('space', { name, avatar, spaceId });
     room.onMessage('chat', () => {});
     room.onError(() => {});
     room.reconnection.minUptime = 0;
@@ -144,9 +145,9 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
   });
   test('guest input is validated before joining', async () => {
     const client = sdk(await createIdentity());
-    await assert.rejects(client.joinOrCreate('space', { name: '', avatar: 'mint' }));
+    await assert.rejects(client.joinOrCreate('space', { name: '', avatar: 'mint', spaceId: 'main' }));
     // The SDK's permissive overload allows malformed data; the server must reject it.
-    await assert.rejects(client.joinOrCreate('space', { name: 'Alice', avatar: 'unknown' }));
+    await assert.rejects(client.joinOrCreate('space', { name: 'Alice', avatar: 'unknown', spaceId: 'main' }));
   });
   test('server movement stops after stale input and prevents walking through collisions', async () => {
     const alice = await join('Alice');
@@ -437,12 +438,10 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await until(() => bob.state.notes.size === 0);
   });
 
-  test('persistent boards synchronize across capacity-split rooms and survive room disposal', async () => {
+  test('persistent boards synchronize within a Space and survive room disposal', async () => {
     const alice = await join('Alice');
-    const first = harness.getRoomById<SpaceRoom>(alice.roomId);
-    first.maxClients = 1;
     const bob = await join('Bob');
-    assert.notEqual(alice.roomId, bob.roomId);
+    assert.equal(alice.roomId, bob.roomId);
     place(alice, 500, 350); place(bob, 500, 350);
     await alice.request('boardPost', { resourceId: 'message-wall', text: 'shared board' });
     await until(() => bob.state.notes.size === 1);
@@ -486,14 +485,13 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal(timer.endsAt, 0);
   });
 
-  test('pomodoro completes on the server clock, recovers after reconnect, and is isolated per room', async () => {
+  test('pomodoro completes on the server clock, recovers after reconnect, and is isolated per Space', async () => {
     const alice = await join('Alice');
     place(alice, 100, 350);
     await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'start', mode: 'focus' });
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const timer = authoritative.state.pomodoros.get('focus-corner')!;
-    authoritative.maxClients = 1;
-    const bob = await join('Bob');
+    const bob = await join('Bob', 'mint', undefined, 'other');
     assert.equal(bob.state.pomodoros.get('focus-corner')?.status, 'idle');
     const endsAt = timer.endsAt;
     const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
@@ -520,8 +518,8 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal(alice.state.pomodoros.get('focus-corner')?.status, 'idle');
   });
   test('missing, unsigned and forged identity claims cannot authorize room joins', async () => {
-    await assert.rejects(harness.sdk.joinOrCreate('space', { name: 'Forged', avatar: 'mint', userId: 'owner', role: 'admin' }));
-    await assert.rejects(sdk('better-auth.session_token=forged').joinOrCreate('space', { name: 'Forged', avatar: 'mint' }));
+    await assert.rejects(harness.sdk.joinOrCreate('space', { name: 'Forged', avatar: 'mint', userId: 'owner', role: 'admin', spaceId: 'main' }));
+    await assert.rejects(sdk('better-auth.session_token=forged').joinOrCreate('space', { name: 'Forged', avatar: 'mint', spaceId: 'main' }));
     const response = await fetch(endpoint + '/api/me');
     assert.equal(response.status, 401);
     assert.equal((await fetch(endpoint + '/api/auth/sign-up/email', { method: 'POST' })).status, 404);
@@ -656,7 +654,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.deepEqual(db.prepare('SELECT count(*) AS count FROM board_notes').get(), { count: 0 });
     assert.equal(await left, 4003);
     assert.equal((await fetch(endpoint + '/api/me', { headers: { Cookie: cookie } })).status, 401);
-    await assert.rejects(sdk(cookie).joinOrCreate('space', { name: 'revoked', avatar: 'mint' }));
+    await assert.rejects(sdk(cookie).joinOrCreate('space', { name: 'revoked', avatar: 'mint', spaceId: 'main' }));
   });
 
   test('profile responses forward refreshed session cookies to the browser', async () => {
@@ -690,20 +688,84 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const owner = await me(cookie);
     db.prepare('UPDATE auth_session SET expiresAt = ? WHERE userId = ?').run(new Date(Date.now() - 1000).toISOString(), owner.id);
     assert.equal((await fetch(endpoint + '/api/me', { headers: { Cookie: cookie } })).status, 401);
-    await assert.rejects(sdk(cookie).joinOrCreate('space', { name: 'Expired', avatar: 'mint' }));
+    await assert.rejects(sdk(cookie).joinOrCreate('space', { name: 'Expired', avatar: 'mint', spaceId: 'main' }));
   });
 
-  test('a full room rejects joinById and matchmaking creates a separate room', async () => {
+  test('Space directory and runtime isolate players, chat, voice, boards and timers', async () => {
+    const catalog = await (await fetch(endpoint + '/api/world')).json() as { spaces: { id: string; name: string }[] };
+    assert.deepEqual(catalog.spaces.map(space => [space.id, space.name]), [['main', 'Main'], ['other', 'Other']]);
+    const alice = await join('Alice'); const bob = await join('Bob');
+    const carol = await join('Carol', 'mint', undefined, 'other');
+    assert.equal(alice.roomId, bob.roomId); assert.notEqual(alice.roomId, carol.roomId);
+    const first = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const other = harness.getRoomById<SpaceRoom>(carol.roomId);
+    assert.equal(first.state.spaceId, 'main'); assert.equal(other.state.spaceId, 'other');
+    assert.equal(first.state.players.size, 2); assert.equal(other.state.players.size, 1);
+    assert.deepEqual([...first.state.worldObjects.keys()], ['lobby']);
+    assert.deepEqual([...other.state.privateAreas.keys()], ['lobby']);
+    const received: string[] = []; const outside: string[] = [];
+    bob.onMessage('chat', message => received.push(message.text));
+    carol.onMessage('chat', message => outside.push(message.text));
+    alice.send('chat', { text: 'Only main' });
+    await until(() => received.length === 1); await delay(100);
+    assert.deepEqual(received, ['Only main']); assert.deepEqual(outside, []);
+    assert.equal(await alice.request('voiceEnabled', { enabled: true }), true);
+    assert.equal(await carol.request('voiceEnabled', { enabled: true }), true);
+    const [sender, receiver] = alice.sessionId < carol.sessionId ? [alice, carol] : [carol, alice];
+    assert.equal(await sender.request('voiceOffer', { peerId: receiver.sessionId,
+      connectionId: '550e8400-e29b-41d4-a716-446655440099', sdp: 'cross-space' }), false);
+    place(alice, 500, 350); place(carol, 500, 350);
+    assert.equal((await alice.request('boardPost', { resourceId: 'message-wall', text: 'Main board' })).ok, true);
+    await until(() => bob.state.notes.size === 1);
+    assert.equal(other.state.notes.size, 0);
+    assert.equal((await carol.request('boardPost', { resourceId: 'message-wall', text: 'Other board' })).ok, true);
+    assert.deepEqual([...first.state.notes.values()].map(note => note.text), ['Main board']);
+    assert.deepEqual([...other.state.notes.values()].map(note => note.text), ['Other board']);
+    place(alice, 100, 350); await delay(550);
+    assert.equal((await alice.request('pomodoro', { resourceId: 'focus-corner', action: 'start', mode: 'focus' })).ok, true);
+    assert.equal(first.state.pomodoros.get('focus-corner')?.status, 'running');
+    assert.equal(other.state.pomodoros.get('focus-corner')?.status, 'idle');
+  });
+
+  test('unknown or mismatched Space IDs cannot join and explicit create cannot duplicate an active Space', async () => {
+    const cookie = await createIdentity(); const client = sdk(cookie);
+    await assert.rejects(client.joinOrCreate('space', { name: 'Unknown', spaceId: 'unknown' }), /Unknown Space/);
+    const alice = await join('Alice');
+    await assert.rejects(client.joinById(alice.roomId, { name: 'Wrong', spaceId: 'other' }), /Space does not match/);
+    await assert.rejects(client.create('space', { name: 'Duplicate', spaceId: 'main' }), /Space already active/);
+    assert.equal((await matchMaker.query({ name: 'space' })).length, 1);
+    const bob = await join('Bob'); assert.equal(bob.roomId, alice.roomId);
+  });
+
+  test('Portal runtime rejects a globally registered map outside the current Space', async () => {
+    const alice = await join('Alice'); const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    const world = authoritative['maps'].get('lobby')!.world;
+    // Exercise the runtime guard independently of startup validation.
+    world.zones.push({ id: 'outside', kind: 'Portal', resourceId: 'outside', x: 16, y: 16, width: 32, height: 32,
+      properties: { targetMap: 'unused', targetSpawn: 'default' } });
+    try {
+      player.x = 24; player.y = 24;
+      const result = await alice.request('portal', { zoneId: 'outside' });
+      assert.equal(result.ok, false); assert.match(result.message, /当前 Space/);
+      assert.equal(player.mapId, 'lobby'); assert.deepEqual([player.x, player.y], [24, 24]);
+    } finally { world.zones.pop(); }
+  });
+
+  test('a full Space rejects entry without creating a second instance', async () => {
     const alice = await join('Alice');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     assert.equal(authoritative.maxClients, 32);
     authoritative.maxClients = 2;
     const bob = await join('Bob');
     assert.equal(alice.roomId, bob.roomId);
-    await assert.rejects(harness.sdk.joinById(alice.roomId, { name: 'Charlie', avatar: 'mint' }));
-    const charlie = await join('Charlie');
-    assert.notEqual(charlie.roomId, alice.roomId);
+    await assert.rejects(harness.sdk.joinById(alice.roomId, { name: 'Charlie', avatar: 'mint', spaceId: 'main' }));
+    await assert.rejects(join('Charlie'), /Space is full/);
+    assert.equal((await matchMaker.query({ name: 'space' })).length, 1);
     assert.equal(authoritative.state.players.size, 2);
+    await bob.leave();
+    const replacement = await join('Replacement');
+    assert.equal(replacement.roomId, alice.roomId);
   });
   test('a reconnect timeout releases the player and rejects the expired token', async () => {
     const alice = await join('Alice');

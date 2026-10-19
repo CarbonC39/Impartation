@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
-import { DEFAULT_APPEARANCE, type WebTool, type SpaceProtocol } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type WebTool, type SpaceProtocol } from '@virtual-workspace/shared';
 import type Phaser from 'phaser';
 import type { SpaceScene } from '../src/SpaceScene';
 import { avatars } from '../src/characters';
@@ -383,7 +383,7 @@ test('in-place static and animated sit use distinct action columns and movement 
 
 async function openAvatarScreen(page: Page) {
   if (await page.locator('#login-screen').isVisible()) {
-    await page.locator('#world-list [data-world="sunny-lobby"]').click();
+    await page.locator('#world-list [data-world="main"]').click();
   }
   await expect(page.locator('#avatar-screen')).toBeVisible();
 }
@@ -401,7 +401,7 @@ async function observe(): Promise<Room<SpaceProtocol>> {
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
-    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE });
+    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'main' });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;
@@ -845,7 +845,7 @@ test('leaving clears controls and canvas, and the same page can join again', asy
   await expect(page.locator('#status')).toContainText('已离开');
   await expect(page.locator('#game canvas')).toHaveCount(0);
   await expect(page.locator('#message')).toBeDisabled();
-  await expect(page.locator('#login-screen [data-world="sunny-lobby"]')).toBeEnabled();
+  await expect(page.locator('#login-screen [data-world="main"]')).toBeEnabled();
   await joinSavedProfile(page);
   await expect(page.locator('#game canvas')).toHaveCount(1);
 });
@@ -1004,8 +1004,8 @@ test('health and Tiled assets are reachable through the dev server', async ({ re
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual({ status: 'ok' });
   const directory = await request.get('/api/world');
-  const registry = await directory.json() as { initialMap: string; maps: { id: string; url: string }[] };
-  const entry = registry.maps.find(map => map.id === registry.initialMap)!;
+  const registry = await directory.json() as { maps: { id: string; url: string }[]; spaces: { id: string; initialMap: string }[] };
+  const entry = registry.maps.find(map => map.id === registry.spaces[0]!.initialMap)!;
   const map = await request.get(entry.url);
   expect(map.status()).toBe(200);
   expect((await map.json()).layers.some((layer: { type: string }) => layer.type === 'tilelayer')).toBe(true);
@@ -1343,4 +1343,37 @@ test('selector choices survive state patches, take priority over web areas, and 
     await expect(page.locator('#tool-open')).toBeVisible();
     await expect(page.locator('#tool-window')).toBeHidden();
   } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+
+test('Space tiles follow the registry and selecting a Space uses its own initial map', async ({ page }) => {
+  const response = await page.request.get('/api/world');
+  const registry = worldRegistryResponseSchema.parse(await response.json());
+  await page.goto('/');
+  await expect(page.locator('#world-list [data-world]')).toHaveCount(registry.spaces.length);
+  expect(await page.locator('#world-list [data-world]').evaluateAll(tiles => tiles.map(tile => tile.getAttribute('data-world'))))
+    .toEqual(registry.spaces.map(space => space.id));
+  await page.locator('#world-list [data-world="other"]').click();
+  await page.locator('#name').fill('OtherSpace');
+  await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#map-world-name')).toHaveText('Other');
+  const main = await observe();
+  const identity = await page.request.get('/api/me');
+  const profile = await identity.json() as { id: string };
+  const sessionId = await sessionOf(page);
+  const endpoint = test.info().project.use.baseURL!;
+  const cookie = (await page.context().cookies()).map(value => `${value.name}=${value.value}`).join('; ');
+  const observer = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
+    { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' });
+  observer.onMessage('chat', () => {});
+  try {
+    if (!observer.state?.players) await new Promise<void>(resolve => observer.onStateChange.once(() => resolve()));
+    expect(observer.state.spaceId).toBe('other');
+    expect(observer.state.players.get(sessionId)?.mapId).toBe('studio');
+    expect(observer.state.players.get(sessionId)?.userId).toBe(profile.id);
+    expect(main.state.players.has(sessionId)).toBe(false);
+    await expect(page.locator('#game canvas')).toBeVisible();
+    await page.locator('#leave').click();
+  } finally { await observer.leave(); await main.leave(); }
 });
