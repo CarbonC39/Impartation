@@ -2,6 +2,8 @@
 
 地图交互区域连接内置功能与外置页面。Tiled `class`/`type` 由共享 `InteractionRegistry<T>` 关联语义定义；前端和服务端分别组装各自的 interaction handlers。服务端负责身份、地图位置和操作权限。所有外置页面使用 Tiled 类型 `web`，以 `resourceId` 查找 WebTool 配置；`embed` 或 `external` 决定呈现方式。
 
+边界按业务域划分：项目内置交互负责位置、距离、角色动作、地图世界状态和项目内访问控制；协作文档、面向绘师的共同作画、同步媒体等完整业务域由独立外置服务负责。`action`、`variantSelector` 与 `privateArea` 属于地图角色和世界状态交互；衣柜复用项目原生角色外观编辑界面。Portal 继续由服务器验证并执行地图转换，留言板和番茄钟继续作为内置功能。外置服务的账号、协作状态和业务规则仍由服务自身管理。
+
 ## 内置接入
 
 | 功能 | 地图类型 | 默认 resourceId | 数据范围 |
@@ -32,11 +34,11 @@
 | 功能 | 预期服务 | 地图类型 | 默认 resourceId |
 | --- | --- | --- | --- |
 | 白板 | WBO | `web` | `shared-canvas` |
-| 面向绘师的共同作画 | Drawpile 的浏览器入口 | `web` | `shared-drawing` |
+| 面向绘师的共同作画 | Drawpile Web 浏览器入口 | `web` | `shared-drawing` |
 | YouTube/Bilibili 同步观看 | SyncTV | `web` | `lounge-screen` |
 | 协作文档 | Etherpad | `web` | `shared-document` |
 
-优先使用宿主机上的 Docker 服务。先部署服务并确认浏览器可以访问，再在地图中为外置入口使用 `web` 类型，并通过 `EXTERNAL_TOOLS` 以 `resourceId` 配置 URL；配置格式和公开 API 见[入口配置](integration-plan.md)。进入区域只显示工具面板，点击“打开”后才按 `mode` 打开新标签页或挂载 iframe。配置可选 `manualExternalOpen`，在已打开的 embed 旁显示手动外链；旧 `fallback: "external"` 是兼容别名，没有加载失败检测或自动切换。`allowSameOrigin` 默认 false，仅供可信自托管页面按需启用。board 和 pomodoro 是项目内置交互，有独立面板 handler。
+优先使用宿主机上的 Docker 服务。具体示例包括 WBO 白板、Drawpile Web 浏览器入口、SyncTV 和 Etherpad；这些是预期接入服务，不代表已完成对应服务的集成验收。先部署服务并确认目标浏览器可以访问，再在地图中为外置入口使用 `web` 类型，并通过 `EXTERNAL_TOOLS` 以 `resourceId` 配置 URL；配置格式和公开 API 见[入口配置](integration-plan.md)。`external` 是默认且跨浏览器环境最直接的打开路径；`embed` 是可选展示方式，是否可用取决于服务的 CSP、认证方式、浏览器策略和部署配置。进入区域只显示工具面板，点击“打开”后才按 `mode` 打开新标签页或挂载 iframe。配置可选 `manualExternalOpen`，在已打开的 embed 旁显示手动外链；旧 `fallback: "external"` 是兼容别名，没有加载失败检测或自动切换。`allowSameOrigin` 默认 false，仅供可信自托管页面按需启用。board 和 pomodoro 是项目内置交互，有独立面板 handler。
 
 项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 默认使用 `allow-scripts allow-forms allow-popups` 且不含 `allow-same-origin` 的沙盒 iframe；配置 `allowSameOrigin: true` 才增加该权限。离开区域会移除 iframe，但不会撤销工具自己的会话；项目身份和管理员角色不映射到外置服务。没有 iframe bridge、postMessage API 或服务适配层。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
 

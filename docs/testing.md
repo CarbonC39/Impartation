@@ -32,6 +32,8 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | --- | --- | --- |
 | 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段；语音信令、ICE 配置和距离资格 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长；动作点朝向/偏移、同格动作匹配、非法动作锚点和方向输入朝向 | [world.test.ts](../apps/backend/test/world.test.ts) |
+| 显式交互制作 | 选择器单/多变体、数字对象引用、分组偏移、未知属性保留和非法配置拒绝 | [interaction-authoring.test.ts](../apps/backend/test/interaction-authoring.test.ts) |
+| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；私密成员平等权限、重入、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
 | 角色帧选择 | 角色图集尺寸与方向帧索引有效性、走路帧选择、idle/动作姿态回退 | [character.test.ts](../apps/backend/test/character.test.ts) |
 | WebTool 配置 | 跨地图资源一致性、embed/external mode、手动外链与同源选项、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
 | 交互架构 | 通用前后端分发、handler 清理、消息冲突、展示策略与 shared 协议一致性 | [architecture.test.ts](../apps/backend/test/architecture.test.ts) |
@@ -40,6 +42,8 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
 | HTTP 与 WebSocket | 匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、正在输入状态的设置/发送聊天清除/超时清除、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消；语音 opt-in、地图/距离、节点容量、信令转发和范围退出 | [space.test.ts](../apps/backend/test/space.test.ts) |
 | 浏览器 | 界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；衣橱单品预览、3 个造型槽位的保存/覆盖确认/刷新保留、自定义界面配色、昵称显隐和聊天背景偏好的保存；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理；语音点击麦克风键授权、开麦/闭麦、断开语音、喇叭键静音来声、双浏览器音轨交换和离开清理；进入前准备的开麦/不开麦/返回、只请求一次麦克风、静音进入；说话时自己和对方头顶的麦克风标识；正在输入省略号的显示、发送后消失与设置关闭；方向键手柄提示、双击进入布局调整、缩放方向键、拖动方向键与动作按钮并保存 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+
+显式交互浏览器用例检查选择器按钮和目标 GID 画面、私密区域锁定按钮，以及镜子打开原有衣橱、保存/返回后保留房间和 session。自动化用例使用临时测试地图；仓库另提供可从大厅进入的交互试验场，手动体验路径见 [地图说明](tiled.md#交互试验场)。
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 
@@ -50,11 +54,13 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 ## 隔离与排查
 
 - Node 联机测试使用 2568 端口和内存数据库；SQLite 持久化及 CLI 测试使用临时目录。
-- 浏览器测试使用 5174/2569 端口、内存数据库和临时 Tiled fixture；默认大厅源数据不增加测试 Portal 或测试目的地。测试不复用已有开发服务。运行中修改源码或重建 shared 会触发 Vite 重载，应待测试结束后编辑。
+- 浏览器测试使用 5174/2569 端口、内存数据库和临时 Tiled fixture；自动化测试不改写产品地图；大厅自带的交互试验场用于手动体验。测试不复用已有开发服务。运行中修改源码或重建 shared 会触发 Vite 重载，应待测试结束后编辑。
 - 断线超时用例将测试房间的重连窗口缩短至 0.1 秒；正常重连用例仍使用默认 20 秒。
 - 非法载荷用例会产生预期校验日志，以退出码和测试统计为准。
 - Playwright 失败时保存 trace 到 `test-results/`，可用 `npx playwright show-trace TRACE_FILE` 查看。
 
 ## 未覆盖项
+
+私密区域目前不提供聊天、语音或 Schema 可见性隔离。区域形状只支持不重叠矩形，复杂门禁拓扑与永久 ACL 未实现。
 
 真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。测试验证 iframe 容器和 external 打开行为，不验证第三方站点允许嵌入或真实服务功能。

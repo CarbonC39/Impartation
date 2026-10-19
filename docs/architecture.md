@@ -24,13 +24,13 @@ flowchart LR
 | --- | --- |
 | [shared/index.ts](../packages/shared/src/index.ts) | Schema、消息输入校验、`WebTool` 配置类型、公共常量 |
 | [shared/protocol.ts](../packages/shared/src/protocol.ts) | SDK 使用的 `SpaceProtocol` 结构类型，定义房间输入、请求响应及服务端消息 |
-| [shared/world.ts](../packages/shared/src/world.ts) | Tiled 语义提取、registry 校验、动作锚点格判定、碰撞和移动函数 |
+| [shared/world.ts](../packages/shared/src/world.ts) | Tiled 语义提取、registry 校验、动作锚点重叠解析、碰撞和移动函数 |
 | [shared/character.ts](../packages/shared/src/character.ts) | 角色朝向和激活载荷的共享类型与校验 |
 | [shared/interactions.ts](../packages/shared/src/interactions.ts) | 泛型 `InteractionRegistry<T>`，按 kind 注册、查询和遍历；拒绝空 kind 和重复注册 |
 | [backend/app.config.ts](../apps/backend/src/app.config.ts) | 注册 `space` 房间、WebSocket transport 和 HTTP 路由 |
 | [backend/rooms/SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts) | 房间生命周期、身份复验、移动、聊天及交互授权上下文 |
 | [backend/world.ts](../apps/backend/src/world.ts) | 读取地图 registry，生成权威世界和浏览器可加载的渲染资源 |
-| [backend/interactions/index.ts](../apps/backend/src/interactions/index.ts) | 服务端交互组装入口；注册 board、pomodoro 和 Portal |
+| [backend/interactions/index.ts](../apps/backend/src/interactions/index.ts) | 服务端交互组装入口；注册 action、variantSelector、privateArea、board、pomodoro 和 Portal |
 | [backend/interactions/context.ts](../apps/backend/src/interactions/context.ts) / [registry.ts](../apps/backend/src/interactions/registry.ts) | 服务端通用交互上下文、消息与生命周期组合 |
 | [backend/interactions/web/config.ts](../apps/backend/src/interactions/web/config.ts) | 解析并校验公开 WebTool 配置 |
 | [backend/identity.ts](../apps/backend/src/identity.ts) / [db.ts](../apps/backend/src/db.ts) | Better Auth、项目资料、数据库初始化和迁移 |
@@ -83,7 +83,7 @@ sequenceDiagram
 
 界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 在浏览器中保存 3 个命名造型。界面配色、造型槽位、柔和区锁定、昵称显隐和聊天背景都只存在 localStorage，不进入身份资料或房间状态，也不跨设备同步；服务端仍只按 `appearanceSchema` 校验六位 RGB，不强制柔和区。保存造型槽位时会同时调用 `PATCH /api/me` 保存当前造型。
 
-当前只有公共 `space` 房间类型，每房间最多 32 个连接。房间包含整个已登记地图集合；地图 ID 不是房间 ID。客户端调用 `joinOrCreate`，没有私密房间、成员名单或按地图创建房间的机制。
+当前只有公共 `space` 房间类型，每房间最多 32 个连接。房间包含整个已登记地图集合；地图 ID 不是房间 ID。客户端调用 `joinOrCreate`，私密区域是在同一房间中的临时空间上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 
@@ -93,7 +93,7 @@ sequenceDiagram
 
 | 产物 | 消费方 | 内容 |
 | --- | --- | --- |
-| `WorldMap` | 服务端移动/授权；客户端区域及动作锚点显示 | 像素宽高、命名 `spawns`、碰撞矩形 `collisions`、交互矩形 `zones`、动作锚点 `actions` |
+| `WorldMap` | 服务端移动/授权；客户端区域及动作锚点显示 | 像素宽高、命名 `spawns`、碰撞矩形 `collisions`、交互矩形 `zones`、动作锚点 `actions`、选择器 `selectors` 和变体目标 `variantTargets` |
 | 规范化 Tiled JSON | Phaser | 保留地图渲染数据；外置 JSON tileset 展开，图片路径改写为地图资源 API URL |
 | 资源索引 | HTTP 资源路由 | 该地图显式引用的图片文件与服务端生成的 asset ID 对应关系 |
 
@@ -111,17 +111,17 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 | --- | --- |
 | `spawns` | 至少一个命名 point；名称唯一，按玩家碰撞体检查可站立性 |
 | `collisions` | 地图内的非旋转、正面积轴对齐矩形；可为空 |
-| `interactions` | 区域为地图内的非旋转、正面积轴对齐矩形；动作锚点为可站立的点；可为空；对象 `name` 是该地图内唯一的交互对象 ID |
+| `interactions` | 区域为地图内的非旋转、正面积轴对齐矩形；动作锚点为可站立的点；可为空；旧 action/区域保留 `name` ID；新增 variantSelector/privateArea/wardrobe 使用 Tiled 数字 object ID 的字符串形式 |
 
-`interactions` 层也可包含动作锚点：`class` 为 `action` 的对象必须是命名 point，string property `action` 指定动作名称。可选 `facing` 覆盖朝向，`offsetX`/`offsetY` 指定世界像素偏移，`linkedObjectId` 保留地图对象关联。有效锚点必须可站立；每个动作名称在每个 16×16 格最多一个锚点，不同动作可共格。动作只按角色脚点所在格查找，不使用距离半径；命中后服务端吸附到偏移后的锚点并采用可选朝向，未命中则原地执行并保留朝向。ID 在地图间可重复，运行时状态通过 map ID 隔离。
+`interactions` 层也可包含动作锚点：`class` 为 `action` 的对象必须是命名 point，string property `action` 指定动作名称。可选 `facing` 声明对齐到锚点所需朝向；交互不会自动转身。`offsetX`/`offsetY` 指定世界像素偏移，`linkedObjectId` 保留地图对象关联。有效锚点必须可站立；每个动作名称在每个 16×16 格最多一个锚点，不同动作可共格。服务端以玩家 12×8 脚底矩形与锚点 tile 的正面积重叠查找候选；最近候选优先，等距按稳定对象 ID 的字符串顺序决定。最近候选朝向不符时动作原地执行，保持位置和朝向、清空 `actionTargetId` 并释放先前认领；不对齐或认领锚点，不打开变体选择器或自动应用变体。最近候选朝向相符但已被占用时直接拒绝，不尝试更远锚点。有效请求吸附到偏移位置，并沿吸附路径按短于脚底矩形尺寸的步长检查权威碰撞与私密区域限制；没有重叠候选时动作原地执行。ID 在地图间可重复，运行时状态通过 map ID 隔离。
 
 交互 kind 取对象 `class`，没有 class 时使用 `type`；properties 保存为 `Record<string, unknown>`。`resourceId` 是从 properties 提取的共享资源标识，与 zone ID 不同：多个区域或地图可以引用同一资源。Portal 使用 `targetMap` 和 `targetSpawn`。
 
-已注册的交互定义负责 kind 特有的语义校验。当前 `interactionDefinitions` 在 shared/world.ts 中集中注册：board、pomodoro 和 `web` 检查非空 resourceId，Portal 检查目标属性。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
+已注册的交互定义负责 kind 特有的语义校验。类型决定配置和校验：action 和 variantSelector 使用各自的点配置 schema；privateArea 与 wardrobe 使用矩形定义，暂无额外必填属性；board、pomodoro 和 `web` 检查非空 resourceId，Portal 检查目标属性。所有内置类型校验所需属性类型及几何，重复属性名被拒绝。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
 
-校验范围与渲染能力分开。其它对象层中的装饰对象保持不透明，不套用语义矩形约束；多个 tile layer、多个 tileset 或额外 Tiled 元数据也不会仅因当前画面不需要而被语义解析器拒绝。语义层的可见性不控制碰撞或授权。
+校验范围与渲染能力分开。其它对象层中的装饰对象保持不透明；只有被 variantSelector 引用的目标矩形或 tile object 需要校验目标几何、可选基础 GID 与 `variant.<名称>` local tile ID。单 tileset 地图默认选择该 tileset，多 tileset 地图要求目标提供 `variantTileset`；共享解析器根据展开后的 tileset 元数据解析成运行时 map GID。多个 tile layer 或额外 Tiled 元数据也不会仅因当前画面不需要而被语义解析器拒绝。语义层的可见性不控制碰撞或授权。
 
-一个位置只激活一个 zone：服务端取解析顺序中第一个包含玩家中心点的矩形。包含判断左/上边界闭合、右/下边界开放；重叠区域没有独立优先级配置，制图时应考虑对象顺序。
+普通区域按解析顺序选择第一个包含脚点的矩形；没有普通区域时才以 privateArea 作为 zoneId。privateAreaId 独立计算，因此私密房间内的镜子、web 入口和 Portal 不会覆盖成员上下文。privateArea 矩形互不重叠，普通区域可放在其中。包含判断左/上边界闭合、右/下边界开放。
 
 ### 3.3 渲染加载和支持边界
 
@@ -129,7 +129,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 
 `SpaceScene.preload` 把规范化 JSON 交给 Phaser Tiled parser，并加载带顶层 `image` 的 atlas tileset。`create` 按 Phaser 解析得到的 tile layer 顺序创建图层，使用全部已加载 atlas；不要求图层叫 ground，也不要求只有一张内嵌 tileset。玩家和交互区提示在瓦片层之后绘制。
 
-当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和 tile object 没有相应的客户端绘制实现。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
+当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和通用 tile object 没有相应的客户端绘制实现。variantSelector 引用的矩形或直立 tile object 有专用 atlas 绘制路径，按目标尺寸绘制底边锚定的图块，深度高于同底边的 ySort 图块；不支持翻转 GID、旋转或 image collection tileset。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
 
 地图逻辑尺寸来自 registry 中的 world。浏览器相机默认倍率按 Tiled 图块宽高中较大的一边计算：取最接近 `48 / tileSize` 的整数，并限制在 1–6；16×16 图块默认用 3x。浏览器设置可选自动或固定 1x–6x，按浏览器保存并立即应用。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读；昵称绘制在角色脚点下方，不随动作改变文字。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
 
@@ -145,11 +145,12 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 | `notes` | note UUID → `BoardNote` | registry 内 board 资源的留言快照 |
 | `pomodoros` | `resourceId` → `Pomodoro` | 当前房间的共享计时器 |
 | `serverTime` | 服务端时间戳 | 番茄钟显示使用的时间基准 |
-| `worldObjects` | map ID → `MapObjectState`（authored object ID → `{ variant, occupiedBy }`） | 房间内各地图对象的共享视觉变体和占用状态；动作锚点、区域及关联对象 ID 均预留状态 |
+| `privateAreas` | map ID → area object ID → `{ locked, members, resetAt }` | 房间内临时空间会话，无所有者或永久 ACL |
+| `worldObjects` | map ID → `MapObjectState`（authored object ID → `{ variant, variantCleared, occupiedBy }`） | 房间内各地图对象的共享视觉变体、显式清除标记和占用状态；动作锚点、选择器、变体目标、区域及关联对象 ID 均预留状态 |
 
-Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`voiceEnabled`、`typing`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated` 和 `actionTargetId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
+Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`voiceEnabled`、`typing`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated`、`actionTargetId` 和当前物理私密上下文 `privateAreaId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
 
-消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal 和 activateAction，后者返回 `{ ok, message }`。activateAction 只接收 shared `CHARACTER_ACTIONS` 目录中的动作名和可选动画标记，目录外的名称被校验拒绝，动作不支持动画时服务端忽略动画标记；地图与玩家位置由服务端权威读取。服务端 chat 是实时广播；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
+消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal、activateAction、cancelAction、selectVariant 和 privateArea，这些交互请求返回 `{ ok, message }`。activateAction 只接收 shared `CHARACTER_ACTIONS` 目录中的动作名和可选动画标记，目录外的名称被校验拒绝，动作不支持动画时服务端忽略动画标记；地图与玩家位置由服务端权威读取。服务端 chat 是实时广播；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
 
 | 消息名 | 客户端载荷 | 服务端效果 |
 | --- | --- | --- |
@@ -160,7 +161,10 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 | `boardDelete` | `{ resourceId, id }` | 检查作者或 admin 权限后删除 |
 | `pomodoro` | `{ resourceId, action, mode? }` | start/reset 要求 mode；pause/resume 不接收客户端剩余时间 |
 | `portal` | `{ zoneId }` | 使用服务端地图属性选择目标及出生点 |
-| `activateAction` | `{ action, animated? }` | 按当前位置所在格和动作名查找锚点；匹配后权威吸附并可覆盖朝向，否则原地执行 |
+| `activateAction` | `{ action, animated? }` | 按脚底矩形与锚点 tile 的正面积重叠查找最近候选；朝向不符时原地执行并释放旧认领；朝向相符且被占用则拒绝，否则检查吸附路径并吸附；无候选时原地执行 |
+| `cancelAction` | `{}` | 清除动作、释放独占选择点，并恢复目标 authored 基础显示 |
+| `selectVariant` | `{ selectorId, variant: string \| null }` | 验证独占认领、所需动作、朝向及精确锚点位置；名称选择变体，`null` 清除目标显示但保留认领 |
+| `privateArea` | `{ areaId, operation: "lock", locked }` 或 `{ areaId, operation: "addMember", playerId }` | 当前成员平等地锁定/解锁或添加在线玩家；目标 playerId 不充当操作者身份 |
 | `voiceEnabled` | `{ enabled }` | 验证身份后更新该连接的语音意愿；断线时清除 |
 | `voiceOffer` / `voiceAnswer` | `{ peerId, connectionId, sdp }` | 检查双方已启用、同地图、在范围内且未超过节点数，然后转发 SDP |
 | `voiceIceCandidate` / `voiceEnd` | `{ peerId, connectionId, ... }` | 只转发已授权连接的 ICE，或关闭指定连接 |
@@ -177,11 +181,21 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 
 [stepMovement](../packages/shared/src/world.ts) 将斜向输入归一化，以 150 像素/秒移动；单步 delta 限制在 0–50ms，依次尝试 X、Y 方向，允许沿墙滑动。玩家坐标表示地面脚点，碰撞使用固定 12×8 像素的轴对齐地面矩形：横向从脚点 x−6 到 x+6，纵向从 y−8 到脚点 y。该尺寸独立于地图 tile 和角色图片；边界及 collision 矩形都由当前 mapId 对应的 `WorldMap` 决定。移动后，服务端重新计算 zoneId。
 
-客户端对服务端位置做线性插值，无本地预测或重演。全屏画布使用 RESIZE，镜头在地图范围内跟随当前玩家；键盘和屏幕方向按钮提交相同的 input，松开、页面隐藏或失焦会停止输入。`facing` 由方向输入更新，`motion` 表示 idle/walk；激活动作时服务端同步动作、动画标记和目标对象 ID，并按锚点规则调整位置与朝向。非零移动会清除动作状态。场景中的区域通知使用服务端 zoneId；界面提示和按钮状态不会替代服务端位置校验。
+客户端对服务端位置做线性插值，无本地预测或重演。全屏画布使用 RESIZE，镜头在地图范围内跟随当前玩家；键盘和屏幕方向按钮提交相同的 input，松开、页面隐藏或失焦会停止输入。`facing` 由方向输入更新，`motion` 表示 idle/walk；激活动作时服务端同步动作、动画标记和目标对象 ID，并按锚点规则调整位置。配置了 `facing` 的锚点要求玩家预先匹配朝向才能对齐；不符时仍可原地坐下，按钮保持普通 sit 标签，反馈会说明原地动作和所需朝向。交互不会自动转向；旧地图如依赖自动转向，可移除限制以允许原地动作，或安排玩家在激活前转向。非零移动会清除动作状态。场景中的区域通知使用服务端 zoneId；界面提示和按钮状态不会替代服务端位置校验。
 
 角色素材按 `assets/characters/<category>/*.png` 分目录，由 shared 构建脚本生成选项和 URL 清单；文件名作为素材 ID。角色帧尺寸与帧内地面脚点由 [characters.ts](../apps/frontend/src/characters.ts) 配置，独立于地图 tile 与碰撞尺寸。约定图集为 4 列：前四行按 down/left/right/up 排列行走帧，第五至八行按同样方向顺序排列 sit 帧；后续动作在角色配置中增加对应的四个方向行；idle 和静态动作使用各行第一帧，走路使用列 1–4，动画动作使用列 2–4。动画帧由客户端本地时间选择，不进入 Schema。目前所有角色图层都是 64×192，帧尺寸 16×24。`none` 会隐藏可选穿搭图层；各层使用同一帧号、位置和脚点。mint、amber、violet 是保留的角色原型 ID；实际外观由 appearance 决定。
 
-`Tiled 对象 → interaction → worldObjects 状态 → 视觉表示` 是对象呈现的数据路径。动作锚点可保留 `linkedObjectId`，WorldObjectState 按地图和 authored ID 保存对象 variant，以支持后续变体切换；当前动作不执行脚本，也不改变桌面行为。`worldObjectVisuals.ts` 保留按 authored ID 和 kind/variant 绘制叠加图的能力。叠加视觉尺寸单独定义，不依赖 tile 尺寸；业务 handler 只修改对象状态，不写 GID 或调用 putTileAt。
+`Tiled 对象 → interaction → worldObjects 状态 → 视觉表示` 是对象呈现的数据路径。variantSelector 以逗号分隔的 `variants` 和 Tiled object reference `targetObjectId` 声明可选物品；目标矩形或 tile object 用 `variant.<名称>` int 属性声明图块的零起始 local tile ID：`0` 是第一块，`-1` 表示透明。单 tileset 地图默认选用唯一 tileset；多 tileset 地图要求目标提供 string property `variantTileset`，其值为 tileset 名称；单 tileset 地图也可显式指定。shared parser 根据已展开的 tileset 元数据将 local ID 转成运行时 map GID；backend 会先解析 external TSJ 引用再解析地图语义。例：tileset `basic` 的 `firstgid` 为 1 时，local ID 6 映射为 GID 7。没有旧式 map GID 输入模式。普通矩形省略基础 GID，初始透明；tile object 的基础 `gid` 仍是 Tiled 原生 map GID，显式 `0` 表示透明。矩形使用左上坐标，带 gid 的 tile object 保留底边坐标，规范化后均为左上矩形。服务端保存变体名称及 `variantCleared`：初始及释放认领后为 `variant: ''`、`variantCleared: false`，显示 authored 基础图块（省略基础 GID 时透明）；选择名称变体也设为 `false`。`variant: ''`、`variantCleared: true` 表示玩家明确清除，目标透明且隐藏 authored 基础图块。客户端依据 Tiled 的静态映射绘制，不接受客户端 GID。非零基础 GID 与解析后的变体 GID 在加载地图时验证为可用 atlas 图块。旧 action 的 `linkedObjectId` 保留原有元数据用途。
+
+### 4.2.1 选择器与临时私密区域
+
+variantSelector 复用动作锚点的重叠候选、朝向与偏移规则。朝向不符时玩家仍原地执行动作，释放已有认领并复原其目标，不打开选择器或应用新变体；朝向相符才进行对齐和认领。一次身份复验后的同步处理完成空闲检查和认领，任何交错请求最多一人成功；只有该玩家保持所需动作、朝向和锚点位置时可选择。`selectVariant` 接受声明的名称或 `null`；`null` 清除目标并设置 `variantCleared`，保留当前动作与认领，不需要额外 authored 空选项。名称选择将其设回 false。移动、取消、断线、跨地图或认领失效时释放占用并重置目标显示，恢复 Tiled 基础图块（无基础 GID 时透明）；动画切换保持同一认领时保留当前选择或清除状态，单选项不会重复自动应用。周期巡检仅在过期认领仍属于原 session 时重置目标，避免覆盖新占用者。每个选择器拥有独立目标，沙发多个座位分别制作。
+
+privateArea 开放时进入者加入临时会话，成员权限平等；成员离开物理区域后保留重入、锁定与添加在线玩家的资格。锁定时，服务端以完整 12×8 脚底碰撞体阻止非成员进入，同时检查动作偏移和 Portal 落点；成员仍可自由离开。所有锁定/成员修改都在身份复验后的同步片段完成。默认出生点在锁区时加入/重连尝试其它命名 spawn；没有可进入 spawn 时拒绝入场。同地图 Portal 保留成员资格，跨地图清理旧地图成员资格。
+
+无成员时立即清空锁；有成员但连续 60 秒没有在线成员在物理区域内时清空会话。断线立即删除该连接在所有区域的成员资格，房间销毁也会重置。`Player.privateAreaId` 仅表示当前位置的空间上下文；授权以服务端成员表为准。未来听觉规则可组合 mapId/privateAreaId，当前语音、聊天和 Schema 可见性仍沿用公共房间规则，不提供声音或读取隔离。
+
+wardrobe 是原生入口，打开已有 Wardrobe 实例及其外观编辑 UI。保存走同一个 `PATCH /api/me` 和 appearance 校验，返回地图保留原房间和连接；不另建外观状态或工具服务。
 
 ### 4.3 Portal 的完整路径
 
@@ -189,13 +203,13 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 2. 客户端 [PortalInteraction](../apps/frontend/src/interactions/portal/handler.ts) 对本次区域进入发送一次 `portal` 请求，载荷只有 zoneId。
 3. 服务端复验身份，按当前 mapId 与真实坐标寻找区域，检查 zone ID/kind、连接状态和操作间隔。
 4. [Portal handler](../apps/backend/src/interactions/portal/handler.ts) 从服务端 Tiled 属性读取目标地图和命名 spawn，更新 mapId、坐标和 zoneId，并清除旧移动输入。
-5. `main.ts` 观察本玩家 mapId，清除当前交互区域，获取目标渲染 JSON，销毁旧 Phaser Game 并创建新场景。异步加载以 generation 和 room 引用检查丢弃过期结果。
+5. `main.ts` 观察本玩家 mapId，清除当前交互区域，获取目标渲染 JSON，等待旧 Phaser Game 的 DESTROY 生命周期完成后创建新场景；旧画布立即移除，过期场景区域回调被忽略。异步加载以 generation 和 room 引用检查丢弃过期结果。
 
 Portal 保留同一房间、连接、身份和聊天。加入房间使用 initialMap 的 defaultSpawn；Portal 使用其明确指定的 targetSpawn，不强制使用目标地图默认出生点。目标地图和 spawn 在启动时已验证。失败请求不会改变地图；客户端需要重新进入区域才再次尝试。
 
 ### 4.4 断线和资源清理
 
-后端 `onDrop` 标记玩家 disconnected 并删除移动输入，对允许重试的网络 close code 提供 20 秒重连窗口；SDK 在同一 Room 实例上自动重试。`onReconnect` 再检查身份，恢复 connected。最终 `onLeave` 才删除玩家、身份引用和限流记录；`onDispose` 调用各 integration 的清理钩子。
+后端 `onDrop` 标记玩家 disconnected、删除移动输入，立即释放 variantSelector 并删除私密成员资格；旧 action 座位保留重连窗口内的占用。随后对允许重试的网络 close code 提供 20 秒重连窗口；SDK 在同一 Room 实例上自动重试。`onReconnect` 再检查身份，恢复 connected。最终 `onLeave` 才删除玩家、身份引用和限流记录；`onDispose` 调用各 integration 的清理钩子。
 
 浏览器断线时禁用聊天和交互控制，重连后恢复。最终离开时，`main.ts.cleanup` 使未完成地图加载失效，dispose dispatcher，销毁 Phaser Game，并复位连接与页面状态。交互 handler 负责移除自身 DOM 监听、房间订阅、计时器和 iframe。外置工具面板会 abort 配置 fetch；内置面板与 Portal 不取消已发出的 `room.request`，而是在销毁或区域变化后忽略迟到响应的界面更新。清理是 handler 接入契约的一部分。
 
@@ -212,11 +226,11 @@ Portal 保留同一房间、连接、身份和聊天。加入房间使用 initia
 | backend `interactions/index.ts` | 消息字典及生命周期钩子 | `SpaceRoom` 合成消息并调用 initialize/tick/dispose |
 | frontend `web/presentations.ts` | WebTool 展示实现 | 用户点击打开后按 mode 展示；离开区域时清理页面 |
 
-客户端 [InteractionDispatcher](../apps/frontend/src/interactions/dispatcher.ts) 只认识 `setZone`、`setConnected`、`dispose`。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
+客户端 [InteractionDispatcher](../apps/frontend/src/interactions/dispatcher.ts) 分发 `setZone`、`setConnected`、`dispose`，并允许暂时暂停区域呈现。variantSelector 认领期间，组合入口暂停普通区域 handler，关闭 web 窗口；释放后恢复最新区域，私密成员上下文仍独立更新。选择按钮按认领上下文建立，状态补丁仅更新按钮状态，避免点击过程中替换 DOM。切换区域先向旧 handler 传 `undefined`，再通知新 handler；同一 handler 可注册到多个 kind，连接/销毁广播按实例去重。未知 kind 没有对应 handler 时，不显示专属交互界面。
 
-board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/interactions/board/handler.ts)、[PomodoroInteraction](../apps/frontend/src/interactions/pomodoro/handler.ts)，共用 [panel.ts](../apps/frontend/src/interactions/panel.ts) 的连接、pending、反馈和订阅清理机制。它们在 interactions/index.ts 直接注册，其现有 UI 不通过 WebTool 配置选择模式。Portal 使用 [portal/handler.ts](../apps/frontend/src/interactions/portal/handler.ts) 独立注册。`web/handler.ts` 读取 `/api/tools`，按资源匹配配置。角色动作由客户端 actions 模块提交 `activateAction`，载荷不含地图对象 ID 或客户端坐标；地图不是客户端动作 handler 的依赖。
+board 和 pomodoro 分别使用 [BoardInteraction](../apps/frontend/src/interactions/board/handler.ts)、[PomodoroInteraction](../apps/frontend/src/interactions/pomodoro/handler.ts)，共用 [panel.ts](../apps/frontend/src/interactions/panel.ts) 的连接、pending、反馈和订阅清理机制。它们在 interactions/index.ts 直接注册，其现有 UI 不通过 WebTool 配置选择模式。Portal 使用 [portal/handler.ts](../apps/frontend/src/interactions/portal/handler.ts) 独立注册。`web/handler.ts` 读取 `/api/tools`，按资源匹配配置。选择器和私密面板监听权威状态独立呈现，可同时与区域 handler 使用；wardrobe handler 通过组装入口回调打开已有编辑界面。角色动作由客户端 actions 模块提交 `activateAction`，载荷不含地图对象 ID 或客户端坐标；客户端地图只用于选择快捷动作，服务端独立匹配锚点。
 
-服务端 [registerServerInteractions](../apps/backend/src/interactions/registry.ts) 合并 handlers 的消息字典，保留具体消息类型，拒绝重复消息名。kind 注册只关联生命周期；实际请求按消息名进入对应 handler。通用容器不会自动执行身份或位置检查。区域 handler 调用上下文中的 `authorize` 和 `check`；动作 handler 使用同一身份复验和操作限流，再按动作名与所在格查找地图锚点。
+服务端 [registerServerInteractions](../apps/backend/src/interactions/registry.ts) 合并 handlers 的消息字典，保留具体消息类型，拒绝重复消息名。kind 注册只关联生命周期；实际请求按消息名进入对应 handler。通用容器不会自动执行身份或位置检查。区域 handler 调用上下文中的 `authorize` 和 `check`；动作 handler 使用同一身份复验和操作限流，再按动作名、脚底矩形与锚点 tile 的重叠查找最近候选。
 
 上下文提供 state、地图语义、身份复验和区域检查；Portal 另需要 map 索引与移动重置函数。房间在创建时调用 initialize，每秒及新玩家加入时调用 tick，销毁时调用 dispose。业务规则由 handler 和其 store 承担，SpaceRoom 提供通用授权与生命周期。
 
@@ -257,14 +271,15 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 `SpaceRoom.onAuth` 从 HTTP headers/cookie 验证身份并检查提供的 Origin，不接受客户端声明的 userId 或 role。入房时保存服务端验证得到的认证 session 引用；每条受保护消息及每秒巡检通过 Better Auth adapter 复验有效性，再读取最新 profile。资料和角色因此可在线更新；失效连接会被关闭。前端检查只改善交互反馈。
 
-区域交互检查按玩家真实 mapId/位置确认 kind 和 resourceId；动作锚点由服务端按角色实际位置所在格与动作名匹配。两者共享每连接至少 500ms 的操作间隔。聊天另有每连接 500ms 间隔。管理员不会绕过身份、位置或限流。`avatar` 是角色原型 ID；`appearance` 是单独校验并共享的换装配置。两者都与权限 `role` 分离。
+区域交互检查按玩家真实 mapId/位置确认 kind 和 resourceId；动作锚点由服务端按角色实际脚底矩形与 tile 重叠及动作名匹配。两者共享每连接至少 500ms 的操作间隔。聊天另有每连接 500ms 间隔。管理员不会绕过身份、位置或限流。`avatar` 是角色原型 ID；`appearance` 是单独校验并共享的换装配置。两者都与权限 `role` 分离。
 
 | 数据 | 持久化和共享范围 | 实现 |
 | --- | --- | --- |
 | auth user/session/verification 等 | SQLite；跨浏览器绑定共享身份 | Better Auth |
 | 昵称、avatar ID、appearance、member/admin role | SQLite profiles；按持久 userId | identity.ts；换装选项由共享 Schema 校验；role 通过本地 CLI 更新 |
 | 玩家脚点、mapId、appearance、zoneId、connected、facing、motion、action/actionAnimated/actionTargetId | 房间内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
-| 对象 variant/occupiedBy | 房间内存；按地图与 authored ID 共享，房间销毁后重置 | SpaceState.worldObjects / action handler |
+| 对象 variant/variantCleared/occupiedBy | 房间内存；新选择器和目标以地图与数字 Tiled ID 共享，释放选择点时恢复 authored 基础显示；房间销毁后重置 | SpaceState.worldObjects / action handler |
+| 私密区域 locked/members/resetAt | 房间内存；地图 + Tiled ID；临时连接成员、物理空置 60 秒重置 | privateArea handler / SpaceState.privateAreas |
 | 聊天 | 房间广播；没有服务端历史 | SpaceRoom |
 | 留言 | SQLite board_notes；同一进程所有房间按 resourceId 共享 | [BoardStore](../apps/backend/src/interactions/board/store.ts) |
 | 番茄钟 | 每房间按 resourceId 共享；房间销毁或服务重启后重置 | [pomodoro handler](../apps/backend/src/interactions/pomodoro/handler.ts) |
