@@ -137,6 +137,19 @@
          "name":"spawns",
          "objects":[
                 {
+                  "id": 37,
+                  "name": "lab-return",
+                  "x": 360,
+                  "y": 128,
+                  "width": 0,
+                  "height": 0,
+                  "rotation": 0,
+                  "visible": true,
+                  "properties": [],
+                  "point": true
+                },
+
+                {
                  "height":0,
                  "id":1,
                  "name":"default",
@@ -376,6 +389,30 @@
          "name":"interactions",
          "objects":[
                 {
+                  "id": 36,
+                  "name": "to-interaction-lab",
+                  "class": "Portal",
+                  "x": 336,
+                  "y": 96,
+                  "width": 48,
+                  "height": 16,
+                  "rotation": 0,
+                  "visible": true,
+                  "properties": [
+                    {
+                      "name": "targetMap",
+                      "type": "string",
+                      "value": "interaction-lab"
+                    },
+                    {
+                      "name": "targetSpawn",
+                      "type": "string",
+                      "value": "arrival"
+                    }
+                  ]
+                },
+
+                {
                  "height":64,
                  "id":3,
                  "name":"lounge-screen",
@@ -587,7 +624,7 @@
          "y":0
         }],
  "nextlayerid":11,
- "nextobjectid":36,
+ "nextobjectid":38,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",
