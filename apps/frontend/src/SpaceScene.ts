@@ -5,6 +5,7 @@ import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
+import { cameraZoom } from './cameraZoom';
 
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[]; status: CharacterStatus;
   animation: string; elapsed: number };
@@ -32,6 +33,9 @@ export class SpaceScene extends Phaser.Scene {
   private lastInput = '';
   private bubbles = new Map<string, ChatBubble>();
   private lastAnchor = '';
+  private tileWidth = 16;
+  private tileHeight = 16;
+  private zoneTexts: Phaser.GameObjects.Text[] = [];
 
   constructor(private room: Room<SpaceProtocol>, private mapEntry: RegisteredMap,
     private renderMap: { tilesets: { name: string; image?: string }[] }, private hooks: SceneHooks) {
@@ -58,9 +62,9 @@ export class SpaceScene extends Phaser.Scene {
   create() {
     prepareStatusTextures(this);
     const map = this.make.tilemap({ key: 'world' });
-    // A display preference, independent of tile dimensions and simulation units.
-    const configuredZoom = Number(import.meta.env.VITE_CAMERA_ZOOM ?? 2);
-    const zoom = Number.isFinite(configuredZoom) && configuredZoom > 0 ? configuredZoom : 2;
+    this.tileWidth = map.tileWidth;
+    this.tileHeight = map.tileHeight;
+    const zoom = cameraZoom(this.tileWidth, this.tileHeight);
     this.cameras.main.setZoom(zoom);
     const tiles = this.renderMap.tilesets.flatMap((tileset, index) => {
       if (!tileset.image) return [];
@@ -95,8 +99,8 @@ export class SpaceScene extends Phaser.Scene {
     for (const zone of this.mapEntry.world.zones) {
       this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
         .setOrigin(0).setStrokeStyle(1, 0xd5d080, 0.6);
-      this.add.text(zone.x + 8, zone.y + 8, zoneLabels[zone.kind] ?? zone.kind, { fontSize: '14px', color: '#eeefd9' })
-        .setScale(1 / zoom);
+      this.zoneTexts.push(this.add.text(zone.x + 8, zone.y + 8, zoneLabels[zone.kind] ?? zone.kind,
+        { fontSize: '14px', color: '#eeefd9' }).setScale(1 / zoom));
     }
     this.objectVisuals = new WorldObjectVisuals(this, this.mapEntry.world);
     this.cameras.main.setBounds(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
@@ -119,6 +123,13 @@ export class SpaceScene extends Phaser.Scene {
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', visibility);
     });
+  }
+  refreshCameraZoom() {
+    const zoom = cameraZoom(this.tileWidth, this.tileHeight);
+    this.cameras.main.setZoom(zoom);
+    for (const label of this.zoneTexts) label.setScale(1 / zoom);
+    for (const sprite of this.sprites.values()) sprite.status.setZoom(zoom);
+    this.lastAnchor = '';
   }
   update(time: number, delta: number) {
     const players = this.room.state?.players;

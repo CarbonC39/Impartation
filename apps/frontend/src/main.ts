@@ -22,6 +22,7 @@ import { LayoutEditor } from './layoutEditor';
 import { ChatLayout } from './chatLayout';
 import { mountPrejoin, type VoicePlan } from './prejoin';
 import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
+import { automaticCameraZoom, cameraZoomPreference, setCameraZoomPreference } from './cameraZoom';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -105,7 +106,13 @@ chatToggle.addEventListener('click', () => {
   chatToggle.blur(); // Return keyboard movement to the map.
 });
 
-// Map display preferences: name tags and the chat background.
+// Per-browser map display preferences.
+const cameraZoomSelect = element<HTMLSelectElement>('camera-zoom');
+cameraZoomSelect.value = String(cameraZoomPreference() ?? 'auto');
+cameraZoomSelect.addEventListener('change', () => {
+  setCameraZoomPreference(cameraZoomSelect.value === 'auto' ? null : Number(cameraZoomSelect.value));
+  scene?.refreshCameraZoom();
+});
 const chatModes = ['clear', 'half', 'solid'] as const;
 type ChatMode = typeof chatModes[number];
 let namesVisible = readPreference('virtual-workspace-show-names') !== 'false';
@@ -365,7 +372,10 @@ async function enterWorld(plan: VoicePlan) {
     joinFeedback.textContent = `进入失败：${error instanceof Error ? error.message : String(error)}`;
   }
 }
-const renderMapSchema = z.object({ tilesets: z.array(z.object({ name: z.string(), image: z.string().optional() }).passthrough()).default([]) }).passthrough();
+const renderMapSchema = z.object({
+  tilewidth: z.number().positive(), tileheight: z.number().positive(),
+  tilesets: z.array(z.object({ name: z.string(), image: z.string().optional() }).passthrough()).default([]),
+}).passthrough();
 async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   const entry = worldRegistry?.maps.find(map => map.id === mapId);
   if (!entry) throw new Error(`Unknown map: ${mapId}`);
@@ -377,6 +387,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
     const response = await fetch(entry.url, { signal: AbortSignal.timeout(12_000) });
     if (!response.ok) throw new Error('地图加载失败');
     const renderMap = renderMapSchema.parse(await response.json());
+    cameraZoomSelect.options[0]!.text = `自动（${automaticCameraZoom(renderMap.tilewidth, renderMap.tileheight)}x）`;
     if (generation !== renderGeneration || room !== activeRoom) return;
     game?.destroy(true);
     const zoneAnchor = element('zone-anchor');

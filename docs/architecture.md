@@ -131,7 +131,7 @@ registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn
 
 当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和 tile object 没有相应的客户端绘制实现。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
 
-地图逻辑尺寸来自 registry 中的 world。浏览器相机缩放由 `VITE_CAMERA_ZOOM` 单独配置，默认值为 2；仅接受有限且大于零的数字，其它值回退到 2。该值不依赖地图 tile 尺寸。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读；昵称绘制在角色脚点下方，不随动作改变文字。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
+地图逻辑尺寸来自 registry 中的 world。浏览器相机默认倍率按 Tiled 图块宽高中较大的一边计算：取最接近 `48 / tileSize` 的整数，并限制在 1–6；16×16 图块默认用 3x。浏览器设置可选自动或固定 1x–6x，按浏览器保存并立即应用。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读；昵称绘制在角色脚点下方，不随动作改变文字。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
 
 ## 4. 实时状态、移动与地图切换
 
