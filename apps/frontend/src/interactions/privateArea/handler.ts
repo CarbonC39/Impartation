@@ -3,6 +3,19 @@ import type { PrivateAreaOperationInput, SpaceProtocol, Zone } from '@virtual-wo
 import type { InteractionHandler } from '../dispatcher';
 import { element } from '../panel';
 
+/**
+ * State patches arrive many times a second. Rebuilding an open <select> on every patch fights the
+ * user's pointer and can hang the native popup, so options change only when their content does.
+ */
+function setOptions(select: HTMLSelectElement, options: [value: string, label: string][]) {
+  const current = [...select.options];
+  if (current.length === options.length && current.every((option, index) =>
+    option.value === options[index]![0] && option.text === options[index]![1])) return;
+  const selected = select.value;
+  select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+  if (options.some(([value]) => value === selected)) select.value = selected;
+}
+
 export class PrivateAreaInteraction implements InteractionHandler {
   private panel = element('private-area-panel');
   private areas = element<HTMLSelectElement>('private-area-select');
@@ -36,15 +49,15 @@ export class PrivateAreaInteraction implements InteractionHandler {
     this.panel.hidden = !memberships.length;
     if (!memberships.length) { this.selected = ''; return; }
     if (!memberships.some(([id]) => id === this.selected)) this.selected = player?.privateAreaId || memberships[0]![0];
-    this.areas.replaceChildren(...memberships.map(([id, area]) => new Option(`区域 ${id}${area.locked ? ' · 已锁定' : ' · 开放'}`, id)));
-    this.areas.value = this.selected;
+    setOptions(this.areas, memberships.map(([id, area]) => [id, `区域 ${id}${area.locked ? ' · 已锁定' : ' · 开放'}`]));
+    if (this.areas.value !== this.selected) this.areas.value = this.selected;
     const state = areas!.get(this.selected)!;
-    this.members.textContent = `成员：${[...state.members.keys()].map(id => this.room.state.players.get(id)?.name ?? id).join('、')}`;
-    const selectedPlayer = this.players.value;
-    this.players.replaceChildren(...[...this.room.state.players.entries()]
-      .filter(([id, other]) => other.connected && !state.members.has(id)).map(([id, other]) => new Option(other.name, id)));
-    if ([...this.players.options].some(option => option.value === selectedPlayer)) this.players.value = selectedPlayer;
-    this.lock.textContent = state.locked ? '解锁' : '锁定';
+    const members = `成员：${[...state.members.keys()].map(id => this.room.state.players.get(id)?.name ?? id).join('、')}`;
+    if (this.members.textContent !== members) this.members.textContent = members;
+    setOptions(this.players, [...this.room.state.players.entries()]
+      .filter(([id, other]) => other.connected && !state.members.has(id)).map(([id, other]) => [id, other.name]));
+    const lockText = state.locked ? '解锁' : '锁定';
+    if (this.lock.textContent !== lockText) this.lock.textContent = lockText;
     this.lock.disabled = !this.connected || !player?.connected || this.pending;
     this.add.disabled = this.lock.disabled || !this.players.options.length;
     this.areas.disabled = this.pending;
