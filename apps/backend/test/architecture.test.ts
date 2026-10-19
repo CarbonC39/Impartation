@@ -52,6 +52,26 @@ test('generic interaction dispatch supports new kinds and shared handlers with d
   assert.deepEqual(events, ['connected:true', 'one', 'exit', 'connected:true', 'two', 'connected:false', 'exit', 'dispose']);
 });
 
+test('claimed point presentation suspends area handlers and restores the latest area', () => {
+  const events: string[] = [];
+  const handler: InteractionHandler = {
+    setZone(zone) { events.push(zone?.id ?? 'exit'); },
+    setConnected(value) { events.push(`connected:${value}`); },
+    dispose() { events.push('dispose'); },
+  };
+  const dispatcher = new InteractionDispatcher(new InteractionRegistry<InteractionHandler>().register('web', handler));
+  const zone: Zone = { id: 'one', kind: 'web', resourceId: 'tool', properties: {}, x: 0, y: 0, width: 16, height: 16 };
+  dispatcher.setZone(zone);
+  dispatcher.setZoneSuspended(true);
+  dispatcher.setZoneSuspended(true);
+  dispatcher.setZone({ ...zone, id: 'two' });
+  dispatcher.setConnected(false);
+  dispatcher.setZoneSuspended(false);
+  dispatcher.setZoneSuspended(false);
+  dispatcher.dispose();
+  assert.deepEqual(events, ['connected:true', 'one', 'exit', 'connected:false', 'connected:false', 'two', 'dispose']);
+});
+
 test('web presentation dispatch selects embed or external by resource configuration and cleans up', () => {
   const events: string[] = [];
   const host = {} as HTMLElement;

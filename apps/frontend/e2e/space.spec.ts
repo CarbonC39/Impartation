@@ -251,6 +251,7 @@ test('camera zoom defaults to map tiles and settings apply integer zoom', async 
     return {
       zoom, frame: Number(sprite.frame.name),
       objectImages: scene.children.list.filter(child => child.type === 'Image').length,
+      targetImages: scene.children.list.filter(child => child.type === 'Image' && (child as Phaser.GameObjects.Image).frame.name === 'world-variant-8').length,
       origin: [sprite.originX, sprite.originY],
       groundAnchor: [sprite.displayOriginX, sprite.displayOriginY],
       worldSize: [sprite.displayWidth, sprite.displayHeight],
@@ -270,7 +271,9 @@ test('camera zoom defaults to map tiles and settings apply integer zoom', async 
   await page.locator('#settings-toggle').click();
   await expect(page.locator('#camera-zoom')).toHaveValue('auto');
   await expect(page.locator('#camera-zoom option:first-child')).toHaveText('自动（3x）');
-  expect(initial.objectImages).toBe(0);
+  // Only the opaque selector target adds an image; action anchors remain invisible.
+  expect(initial.objectImages).toBe(1);
+  expect(initial.targetImages).toBe(1);
   expect(seatVisualRequests).toEqual([]);
   expect(initial.origin).toEqual([avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight]);
   expect(initial.groundAnchor).toEqual([avatar.groundAnchor.x, avatar.groundAnchor.y]);
@@ -596,6 +599,17 @@ test('mobile seat activation renders the character and releases occupancy when w
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
   const player = () => observer.state.players.get(sessionId)!;
   const seat = () => observer.state.worldObjects.get(player().mapId)?.objects.get('lobby-seat-1');
+  const vertical = async (key: string, arrived: () => boolean) => {
+    await canvas.focus(); await page.keyboard.down(key);
+    try { await expect.poll(arrived, { intervals: [10] }).toBe(true); }
+    finally { await page.keyboard.up(key); }
+    await expect.poll(() => player().motion).toBe('idle');
+  };
+  const faceSeat = async () => {
+    await vertical('s', () => player().y >= 408);
+    await vertical('w', () => player().y < 400);
+    await expect(button).toHaveText('坐下');
+  };
   try {
     await expect.poll(() => player()?.name).toBe('E2ESeat');
     await expect(button).toBeEnabled();
@@ -609,6 +623,16 @@ test('mobile seat activation renders the character and releases occupancy when w
         return await button.isEnabled() && Math.floor(value.x / 16) === 25 && Math.floor(value.y / 16) === 24;
       }, { intervals: [10], timeout: 5000 }).toBe(true);
     } finally { await page.keyboard.up('d'); }
+    await vertical('s', () => player().y >= 392);
+    await expect(button).toHaveText('坐下');
+    const before = { x: player().x, y: player().y, facing: player().facing };
+    await button.click();
+    await expect(page.locator('#object-feedback')).toContainText('已原地坐下');
+    expect({ x: player().x, y: player().y, facing: player().facing }).toEqual(before);
+    await expect.poll(() => player().action).toBe('sit'); expect(player().actionTargetId).toBe('');
+    expect(seat()?.occupiedBy).toBe('');
+    await page.waitForTimeout(550);
+    await faceSeat();
     await button.click();
     await expect.poll(() => player().action).toBe('sit');
     await expect.poll(() => player().x).toBe(408);
@@ -646,6 +670,7 @@ test('mobile seat activation renders the character and releases occupancy when w
       }, { intervals: [10] }).toBe(true);
     } finally { await page.keyboard.up('a'); }
     await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+    await faceSeat();
     await canvas.focus();
     await page.keyboard.down('e');
     try { await expect.poll(() => player().action).toBe('sit'); }
@@ -1186,4 +1211,136 @@ test('wardrobe previews items, keeps three named outfit slots and remembers disp
   await page.reload();
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'solid');
   await expect(page.locator('#names-switch')).toHaveAttribute('aria-checked', 'false');
+});
+
+
+test('scene selectors render chosen tiles, private members control locks, and a mirror reuses Wardrobe', async ({ page }) => {
+  test.setTimeout(45000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await enter(page, 'SceneTypes', 'mint', () => captureRenderedScene(page));
+  const sessionId = await sessionOf(page); const observer = await observe();
+  const player = () => observer.state.players.get(sessionId)!;
+  const move = async (key: string, arrived: () => boolean) => {
+    await page.locator('#game canvas').focus(); await page.keyboard.down(key);
+    try { await expect.poll(arrived, { intervals: [10] }).toBe(true); }
+    finally { await page.keyboard.up(key); }
+    await expect.poll(() => player().motion).toBe('idle');
+  };
+  try {
+    await expect.poll(() => player()?.name).toBe('SceneTypes');
+    await move('s', () => player().y >= 449);
+    await page.locator('#action-list [data-action="sit"]').click();
+    await expect(page.locator('#variant-selector-panel')).toBeVisible();
+    await expect.poll(() => player().actionTargetId).toBe('20');
+    await page.waitForTimeout(550);
+    await page.locator('#variant-choices [data-variant="book"]').click();
+    await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variant).toBe('book');
+    await expect.poll(() => page.evaluate(() => {
+      const scene = (window as RenderingWindow).sceneUnderTest;
+      return scene?.children.list.some(child => child instanceof Object && 'frame' in child &&
+        (child as Phaser.GameObjects.Image).frame?.name === 'world-variant-19');
+    })).toBe(true);
+    await page.locator('#variant-cancel').click(); await expect(page.locator('#variant-selector-panel')).toBeHidden();
+    await expect(page.locator('#private-area-panel')).toBeVisible();
+    await page.waitForTimeout(550); await page.locator('#private-area-lock').click();
+    await expect(page.locator('#private-area-lock')).toHaveText('解锁');
+    await move('a', () => player().x < 346);
+    await expect(page.locator('#wardrobe-panel')).toBeVisible();
+    const roomId = await page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.['room'].roomId);
+    await page.locator('#wardrobe-open').click();
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await page.locator('[data-appearance-category="top"]').click();
+    await page.locator('#appearance-choices [data-appearance-item="shirt"]').click();
+    await page.locator('#join').click();
+    await expect(page.locator('#map-screen')).toBeVisible();
+    await expect(page.locator('#prejoin-dialog')).not.toBeVisible();
+    await expect.poll(() => JSON.parse(player().appearance).top.assetId).toBe('shirt');
+    expect(await page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.['room'].roomId)).toBe(roomId);
+    expect(await sessionOf(page)).toBe(sessionId);
+    await page.locator('#wardrobe-open').click();
+    await page.locator('#avatar-screen [data-back]').click();
+    await expect(page.locator('#map-screen')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+
+test('selector choices survive state patches, take priority over web areas, and visibly clear tiles', async ({ page, context }) => {
+  test.setTimeout(45000);
+  await page.route('**/api/tools', route => route.fulfill({ json: [{
+    resourceId: 'shared-canvas', url: 'https://tools.example/selector', mode: 'embed',
+  }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<p>Selector overlap fixture</p>' }));
+  await enter(page, 'SelectorPixels', 'mint', async () => {
+    await captureRenderedScene(page);
+    const png = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 192; canvas.height = 96;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#336699'; ctx.fillRect(0, 0, 192, 96);
+      ctx.fillStyle = '#8855cc'; ctx.fillRect(112, 0, 16, 16); // authored base GID 8
+      ctx.fillStyle = '#ee6633'; ctx.fillRect(96, 0, 16, 16); // local tile 6 / GID 7: computer
+      ctx.fillStyle = '#22aa55'; ctx.fillRect(96, 16, 16, 16); // local tile 18 / GID 19: book
+      return canvas.toDataURL().split(',')[1];
+    });
+    await page.route('**/api/maps/workspace/assets/0', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') }));
+  });
+  const observer = await observe(); const sessionId = await sessionOf(page);
+  const player = () => observer.state.players.get(sessionId)!;
+  const targetPixel = () => page.evaluate(() => new Promise<number[]>((resolve, reject) => {
+    const scene = (window as RenderingWindow).sceneUnderTest;
+    if (!scene) { reject(new Error('Scene missing')); return; }
+    const camera = scene.cameras.main;
+    const point = camera.getViewMatrix().transformPoint(392, 440);
+    scene.game.renderer.snapshotPixel(Math.round(point.x), Math.round(point.y), color => {
+      if ('red' in color) resolve([color.red, color.green, color.blue]);
+      else reject(new Error('Expected pixel color'));
+    });
+  }));
+  try {
+    await expect.poll(() => player()?.name).toBe('SelectorPixels');
+    await page.locator('#game canvas').focus(); await page.keyboard.down('s');
+    try { await expect.poll(() => player().y >= 449, { intervals: [10] }).toBe(true); }
+    finally { await page.keyboard.up('s'); }
+    await expect.poll(() => player().motion).toBe('idle');
+    await page.locator('#tool-open').click();
+    await expect(page.locator('#tool-window iframe')).toBeVisible();
+    // Submit the same UI intent through the scene's real connection while the window is open.
+    await page.evaluate(async () => { await (window as RenderingWindow).sceneUnderTest!['room'].request('activateAction', { action: 'sit' }); });
+    await expect(page.locator('#tool-window')).toBeHidden();
+    await expect(page.locator('#tool-hint')).toBeHidden();
+    await expect(page.locator('#variant-selector-panel')).toBeVisible();
+    await page.waitForTimeout(550);
+    const empty = page.locator('#variant-choices [data-variant="empty"]');
+    if (await empty.isEnabled()) await empty.click();
+    await expect.poll(targetPixel).toEqual([51, 102, 153]);
+    await page.waitForTimeout(550);
+    const book = page.locator('#variant-choices [data-variant="book"]');
+    await book.hover(); await page.mouse.down();
+    // Force authoritative patches between pointer down and pointer up.
+    for (const typing of [true, false]) {
+      observer.send('typing', { typing });
+      await expect.poll(() => page.evaluate(id =>
+        (window as RenderingWindow).sceneUnderTest!['room'].state.players.get(id)?.typing, observer.sessionId),
+      { intervals: [10] }).toBe(typing);
+    }
+    await page.mouse.up();
+    await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variant).toBe('book');
+    await expect.poll(targetPixel).toEqual([34, 170, 85]);
+    await page.waitForTimeout(550);
+    await page.locator('#variant-choices [data-variant="computer"]').click();
+    await expect.poll(targetPixel).toEqual([238, 102, 51]);
+    await page.waitForTimeout(550);
+    await page.evaluate(async () => {
+      await (window as RenderingWindow).sceneUnderTest!['room'].request('selectVariant', { selectorId: '20', variant: null });
+    });
+    await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variantCleared).toBe(true);
+    expect(player().actionTargetId).toBe('20');
+    await expect.poll(targetPixel).toEqual([51, 102, 153]);
+    await page.locator('#variant-cancel').click();
+    await expect(page.locator('#variant-selector-panel')).toBeHidden();
+    await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variantCleared).toBe(false);
+    await expect.poll(targetPixel).toEqual([136, 85, 204]);
+    await expect(page.locator('#tool-open')).toBeVisible();
+    await expect(page.locator('#tool-window')).toBeHidden();
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
