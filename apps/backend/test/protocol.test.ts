@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, typingSchema, boardPostSchema,
   boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES,
-  canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema } from '@virtual-workspace/shared';
+  selectVariantSchema, canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema } from '@virtual-workspace/shared';
 
 test('voice payloads bound signaling size and reject malformed targets and ICE configuration', () => {
   const connectionId = '550e8400-e29b-41d4-a716-446655440000';
@@ -60,6 +60,25 @@ test('character action requests accept only catalog actions and strip client aut
     assert.equal(activateActionSchema.safeParse(value).success, false);
   }
 });
+
+test('variant selection accepts a named choice or explicit clear and rejects client authority', () => {
+  assert.deepEqual(selectVariantSchema.parse({ selectorId: '204', variant: ' book ' }),
+    { selectorId: '204', variant: 'book' });
+  assert.deepEqual(selectVariantSchema.parse({ selectorId: '204', variant: null }),
+    { selectorId: '204', variant: null });
+  for (const value of [
+    { selectorId: '204' },
+    { selectorId: '204', variant: '' },
+    { selectorId: '204', variant: '  ' },
+    { selectorId: '204', variant: 1 },
+    { selectorId: '204', variant: false },
+    { selectorId: '204', variant: {} },
+    { selectorId: '204', variant: null, sessionId: 'forged' },
+    { selectorId: '204', variant: null, mapId: 'other-map' },
+    { selectorId: '204', variant: null, targetObjectId: '501' },
+  ]) assert.equal(selectVariantSchema.safeParse(value).success, false);
+});
+
 for (const [name, value] of [
   ['out of range', { x: 2, y: 0 }], ['negative out of range', { x: 0, y: -2 }],
   ['fractional', { x: 0.5, y: 0 }], ['string', { x: '1', y: 0 }],

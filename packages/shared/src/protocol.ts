@@ -1,5 +1,5 @@
 import type {
-  ActivateActionInput,
+  ActivateActionInput, SelectVariantInput, PrivateAreaOperationInput,
   BoardDeleteInput,
   BoardPostInput,
   ChatMessage,
@@ -33,6 +33,9 @@ export type SpaceProtocol = {
     boardDelete: (client: unknown, input: BoardDeleteInput) => InteractionResult;
     pomodoro: (client: unknown, input: PomodoroActionInput) => InteractionResult;
     portal: (client: unknown, input: { zoneId: string }) => InteractionResult;
+    selectVariant: (client: unknown, input: SelectVariantInput) => InteractionResult;
+    privateArea: (client: unknown, input: PrivateAreaOperationInput) => InteractionResult;
+    cancelAction: (client: unknown, input: Record<string, never>) => InteractionResult;
     activateAction: (client: unknown, input: ActivateActionInput) => InteractionResult;
     voiceEnabled: (client: unknown, input: { enabled: boolean }) => boolean;
     voiceOffer: (client: unknown, input: VoiceOffer) => boolean;

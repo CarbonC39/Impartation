@@ -18,7 +18,6 @@ export function loadWorldRegistry(path: string) {
   const registry: WorldRegistry = { initialMap: input.initialMap, maps: input.maps.map(entry => {
     const file = resolve(dirname(path), entry.file);
     const raw: unknown = JSON.parse(readFileSync(file, 'utf8'));
-    const world = parseWorldMap(raw);
     const render = jsonObject.parse(raw);
     const base = `/api/maps/${encodeURIComponent(entry.id)}`;
     let assetIndex = 0;
@@ -36,6 +35,22 @@ export function loadWorldRegistry(path: string) {
       if (data.tiles) data.tiles = data.tiles.map(tile => tile.image ? { ...tile, image: asset(tile.image, dirname(sourceFile)) } : tile);
       return { ...data, firstgid: reference.firstgid };
     });
+    // External JSON tilesets must be expanded before resolving authored local variant tile IDs.
+    const world = parseWorldMap(render);
+    if (world.variantTargets.length) {
+      const atlases = z.array(z.object({
+        firstgid: z.number().int().positive(), tilecount: z.number().int().positive().optional(),
+        tilewidth: z.number().int().positive().optional(), tileheight: z.number().int().positive().optional(),
+        image: z.string().optional(), objectalignment: z.string().optional(),
+      })).parse(render.tilesets);
+      for (const target of world.variantTargets) for (const gid of [target.gid, ...Object.values(target.variants)]) {
+        if (gid === 0) continue;
+        const atlas = atlases.filter(set => set.firstgid <= gid).sort((a, b) => b.firstgid - a.firstgid)[0];
+        if (!atlas?.image || !atlas.tilecount || !atlas.tilewidth || !atlas.tileheight || gid >= atlas.firstgid + atlas.tilecount ||
+          (atlas.objectalignment !== undefined && !['unspecified', 'bottomleft'].includes(atlas.objectalignment)))
+          throw new Error(`Variant target ${target.id} requires an atlas tile GID with bottom-left alignment: ${gid}`);
+      }
+    }
     // Image layers can appear anywhere, including groups. Other Tiled metadata is retained.
     const rewriteLayers = (layers: unknown[]): unknown[] => layers.map(value => {
       const layer = jsonObject.parse(value);

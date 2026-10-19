@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, type AuthContext } from '@colyseus/core';
-import { SpaceState, Player, joinSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, contains,
+import { SpaceState, Player, joinSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
   TICK_MS, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
   type JoinOptions, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
@@ -35,7 +35,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
       if (input.x || input.y) {
-        cancelAction({ state: this.state }, player, client.sessionId);
+        cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
         player.facing = movementFacing(input, facingSchema.parse(player.facing));
       }
       if (!input.x && !input.y) player.motion = 'idle';
@@ -94,7 +94,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
 
   private checkInteraction(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
     const player = this.state.players.get(client.sessionId);
-    const current = player && worlds.get(player.mapId)?.world.zones.find(zone => contains(zone, player.x, player.y));
+    const map = player && worlds.get(player.mapId);
+    const current = player && map && currentZone(map.world, player);
     if (!player?.connected || current?.kind !== kind || current.resourceId !== resourceId) return '请先走进对应功能区';
     return this.throttleInteraction(client);
   }
@@ -123,11 +124,12 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
         const input = this.movementInputs.get(id);
         if (!input || !player.connected || Date.now() - input.receivedAt > 250) { player.motion = 'idle'; continue; }
         const world = worlds.get(player.mapId)!.world;
-        const next = stepMovement(world, player, input, delta);
+        const next = stepMovement(world, player, input, delta, point => this.interactions.access.canMove(player.mapId, id, player, point));
         player.motion = next.x !== player.x || next.y !== player.y ? 'walk' : 'idle';
         player.x = next.x;
         player.y = next.y;
-        player.zoneId = world.zones.find(zone => contains(zone, next.x, next.y))?.id ?? '';
+        player.zoneId = currentZone(world, player)?.id ?? '';
+        this.interactions.access.syncPlayer(id, player);
       }
     }, TICK_MS);
   }
@@ -148,16 +150,25 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     const { name, avatar, appearance, role } = ensureProfile(auth.userId);
     const map = worlds.get(worldRegistry.initialMap)!;
     const world = map.world;
-    const spawn = world.spawns[map.defaultSpawn];
+    const preferred = world.spawns[map.defaultSpawn];
+    const spawn = [preferred, ...Object.values(world.spawns)].find(point => this.interactions.access.canEnter(map.id, client.sessionId, point));
+    if (!spawn) throw new Error('All map spawns are inside locked private areas');
     const player = new Player({ name, avatar, appearance: JSON.stringify(appearance), role, userId: auth.userId, mapId: map.id, x: spawn.x, y: spawn.y });
-    player.zoneId = world.zones.find(zone => contains(zone, player.x, player.y))?.id ?? '';
+    player.zoneId = currentZone(world, player)?.id ?? '';
     this.state.players.set(client.sessionId, player);
+    this.interactions.access.syncPlayer(client.sessionId, player);
   }
   onDrop(client: SpaceClient, code: number) {
     this.voice.clear(client.sessionId);
     this.setTyping(client.sessionId, false);
     const player = this.state.players.get(client.sessionId);
-    if (player) { player.connected = false; player.motion = 'idle'; }
+    if (player) {
+      player.connected = false; player.motion = 'idle';
+      // Legacy action seats retain their reconnect behavior; selectors release immediately.
+      if (worlds.get(player.mapId)?.world.selectors.some(selector => selector.id === player.actionTargetId))
+        cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
+    }
+    this.interactions.access.release(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     // Match SDK retryable close codes. Validation failures must release their seats.
     if ([CloseCode.NO_STATUS_RECEIVED, CloseCode.ABNORMAL_CLOSURE,
@@ -169,12 +180,25 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient }> 
     const identity = this.identities.get(client.sessionId);
     if (!identity || !await activeProfile(identity)) { client.leave(4003, 'Identity expired'); return; }
     const player = this.state.players.get(client.sessionId);
-    if (player) player.connected = true;
+    if (player) {
+      if (!this.interactions.access.canEnter(player.mapId, client.sessionId, player)) {
+        const map = worlds.get(player.mapId)!;
+        const spawn = [map.world.spawns[map.defaultSpawn], ...Object.values(map.world.spawns)]
+          .find(point => this.interactions.access.canEnter(player.mapId, client.sessionId, point));
+        if (!spawn) { client.leave(4003, 'No accessible spawn'); return; }
+        cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
+        player.x = spawn.x; player.y = spawn.y;
+      }
+      player.connected = true;
+      player.zoneId = currentZone(worlds.get(player.mapId)!.world, player)?.id ?? '';
+      this.interactions.access.syncPlayer(client.sessionId, player);
+    }
   }
   onLeave(client: SpaceClient) {
+    this.interactions.access.release(client.sessionId);
     this.voice.clear(client.sessionId);
     const player = this.state.players.get(client.sessionId);
-    if (player) cancelAction({ state: this.state }, player, client.sessionId);
+    if (player) cancelAction({ state: this.state, maps: worlds }, player, client.sessionId);
     this.identities.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
