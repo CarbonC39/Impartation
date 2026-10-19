@@ -36,7 +36,8 @@ export const TYPING_TIMEOUT_MS = 8000;
 export type MovementInput = z.infer<typeof inputSchema>;
 export type JoinOptions = z.infer<typeof joinSchema>;
 /** `sessionId` is set by the server from the sending connection. */
-export type ChatMessage = { id: string; sessionId: string; name: string; text: string; sentAt: number };
+/** `privateAreaId` is the sender's private area ('' in public); only players in the same audience receive it. */
+export type ChatMessage = { id: string; sessionId: string; name: string; text: string; sentAt: number; privateAreaId: string };
 
 const resourceIdSchema = z.string().trim().min(1).max(128);
 export const boardPostSchema = z.object({ resourceId: resourceIdSchema, text: chatSchema.shape.text });

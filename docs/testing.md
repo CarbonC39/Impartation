@@ -33,7 +33,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段；语音信令、ICE 配置和距离资格 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长；动作点朝向/偏移、同格动作匹配、非法动作锚点和方向输入朝向 | [world.test.ts](../apps/backend/test/world.test.ts) |
 | 显式交互制作 | 选择器单/多变体、数字对象引用、分组偏移、未知属性保留和非法配置拒绝 | [interaction-authoring.test.ts](../apps/backend/test/interaction-authoring.test.ts) |
-| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；私密成员平等权限、重入、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
+| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；私密成员平等权限、重入、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送；私密区域聊天与语音隔离 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
 | 角色帧选择 | 角色图集尺寸与方向帧索引有效性、走路帧选择、idle/动作姿态回退 | [character.test.ts](../apps/backend/test/character.test.ts) |
 | WebTool 配置 | 跨地图资源一致性、embed/external mode、手动外链与同源选项、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
 | 交互架构 | 通用前后端分发、handler 清理、消息冲突、展示策略与 shared 协议一致性 | [architecture.test.ts](../apps/backend/test/architecture.test.ts) |
@@ -61,6 +61,6 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 ## 未覆盖项
 
-私密区域目前不提供聊天、语音或 Schema 可见性隔离。区域形状只支持不重叠矩形，复杂门禁拓扑与永久 ACL 未实现。
+私密区域隔离聊天和语音，但不隔离 Schema 可见性（位置、正在输入标识）；浏览器端的私密消息标记和进出提示未自动化验证。区域形状只支持不重叠矩形，复杂门禁拓扑与永久 ACL 未实现。
 
 真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。测试验证 iframe 容器和 external 打开行为，不验证第三方站点允许嵌入或真实服务功能。

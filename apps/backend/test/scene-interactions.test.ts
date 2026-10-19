@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import { DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, type SpaceProtocol } from '@virtual-workspace/shared';
@@ -260,6 +261,37 @@ test('private membership is peer controlled, survives exit, blocks physical admi
   const now = Date.now(); access.tick(now); assert.equal(area.resetAt, now + PRIVATE_AREA_IDLE_MS);
   access.tick(now + PRIVATE_AREA_IDLE_MS);
   assert.equal(area.members.size, 0); assert.equal(area.locked, false); assert.equal(area.resetAt, 0);
+});
+
+test('private areas isolate chat and voice from the public room', async () => {
+  const alice = await connect('Alice'); const bob = await connect('Bob'); const carol = await connect('Carol');
+  const clients = [alice, bob, carol];
+  const room = roomFor(alice); const access = room['interactions'].access;
+  const [a, b, c] = clients.map(client => room.state.players.get(client.sessionId)!);
+  a.x = 176; a.y = 160; b.x = 200; b.y = 200; c.x = 130; c.y = 160; access.tick();
+  assert.deepEqual([a.privateAreaId, b.privateAreaId, c.privateAreaId], ['30', '30', '']);
+  const inbox = new Map(clients.map(client => [client.sessionId, [] as string[]]));
+  const ended: string[] = [];
+  for (const client of clients) {
+    client.onMessage('chat', message => inbox.get(client.sessionId)!.push(`${message.privateAreaId}:${message.text}`));
+    client.onMessage('voiceOffer', () => {}); client.onMessage('voiceEnd', () => ended.push(client.sessionId));
+  }
+  alice.send('chat', { text: 'inside' }); carol.send('chat', { text: 'outside' });
+  await until(() => clients.every(client => inbox.get(client.sessionId)!.length >= 1)); await delay(100);
+  assert.deepEqual(inbox.get(alice.sessionId), ['30:inside']);
+  assert.deepEqual(inbox.get(bob.sessionId), ['30:inside']);
+  assert.deepEqual(inbox.get(carol.sessionId), [':outside']);
+
+  for (const client of clients) assert.equal(await client.request('voiceEnabled', { enabled: true }), true);
+  const offer = (one: Room<SpaceProtocol>, two: Room<SpaceProtocol>) => {
+    const [from, to] = [one, two].sort((x, y) => x.sessionId < y.sessionId ? -1 : 1);
+    return from!.request('voiceOffer', { peerId: to!.sessionId, connectionId: randomUUID(), sdp: 'offer' });
+  };
+  assert.equal(await offer(alice, carol), false, 'voice does not cross the private-area border');
+  assert.equal(await offer(alice, bob), true);
+  b.x = 130; b.y = 200; access.tick(); room['voice'].tick();
+  await until(() => ended.includes(alice.sessionId) && ended.includes(bob.sessionId));
+  assert.equal(await offer(bob, carol), true, 'leaving the area rejoins the public audience');
 });
 
 test('Portal rejects locked destination and map change/drop prune temporary membership', async () => {

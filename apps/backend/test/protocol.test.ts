@@ -22,14 +22,17 @@ test('voice payloads bound signaling size and reject malformed targets and ICE c
     disconnectRadius: 160, maxPeers: 6, scanIntervalMs: 1000 }).success, false);
 });
 
-test('voice eligibility requires opt-in, connection, same map and authoritative distance', () => {
-  const a = { x: 0, y: 0, mapId: 'a', connected: true, voiceEnabled: true };
+test('voice eligibility requires opt-in, connection, same map, same private area and authoritative distance', () => {
+  const a = { x: 0, y: 0, mapId: 'a', privateAreaId: '', connected: true, voiceEnabled: true };
   const b = { ...a, x: 159 };
   assert.equal(canHear(a, b, 160), true);
   assert.equal(canHear(a, { ...b, x: 161 }, 160), false);
   assert.equal(canHear(a, { ...b, mapId: 'b' }, 160), false);
   assert.equal(canHear(a, { ...b, connected: false }, 160), false);
   assert.equal(canHear(a, { ...b, voiceEnabled: false }, 160), false);
+  assert.equal(canHear(a, { ...b, privateAreaId: '30' }, 160), false);
+  assert.equal(canHear({ ...a, privateAreaId: '30' }, { ...b, privateAreaId: '30' }, 160), true);
+  assert.equal(canHear({ ...a, privateAreaId: '30' }, { ...b, privateAreaId: '31' }, 160), false);
 });
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {

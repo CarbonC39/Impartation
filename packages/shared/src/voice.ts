@@ -37,8 +37,17 @@ export const voiceConfigSchema = z.object({
   'disconnectRadius must be greater than connectRadius');
 export type VoiceConfig = z.infer<typeof voiceConfigSchema>;
 
-export type VoicePosition = { x: number; y: number; mapId: string; connected: boolean; voiceEnabled: boolean };
+export type AudienceContext = { mapId: string; privateAreaId: string };
+/**
+ * Private areas are closed rooms: chat and voice pass only between players inside the same area,
+ * or between players who are both outside every area. Area IDs are unique per map only.
+ */
+export function sameAudience(a: AudienceContext, b: AudienceContext): boolean {
+  return a.privateAreaId === b.privateAreaId && (!a.privateAreaId || a.mapId === b.mapId);
+}
+
+export type VoicePosition = AudienceContext & { x: number; y: number; connected: boolean; voiceEnabled: boolean };
 export function canHear(a: VoicePosition | undefined, b: VoicePosition | undefined, radius: number): boolean {
   return Boolean(a?.connected && b?.connected && a.voiceEnabled && b.voiceEnabled && a.mapId === b.mapId &&
-    Math.hypot(a.x - b.x, a.y - b.y) <= radius);
+    sameAudience(a, b) && Math.hypot(a.x - b.x, a.y - b.y) <= radius);
 }
