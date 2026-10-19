@@ -3,7 +3,7 @@ import type { Room } from '@colyseus/sdk';
 import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
 import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
-import { preloadObjectVisuals, WorldObjectVisuals } from './worldObjectVisuals';
+import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
 import { cameraZoom } from './cameraZoom';
 
@@ -56,7 +56,6 @@ export class SpaceScene extends Phaser.Scene {
     for (const id of layerAssetIds) {
       this.load.spritesheet(id, layerAssets[id], { frameWidth: avatar.frameWidth, frameHeight: avatar.frameHeight });
     }
-    preloadObjectVisuals(this);
     preloadStatusTextures(this);
   }
   create() {
@@ -102,7 +101,7 @@ export class SpaceScene extends Phaser.Scene {
       this.zoneTexts.push(this.add.text(zone.x + 8, zone.y + 8, zoneLabels[zone.kind] ?? zone.kind,
         { fontSize: '14px', color: '#eeefd9' }).setScale(1 / zoom));
     }
-    this.objectVisuals = new WorldObjectVisuals(this, this.mapEntry.world);
+    this.objectVisuals = new WorldObjectVisuals(this, this.mapEntry.world, tiles);
     this.cameras.main.setBounds(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT,E', false) as Record<string, Phaser.Input.Keyboard.Key>;
     const canvas = this.game.canvas;
@@ -203,7 +202,7 @@ export class SpaceScene extends Phaser.Scene {
       (['INPUT', 'TEXTAREA', 'SELECT'].includes(focused.tagName) || focused.isContentEditable) &&
       !(focused instanceof HTMLInputElement && focused.type === 'checkbox');
     const touchInput = document.hidden ? { x: 0, y: 0 } : this.hooks.virtualInput();
-    const keyboard = !document.hidden && document.hasFocus() && !typing;
+    const keyboard = document.body.classList.contains('map-open') && !document.hidden && document.hasFocus() && !typing;
     const active = keyboard || (!document.hidden && (touchInput.x !== 0 || touchInput.y !== 0));
     if (keyboard && activatePressed) this.hooks.activate();
     const key = (letter: string, arrow: string) => keyboard && (this.keys[letter]!.isDown || this.keys[arrow]!.isDown);

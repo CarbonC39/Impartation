@@ -83,7 +83,7 @@ test('Portal uses authenticated server position and named destination, preserves
   assert.deepEqual([player.x, player.y], [32, 32]);
   const identity = player.userId;
   assert.equal((await alice.request('portal', { zoneId: 'door' })).ok, false);
-  player.x = 88; player.y = 40;
+  player.x = 88; player.y = 40; player.facing = 'left';
   assert.equal((await alice.request('portal', { zoneId: 'return' })).ok, false);
   // The schema strips forged destination/session fields; only the server map controls them.
   const forged = { zoneId: 'door', targetMap: 'home', targetSpawn: 'missing', sessionId: bob.sessionId };
@@ -106,7 +106,7 @@ test('object ids are scoped by map and a Portal releases the old seat and action
   const alice = await connect('SeatedTraveler');
   const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
   const player = authoritative.state.players.get(alice.sessionId)!;
-  player.x = 88; player.y = 40;
+  player.x = 88; player.y = 40; player.facing = 'left';
   assert.equal((await alice.request('activateAction', { action: 'sit', animated: true })).ok, true);
   const homeSeat = authoritative.state.worldObjects.get('home')!.objects.get('same-seat')!;
   const studioSeat = authoritative.state.worldObjects.get('studio')!.objects.get('same-seat')!;

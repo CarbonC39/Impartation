@@ -6,7 +6,9 @@ A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a charac
 
 Tiled JSON is the source of map geometry and interaction semantics. The server registry can list multiple finite orthogonal maps with 16×16 tiles. Portals move players between maps and named spawn points within the same room.
 
-External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows a small hint above the zone, and clicking it launches a new tab (`external`) or opens a sandboxed iframe in a centered, draggable TV-style window (`embed`). External services keep their own accounts and permissions. Formal sign-up and login, account recovery, and private rooms are not implemented yet.
+Map authors choose explicit `action`, `variantSelector`, `privateArea`, `wardrobe`, `web`, or `Portal` types. Selectors exclusively claim an action point and switch an authored target tile; temporary private areas support peer membership, locking and server-enforced physical admission, resetting after 60 seconds without members inside. Mirrors can open the existing Wardrobe. These types are opt-in Tiled data; see [authoring examples](docs/tiled.md). Private areas currently share the room’s chat, voice and replicated visibility.
+
+External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows a small hint above the zone, and clicking it launches a new tab (`external`) or opens a sandboxed iframe in a centered, draggable TV-style window (`embed`). External services keep their own accounts and permissions. Formal sign-up/login and account recovery are deferred.
 
 ## Run locally
 

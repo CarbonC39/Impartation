@@ -191,21 +191,35 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
       assert.equal(player.facing, 'down');
     });
   }
-  test('adjacent tiles perform sit in place without borrowing a nearby anchor', async () => {
+  test('footprints outside anchor tiles perform sit in place', async () => {
     const alice = await join('AdjacentAction');
     const player = harness.getRoomById<SpaceRoom>(alice.roomId).state.players.get(alice.sessionId)!;
-    player.x = 399.99; player.y = 392; player.facing = 'left';
+    player.x = 394; player.y = 392; player.facing = 'left';
     assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
     assert.deepEqual([player.x, player.y, player.facing, player.actionTargetId, player.actionAnimated],
-      [399.99, 392, 'left', '', false]);
+      [394, 392, 'left', '', false]);
   });
-  test('matching sit anchor overrides facing, ignores forged context and retains occupancy', async () => {
+  test('wrong-facing anchors allow free actions without alignment or occupancy', async () => {
+    const alice = await join('WrongFacing');
+    const room = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = room.state.players.get(alice.sessionId)!;
+    const object = room.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
+    for (const facing of ['down', 'left', 'right']) {
+      player.x = 399.99; player.y = 392; player.facing = facing;
+      const result = await alice.request('activateAction', { action: 'sit', facing: 'up' });
+      assert.equal(result.ok, true); assert.match(result.message, /已原地坐下.*面向上方/);
+      assert.deepEqual([player.x, player.y, player.facing, player.action, player.actionTargetId], [399.99, 392, facing, 'sit', '']);
+      assert.equal(object.occupiedBy, ''); assert.equal(object.variant, 'empty');
+      await delay(510);
+    }
+  });
+  test('matching sit anchor requires facing, ignores forged context and retains occupancy', async () => {
     const alice = await join('SeatedAlice');
     const bob = await join('SeatedBob');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
     const other = authoritative.state.players.get(bob.sessionId)!;
-    player.x = 402; player.y = 386;
+    player.x = 399.99; player.y = 386; player.facing = 'up';
     const forged = { action: 'sit', animated: false, objectId: 'lobby-seat-2', sessionId: bob.sessionId,
       facing: 'down', x: 1, y: 1, offsetX: 900, linkedObjectId: 'forged-desk', variant: 'forged' };
     assert.equal((await alice.request('activateAction', forged)).ok, true);
@@ -221,7 +235,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     objects.get('desk-1')!.variant = 'active';
     await until(() => bob.state.worldObjects.get('lobby')?.objects.get('desk-1')?.variant === 'active');
     await until(() => bob.state.players.get(alice.sessionId)?.action === 'sit');
-    other.x = 408; other.y = 392;
+    other.x = 408; other.y = 392; other.facing = 'up';
     assert.equal((await bob.request('activateAction', { action: 'sit', animated: false })).ok, false);
     alice.send('input', { x: 0, y: 0 });
     await delay(150);
@@ -264,7 +278,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const alice = await join('SeatedReconnect');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
-    player.x = 408; player.y = 392;
+    player.x = 408; player.y = 392; player.facing = 'up';
     assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
     const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
     const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
@@ -283,7 +297,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const alice = await join('RevokedSeat', 'mint', cookie);
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
-    player.x = 408; player.y = 392;
+    player.x = 408; player.y = 392; player.facing = 'up';
     const left = new Promise<number>(resolve => alice.onLeave.once(resolve));
     await fetch(endpoint + '/api/auth/sign-out', { method: 'POST', headers: { Cookie: cookie, Origin: endpoint,
       'Content-Type': 'application/json' }, body: '{}' });
@@ -696,7 +710,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const bob = await join('Bob');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
-    player.x = 408; player.y = 392;
+    player.x = 408; player.y = 392; player.facing = 'up';
     assert.equal((await alice.request('activateAction', { action: 'sit', animated: false })).ok, true);
     const object = authoritative.state.worldObjects.get('lobby')!.objects.get('lobby-seat-1')!;
     authoritative.reconnectionSeconds = 0.1;

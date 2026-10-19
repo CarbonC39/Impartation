@@ -13,11 +13,11 @@ type Payload<T> = T extends { format: infer F extends z.ZodType } ? z.input<F> :
 type Result<T> = T extends { handler: (...args: never[]) => infer R } ? Awaited<R> : T extends (...args: never[]) => infer R ? Awaited<R> : never;
 type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 const protocolMatches: { [K in keyof SpaceProtocol['messages']]: Same<Payload<SpaceProtocol['messages'][K]>, Payload<SpaceRoom['messages'][K]>> } = {
-  input: true, chat: true, typing: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
+  selectVariant: true, privateArea: true, cancelAction: true, input: true, chat: true, typing: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
   voiceEnabled: true, voiceOffer: true, voiceAnswer: true, voiceIceCandidate: true, voiceEnd: true,
 };
-const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activateAction']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
-  boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
+const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activateAction' | 'selectVariant' | 'privateArea' | 'cancelAction']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
+  selectVariant: true, privateArea: true, cancelAction: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
 };
 
 test('shared protocol agrees with the server and frontend depends only on shared contracts', () => {
@@ -50,6 +50,26 @@ test('generic interaction dispatch supports new kinds and shared handlers with d
   dispatcher.setZone({ ...zone, id: 'unhandled', kind: 'custom-c' });
   dispatcher.dispose();
   assert.deepEqual(events, ['connected:true', 'one', 'exit', 'connected:true', 'two', 'connected:false', 'exit', 'dispose']);
+});
+
+test('claimed point presentation suspends area handlers and restores the latest area', () => {
+  const events: string[] = [];
+  const handler: InteractionHandler = {
+    setZone(zone) { events.push(zone?.id ?? 'exit'); },
+    setConnected(value) { events.push(`connected:${value}`); },
+    dispose() { events.push('dispose'); },
+  };
+  const dispatcher = new InteractionDispatcher(new InteractionRegistry<InteractionHandler>().register('web', handler));
+  const zone: Zone = { id: 'one', kind: 'web', resourceId: 'tool', properties: {}, x: 0, y: 0, width: 16, height: 16 };
+  dispatcher.setZone(zone);
+  dispatcher.setZoneSuspended(true);
+  dispatcher.setZoneSuspended(true);
+  dispatcher.setZone({ ...zone, id: 'two' });
+  dispatcher.setConnected(false);
+  dispatcher.setZoneSuspended(false);
+  dispatcher.setZoneSuspended(false);
+  dispatcher.dispose();
+  assert.deepEqual(events, ['connected:true', 'one', 'exit', 'connected:false', 'connected:false', 'two', 'dispose']);
 });
 
 test('web presentation dispatch selects embed or external by resource configuration and cleans up', () => {

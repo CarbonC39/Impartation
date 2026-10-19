@@ -1,6 +1,7 @@
 {
   "initialMap": "lobby",
   "maps": [
-    { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" }
+    { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" },
+    { "id": "interaction-lab", "file": "interaction-lab.tmj", "defaultSpawn": "arrival" }
   ]
 }

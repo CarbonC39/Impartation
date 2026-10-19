@@ -39,6 +39,21 @@ const messages = element<HTMLOListElement>('messages');
 const zone = element('zone');
 let game: Phaser.Game | undefined;
 let scene: SpaceScene | undefined;
+let gameDestruction: Promise<void> = Promise.resolve();
+/** Phaser destroys on the next frame; serialize replacement against that lifecycle. */
+function destroyScene(): Promise<void> {
+  const previous = game;
+  game = undefined; scene = undefined;
+  element('zone-anchor').hidden = true;
+  if (previous) {
+    // Remove the old canvas immediately, including during leave/rejoin on the same page.
+    previous.canvas?.remove();
+    const destroyed = new Promise<void>(resolve => { previous.events.once(Phaser.Core.Events.DESTROY, resolve); });
+    previous.destroy(true);
+    gameDestruction = Promise.all([gameDestruction, destroyed]).then(() => {});
+  }
+  return gameDestruction;
+}
 mountThemePanel(element<HTMLButtonElement>('theme-toggle'), element('theme-panel'));
 const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.origin);
 let room: Room<SpaceProtocol> | undefined;
@@ -177,10 +192,19 @@ element<HTMLFormElement>('create-world-form').addEventListener('submit', event =
   chooseWorld(element<HTMLInputElement>('world-name').value.trim() || '我的小世界', true);
 });
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
-  button.addEventListener('click', () => showScreen(button.dataset.back ?? 'login-screen'));
+  button.addEventListener('click', () => {
+    const target = button.dataset.back ?? 'login-screen';
+    if (worldWardrobe && target === 'map-screen') {
+      const own = room?.state.players.get(room.sessionId);
+      if (own) wardrobe.replace(appearanceSchema.parse(JSON.parse(own.appearance)), false);
+      restoreWardrobeNavigation();
+    }
+    showScreen(target);
+  });
 });
 
 let currentAvatar: JoinOptions['avatar'] = 'mint';
+let worldWardrobe = false;
 const nameInput = element<HTMLInputElement>('name');
 const wardrobe = new Wardrobe({
   preview: element<HTMLCanvasElement>('avatar-canvas'), facingLabel: element('facing-label'), nameTag: element('avatar-name-tag'), nameInput,
@@ -191,6 +215,13 @@ const wardrobe = new Wardrobe({
   picker: element('appearance-picker'), colorTitle: element('color-title'),
   onError: message => { joinFeedback.textContent = message; },
 });
+function restoreWardrobeNavigation() {
+  worldWardrobe = false;
+  const label = document.createElement('span'); label.id = 'join-world-name'; label.textContent = selectedWorld;
+  join.replaceChildren('进入', label);
+  const back = document.querySelector<HTMLButtonElement>('#avatar-screen [data-back]')!;
+  back.dataset.back = 'login-screen'; back.textContent = '返回选世界';
+}
 function renderWelcome() {
   element('welcome-name').textContent = nameInput.value.trim() || '小访客';
   void drawAppearancePreview(element<HTMLCanvasElement>('welcome-canvas'), wardrobe.value).catch(() => {});
@@ -268,6 +299,7 @@ function setConnected(value: boolean) {
   actions?.refresh();
 }
 function cleanup() {
+  if (worldWardrobe) { restoreWardrobeNavigation(); showScreen('login-screen'); }
   touchPad.clear();
   layoutEditor.close();
   resetTyping();
@@ -280,9 +312,7 @@ function cleanup() {
   actions?.dispose();
   actions = undefined;
   element('object-feedback').textContent = '';
-  game?.destroy(true);
-  game = undefined;
-  scene = undefined;
+  void destroyScene();
   room = undefined;
   setUnread(0);
   setConnected(false);
@@ -302,6 +332,16 @@ element<HTMLFormElement>('join-form').addEventListener('submit', event => {
   event.preventDefault();
   if (join.disabled) return;
   joinFeedback.textContent = '';
+  if (worldWardrobe && room) {
+    join.disabled = true;
+    const wardrobeRoom = room;
+    void persistProfile().then(() => {
+      if (room !== wardrobeRoom || !worldWardrobe) return;
+      restoreWardrobeNavigation();
+      showScreen('map-screen');
+    }).catch(error => { joinFeedback.textContent = `保存失败：${String(error)}`; }).finally(() => { join.disabled = false; });
+    return;
+  }
   prejoin.open(selectedWorld);
 });
 async function enterWorld(plan: VoicePlan) {
@@ -323,7 +363,18 @@ async function enterWorld(plan: VoicePlan) {
     room.reconnection.minUptime = 0;
     if (!room.state?.players) await withTimeout(new Promise<void>(resolve => room!.onStateChange.once(() => resolve())),
       10_000, '空间已连接，但没有收到地图角色数据');
-    interactions = createInteractions(room);
+    const nativeRoom = room;
+    interactions = createInteractions(room, undefined, {
+      world: () => worldRegistry?.maps.find(map => map.id === nativeRoom.state.players.get(nativeRoom.sessionId)?.mapId)?.world,
+      openWardrobe: () => {
+        nativeRoom.send('input', { x: 0, y: 0 }); touchPad.clear();
+        worldWardrobe = true; join.disabled = false;
+        join.textContent = '保存并返回地图';
+        const back = document.querySelector<HTMLButtonElement>('#avatar-screen [data-back]')!;
+        back.dataset.back = 'map-screen'; back.textContent = '返回地图';
+        showScreen('avatar-screen');
+      },
+    });
     voice = new ProximityVoice(room, voiceMic, voiceDisconnect, element('voice-status'));
     voice.setDeafened(!soundOn);
     voice.onDeviceChange = refreshVoiceDevices;
@@ -389,16 +440,19 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
     const renderMap = renderMapSchema.parse(await response.json());
     cameraZoomSelect.options[0]!.text = `自动（${automaticCameraZoom(renderMap.tilewidth, renderMap.tileheight)}x）`;
     if (generation !== renderGeneration || room !== activeRoom) return;
-    game?.destroy(true);
+    await destroyScene();
+    if (generation !== renderGeneration || room !== activeRoom) return;
     const zoneAnchor = element('zone-anchor');
     scene = new SpaceScene(activeRoom, entry, renderMap, {
       zoneChanged: id => {
+        if (generation !== renderGeneration || room !== activeRoom) return;
         const current = entry.world.zones.find(item => item.id === id);
         const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
         if (zone.textContent !== text) zone.textContent = text;
         interactions?.setZone(current);
       },
       zoneAnchor: point => {
+        if (generation !== renderGeneration || room !== activeRoom) return;
         zoneAnchor.hidden = !point;
         if (point) zoneAnchor.style.transform = `translate(${point.x}px, ${point.y}px)`;
       },

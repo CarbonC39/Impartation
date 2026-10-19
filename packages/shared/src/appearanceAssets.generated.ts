@@ -24,6 +24,7 @@ export const APPEARANCE_ASSETS = {
     "none",
     "bunny",
     "hoodie",
+    "jacket",
     "priest",
     "school_uniform",
     "shirt",
@@ -46,6 +47,7 @@ export const APPEARANCE_ASSETS = {
     "none",
     "accessories",
     "beanie",
+    "beret",
     "glass",
     "glasses"
   ]
@@ -56,7 +58,7 @@ export const APPEARANCE_ASSET_PATHS = {
   "hair1": "/characters/hair/hair1.png",
   "hair2": "/characters/hair/hair2.png",
   "hair3": "/characters/hair/hair3.png",
-  "hair4": "/characters/hair/hair4.PNG",
+  "hair4": "/characters/hair/hair4.png",
   "hair5": "/characters/hair/hair5.png",
   "hair6": "/characters/hair/hair6.png",
   "hair7": "/characters/hair/hair7.png",
@@ -66,10 +68,11 @@ export const APPEARANCE_ASSET_PATHS = {
   "hair11": "/characters/hair/hair11.PNG",
   "bunny": "/characters/top/bunny.png",
   "hoodie": "/characters/top/hoodie.png",
+  "jacket": "/characters/top/jacket.png",
   "priest": "/characters/top/priest.PNG",
   "school_uniform": "/characters/top/school_uniform.png",
   "shirt": "/characters/top/shirt.png",
-  "suit": "/characters/top/suit.PNG",
+  "suit": "/characters/top/suit.png",
   "sweater": "/characters/top/sweater.PNG",
   "t-shirt": "/characters/top/t-shirt.png",
   "pants": "/characters/bottom/pants.png",
@@ -79,6 +82,7 @@ export const APPEARANCE_ASSET_PATHS = {
   "shortshoe": "/characters/shoes/shortshoe.png",
   "accessories": "/characters/accessories/accessories.png",
   "beanie": "/characters/accessories/beanie.PNG",
+  "beret": "/characters/accessories/beret.png",
   "glass": "/characters/accessories/glass.png",
   "glasses": "/characters/accessories/glasses.PNG"
 } as const;

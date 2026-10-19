@@ -2,15 +2,19 @@
 
 地图中的外置工具区域统一使用交互类型 `web`。区域的 `resourceId` 在 `EXTERNAL_TOOLS` 中查找页面配置。进入区域只在区域上方显示小提示；用户点击提示后，展示模式才决定打开新标签页，或在居中、可拖动的电视框窗口中挂载 iframe。
 
+项目原生交互负责地图位置、距离、角色动作、地图世界状态和项目内访问控制；完整业务域由外置服务负责，包括协作文档、面向绘师的共同作画和同步媒体。WBO、Drawpile Web 浏览器入口、SyncTV 和 Etherpad 是预期服务示例，不表示项目已完成这些服务的端到端验收。`external` 默认以新标签页打开，是面向不同浏览器和部署环境的通用访问路径；`embed` 可按需启用，但可用性受服务 CSP、认证、浏览器策略和部署设置影响。Portal 仍由服务端负责转换，留言板和番茄钟保持内置。地图角色动作、`variantSelector`、`privateArea` 和原生衣柜界面属于项目地图交互范围，不承接外置服务的业务状态。
+
 ## 外置入口配置
 
-宿主机部署服务并确认浏览器可访问后，在根目录 `.env` 配置 `EXTERNAL_TOOLS`。未指定展示模式时默认使用 `external`：
+宿主机部署服务并确认目标用户的浏览器可访问后，在根目录 `.env` 配置 `EXTERNAL_TOOLS`。未指定展示模式时默认使用 `external`：
 
 ```dotenv
 EXTERNAL_TOOLS='{"shared-canvas":{"url":"https://board.example.com/boards/workspace"}}'
 ```
 
 资源键对应地图 `resourceId`。配置项为 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`：`url` 必填；`mode` 可为 `embed` 或 `external`，省略时默认为 `external`；两个布尔选项默认均为 `false`。`manualExternalOpen: true` 仅在点击打开 embed 后，于 iframe 旁提供一个手动外链。旧 `fallback: "external"` 仍作为该选项的兼容写法接受，但推荐改用 `manualExternalOpen`；显式的 `manualExternalOpen: false` 优先于旧字段。两者都不检测加载失败或自动切换。旧 `{ kind, url }` 配置不再使用；请移除 `kind`，对应 Tiled 区域使用统一的 `web` 类型。
+
+`external` 是无需依赖 iframe 兼容性的通用访问路径。只有在目标服务允许嵌入且认证方式适用时才配置 `embed`；请在实际部署和目标浏览器中核验 CSP、登录和交互行为。仓库现有配置/入口检查不等同于对外部服务端到端可用性的验收。
 
 例如，可信的自托管页面需要同源能力时可以配置：
 
@@ -32,12 +36,12 @@ EXTERNAL_TOOLS='{"shared-canvas":{"url":"http://localhost:5001/boards/workspace"
 
 执行 `docker compose -f compose.wbo.yml up -d` 后，确认 `http://localhost:5001/boards/workspace` 可打开，再重启后端。此配置只适用于同一台电脑上的本地开发；Docker 端口绑定到 `127.0.0.1`。手机或其他电脑不能访问主机的 `localhost`；正式部署需把 WBO 放到有 HTTPS 的主机，通过反向代理公开，再将 URL 改为该域名。未配置 WBO 的 JWT 认证时，知道白板链接的人都可能访问白板，因此不要把本机调试地址直接暴露到公网。
 
-现有示例资源可在自定义地图中复用。预期接入服务如下；名称只说明用途，前端不包含服务适配代码，具体页面由 URL 决定：
+现有示例资源可在自定义地图中复用。下列服务是预期接入示例；名称只说明用途，前端不包含服务适配代码，具体页面由 URL 决定。它们的外部协作能力及浏览器可用性需由部署者按目标环境验收：
 
 | resourceId | 预期服务 | 用途 |
 | --- | --- | --- |
 | `shared-canvas` | WBO | 白板 |
-| `shared-drawing` | Drawpile 的浏览器入口 | 面向绘师的共同作画 |
+| `shared-drawing` | Drawpile Web 浏览器入口 | 面向绘师的共同作画 |
 | `lounge-screen` | SyncTV | YouTube/Bilibili 同步观看 |
 | `shared-document` | Etherpad | 协作文档 |
 

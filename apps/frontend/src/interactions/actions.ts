@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { activateActionSchema, CHARACTER_ACTIONS, CHARACTER_ACTION_NAMES, isCharacterAction, standsOnAction,
+import { activateActionSchema, CHARACTER_ACTIONS, CHARACTER_ACTION_NAMES, isCharacterAction, findActionAnchor, actionFacingMatches,
   type ActivateActionInput, type CharacterActionName, type InteractionResult, type SpaceProtocol, type WorldMap } from '@virtual-workspace/shared';
 import { element } from './panel';
 
@@ -44,10 +44,11 @@ export class CharacterActions {
     this.refresh();
   }
 
-  /** E prefers the action of the anchor under the character's feet, then the last chosen action. */
+  /** E uses the nearest anchor whose tile overlaps the ground footprint. */
   private keyAction(): CharacterActionName {
     const player = this.room.state?.players.get(this.room.sessionId);
-    const anchor = player && this.world()?.actions.find(object => isCharacterAction(object.action) && standsOnAction(object, player));
+    const world = this.world();
+    const anchor = player && world && findActionAnchor(world, player);
     return anchor && isCharacterAction(anchor.action) ? anchor.action : this.selected;
   }
 
@@ -59,12 +60,17 @@ export class CharacterActions {
     const player = this.room.state?.players.get(this.room.sessionId);
     const connected = Boolean(player?.connected && this.room.connection.isOpen);
     const keyAction = this.keyAction();
+    const world = this.world();
     for (const [action, button] of this.buttons) {
       const definition = CHARACTER_ACTIONS[action];
       const active = player?.action === action;
       const same = active && player.actionAnimated === this.animatedFor(action);
       button.disabled = this.disposed || this.pending || !connected || same;
+      const anchor = player && world && findActionAnchor(world, player, action);
+      const labels = { up: '上', down: '下', left: '左', right: '右' } as const;
+      const required = anchor?.facing && player && !actionFacingMatches(anchor, player.facing) ? `（朝${labels[anchor.facing]}可对齐）` : '';
       button.textContent = active ? definition.activeLabel : definition.label;
+      button.title = anchor ? `目标：${'name' in anchor ? anchor.name : anchor.id}${required}` : definition.label;
       button.setAttribute('aria-pressed', String(active));
       if (action === keyAction) button.dataset.key = 'E';
       else delete button.dataset.key;

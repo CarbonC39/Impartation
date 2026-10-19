@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { createTestMap } from '../../../packages/shared/test-fixtures/world.js';
 import { parseWorldMap, stepMovement, canStand, contains, PLAYER_FOOTPRINT, PLAYER_SPEED, TICK_MS,
   InteractionRegistry, validateMapRegistry, type InteractionDefinition } from '@virtual-workspace/shared';
-import { standsOnAction, movementFacing } from '@virtual-workspace/shared';
+import { standsOnAction, findActionAnchor, actionFacingMatches, canAlignAction, movementFacing } from '@virtual-workspace/shared';
 
 const raw: unknown = createTestMap();
 const authoredRaw: unknown = JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8'));
@@ -113,11 +113,11 @@ test('action anchors normalize to action objects with optional facing, offsets a
   const action = world.actions[0];
   assert.deepEqual(action, { id: 'lobby-seat-1', kind: 'action', action: 'sit', x: 408, y: 392,
     facing: 'up', offsetX: 0, offsetY: 0, linkedObjectId: 'desk-1' });
-  assert.equal(standsOnAction(action, { x: 400, y: 384 }), true);
+  assert.equal(standsOnAction(action, { x: 400, y: 384.01 }), true);
   assert.equal(standsOnAction(action, { x: 415.99, y: 399.99 }), true);
-  assert.equal(standsOnAction(action, { x: 399.99, y: 392 }), false);
-  assert.equal(standsOnAction(action, { x: 416, y: 392 }), false);
-  assert.equal(standsOnAction(action, { x: 408, y: 400 }), false);
+  assert.equal(standsOnAction(action, { x: 399.99, y: 392 }), true);
+  assert.equal(standsOnAction(action, { x: 416, y: 392 }), true);
+  assert.equal(standsOnAction(action, { x: 408, y: 400 }), true);
 
   const noFacing = parseWorldMap(mutate((_map, layers) => {
     const list = objects(layers[3]);
@@ -139,6 +139,43 @@ test('action anchors normalize to action objects with optional facing, offsets a
     map.layers = [layers[0], { type: 'group', offsetx: 16, offsety: 16, layers: layers.slice(1) }];
   }));
   assert.deepEqual([offset.actions[0].x, offset.actions[0].y], [424, 408]);
+});
+
+test('anchor tiles require ground-footprint area overlap, including across tile boundaries', () => {
+  const anchor = world.actions[0]; // tile [400,416) × [384,400)
+  for (const position of [{ x: 394, y: 392 }, { x: 422, y: 392 }, { x: 408, y: 384 }, { x: 408, y: 408 }]) {
+    assert.equal(standsOnAction(anchor, position), false, 'edge-only contact does not overlap');
+  }
+  for (const position of [{ x: 394.01, y: 392 }, { x: 421.99, y: 392 }, { x: 408, y: 384.01 }, { x: 408, y: 407.99 }]) {
+    assert.equal(standsOnAction(anchor, position), true);
+  }
+});
+
+test('nearest overlapping anchor is deterministic and is checked before facing', () => {
+  const first = world.actions[0];
+  const second = { ...first, id: 'zz-adjacent', x: 424, facing: 'down' as const };
+  const map = { ...world, actions: [first, second] };
+  assert.equal(findActionAnchor(map, { x: 415, y: 392 }, 'sit')?.id, first.id);
+  assert.equal(findActionAnchor(map, { x: 417, y: 392 }, 'sit')?.id, second.id);
+  assert.equal(findActionAnchor(map, { x: 416, y: 392 }, 'sit')?.id, first.id);
+  assert.equal(findActionAnchor({ ...map, actions: [second, first] }, { x: 416, y: 392 }, 'sit')?.id, first.id);
+  assert.equal(findActionAnchor(map, { x: 416, y: 392 }, 'wave'), undefined);
+  assert.equal(actionFacingMatches(first, 'up'), true);
+  for (const facing of ['down', 'left', 'right']) assert.equal(actionFacingMatches(first, facing), false);
+  assert.equal(actionFacingMatches({ ...first, facing: undefined }, 'left'), true);
+  const offset = { ...first, offsetX: 48 };
+  assert.equal(findActionAnchor({ ...world, actions: [offset] }, {
+    x: 456, y: 392, action: 'sit', actionTargetId: first.id,
+  }, 'sit')?.id, first.id, 'animation updates retain an already active offset anchor');
+});
+
+test('action alignment cannot cross thin walls or forbidden areas between clear endpoints', () => {
+  const clear = { ...world, collisions: [] };
+  const from = { x: 64, y: 64 }; const to = { x: 96, y: 64 };
+  assert.equal(canAlignAction(clear, from, to), true);
+  assert.equal(canAlignAction({ ...clear, collisions: [{ x: 80, y: 48, width: 1, height: 32 }] }, from, to), false);
+  assert.equal(canAlignAction(clear, from, to, position => position.x < 76 || position.x > 84), false);
+  assert.equal(canAlignAction(clear, from, from, () => false), false);
 });
 
 test('movement facing retains zero direction and resolves cardinal and diagonal input', () => {
