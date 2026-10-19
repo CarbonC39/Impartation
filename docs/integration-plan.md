@@ -47,7 +47,7 @@ EXTERNAL_TOOLS='{"shared-canvas":{"url":"http://localhost:5001/boards/workspace"
 
 ## World API 与资源
 
-`GET /api/world` 公开返回初始地图 ID 和 registry 地图目录。每个地图条目包含 `id`、地图 JSON `url`、`defaultSpawn` 和服务端提取的权威 `world` 语义数据。规范化 Tiled JSON 位于地图条目的 URL；明确引用的图像资源通过其相对 API 路径提供。API 不要求 session。
+`GET /api/world` 公开返回 `{ maps, spaces }`。`spaces` 按 registry 顺序列出 Space 元数据及各自的初始地图和成员地图；Portal 只能在所选 Space 内转换地图。每个地图条目包含 `id`、地图 JSON `url`、`defaultSpawn` 和服务端提取的权威 `world` 语义数据。规范化 Tiled JSON 位于地图条目的 URL；明确引用的图像资源通过其相对 API 路径提供。API 不要求 session。
 
 `GET /api/tools` 公开返回配置的 WebTool 描述（`resourceId`、`url` 及可选展示选项）。响应不得包含凭据；客户端按当前 `web` 区域的 `resourceId` 查找配置。地图与工具地址都是公开给浏览器的配置，不应放私密邀请 token。
 

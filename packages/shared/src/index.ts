@@ -1,5 +1,6 @@
 import { schema, t, type SchemaType } from '@colyseus/schema';
 import { z } from 'zod';
+import { spaceIdSchema } from './world.js';
 
 export const ROOM_NAME = 'space';
 export const AVATARS = ['mint', 'amber', 'violet'] as const;
@@ -25,6 +26,9 @@ export const joinSchema = z.object({
   avatar: avatarSchema.default('mint'),
   appearance: appearanceSchema.default(DEFAULT_APPEARANCE),
 });
+// Profile editing and joining have distinct contracts; only joining selects a Space.
+export const spaceJoinSchema = joinSchema.extend({ spaceId: spaceIdSchema });
+export type SpaceJoinOptions = z.infer<typeof spaceJoinSchema>;
 export const inputSchema = z.object({
   x: z.number().int().min(-1).max(1),
   y: z.number().int().min(-1).max(1),
@@ -95,6 +99,7 @@ export const privateAreaOperationSchema = z.discriminatedUnion('operation', [
 ]);
 export type PrivateAreaOperationInput = z.infer<typeof privateAreaOperationSchema>;
 export const SpaceState = schema({
+  spaceId: t.string(),
   players: t.map(Player), notes: t.map(BoardNote), pomodoros: t.map(Pomodoro), serverTime: t.number(),
   worldObjects: t.map(MapObjectState), privateAreas: t.map(MapPrivateAreaState),
 }, 'SpaceState');

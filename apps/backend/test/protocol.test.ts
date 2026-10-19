@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AVATARS, DEFAULT_APPEARANCE, joinSchema, inputSchema, chatSchema, typingSchema, boardPostSchema,
+import { AVATARS, DEFAULT_APPEARANCE, joinSchema, spaceJoinSchema, inputSchema, chatSchema, typingSchema, boardPostSchema,
   boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES,
   selectVariantSchema, canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema } from '@virtual-workspace/shared';
 
@@ -166,3 +166,13 @@ for (const [name, value] of [
   ['oversized resource ID', { resourceId: 'r'.repeat(129), action: 'pause' }],
   ['null', null],
 ] as const) test(`pomodoro validation rejects ${name}`, () => assert.equal(pomodoroActionSchema.safeParse(value).success, false));
+
+
+test('Space join requires a stable spaceId while profile editing keeps its original contract', () => {
+  assert.equal(spaceJoinSchema.safeParse({ name: 'Alice' }).success, false);
+  assert.equal(spaceJoinSchema.parse({ name: 'Alice', spaceId: 'main' }).spaceId, 'main');
+  for (const spaceId of ['', ' main ', 'Main', '../other']) {
+    assert.equal(spaceJoinSchema.safeParse({ name: 'Alice', spaceId }).success, false);
+  }
+  assert.deepEqual(joinSchema.parse({ name: 'Alice', spaceId: 'main' }), joinSchema.parse({ name: 'Alice' }));
+});

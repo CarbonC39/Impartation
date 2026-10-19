@@ -20,8 +20,9 @@ export function createPortalInteraction(context: InteractionContext & {
         const error = context.check(client, 'Portal', zone.resourceId);
         if (error) return { ok: false, message: error };
         const target = portalPropertiesSchema.parse(zone.properties);
-        const destination = context.maps.get(target.targetMap)!;
-        const spawn = destination.world.spawns[target.targetSpawn];
+        const destination = context.maps.get(target.targetMap);
+        const spawn = destination?.world.spawns[target.targetSpawn];
+        if (!destination || !spawn) return { ok: false, message: '目标地图不在当前 Space 内或出生点不存在' };
         if (!context.access.canEnter(destination.id, client.sessionId, spawn)) return { ok: false, message: '目标私密区域已锁定' };
         if (destination.id !== player.mapId) context.access.release(client.sessionId, player.mapId);
         cancelAction(context, player, client.sessionId);

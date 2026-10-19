@@ -11,7 +11,7 @@ export function openDatabase(path: string) {
     database.pragma('foreign_keys = ON');
     database.pragma('busy_timeout = 5000');
     const version = database.pragma('user_version', { simple: true }) as number;
-    if (version > 4) throw new Error('Database is newer than this application');
+    if (version > 5) throw new Error('Database is newer than this application');
     if (version < 1) database.transaction(() => {
       database.exec(`CREATE TABLE profiles (
         user_id TEXT PRIMARY KEY,
@@ -41,6 +41,13 @@ export function openDatabase(path: string) {
     if (version < 4) database.transaction(() => {
       database.exec("ALTER TABLE profiles ADD COLUMN appearance_json TEXT NOT NULL DEFAULT '{}';");
       database.pragma('user_version = 4');
+    })();
+    if (version < 5) database.transaction(() => {
+      // Preserve pre-Space notes in the default Space, never copy them into every Space.
+      database.exec(`ALTER TABLE board_notes ADD COLUMN space_id TEXT NOT NULL DEFAULT 'main';
+        DROP INDEX IF EXISTS board_notes_resource;
+        CREATE INDEX board_notes_space_resource ON board_notes(space_id, resource_id, created_at);`);
+      database.pragma('user_version = 5');
     })();
     return database;
   } catch (error) {

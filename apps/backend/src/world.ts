@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
-import { mapRegistrySchema, parseWorldMap, validateMapRegistry, type WorldRegistry } from '@virtual-workspace/shared';
+import { mapRegistrySchema, parseWorldMap, validateWorldRegistry, type WorldRegistry } from '@virtual-workspace/shared';
 import { config } from './config.js';
 
 const jsonObject = z.record(z.string(), z.unknown());
@@ -15,7 +15,7 @@ export function loadWorldRegistry(path: string) {
   const input = mapRegistrySchema.parse(JSON.parse(readFileSync(path, 'utf8')));
   const renderMaps = new Map<string, Record<string, unknown>>();
   const assets = new Map<string, string>();
-  const registry: WorldRegistry = { initialMap: input.initialMap, maps: input.maps.map(entry => {
+  const registry: WorldRegistry = { spaces: input.spaces, maps: input.maps.map(entry => {
     const file = resolve(dirname(path), entry.file);
     const raw: unknown = JSON.parse(readFileSync(file, 'utf8'));
     const render = jsonObject.parse(raw);
@@ -62,7 +62,7 @@ export function loadWorldRegistry(path: string) {
     renderMaps.set(entry.id, render);
     return { id: entry.id, defaultSpawn: entry.defaultSpawn, url: `${base}/map.json`, world };
   }) };
-  return { registry: validateMapRegistry(registry), renderMaps, assets };
+  return { registry: validateWorldRegistry(registry), renderMaps, assets };
 }
 
 export const { registry: worldRegistry, renderMaps, assets: worldAssets } = loadWorldRegistry(config.MAP_REGISTRY_PATH);

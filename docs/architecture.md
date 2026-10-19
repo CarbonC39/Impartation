@@ -64,14 +64,14 @@ sequenceDiagram
     participant UI as 浏览器
     participant API as HTTP / Better Auth
     participant Room as SpaceRoom
+    UI->>API: GET /api/world
     UI->>API: GET /api/me
     opt 首次进入且没有有效身份
         UI->>API: POST /api/auth/sign-in/anonymous
         API-->>UI: session cookie
     end
     UI->>API: PATCH /api/me {name, avatar}
-    UI->>API: GET /api/world
-    UI->>Room: joinOrCreate("space", {name, avatar}) + cookie
+    UI->>Room: joinOrCreate("space", {spaceId, name, avatar}) + cookie
     Room->>Room: 校验来源、session，读取持久资料
     Room-->>UI: 初始 SpaceState
     UI->>UI: 创建交互 handlers
@@ -79,11 +79,11 @@ sequenceDiagram
     UI->>UI: 创建 Phaser 场景
 ```
 
-打开页面只尝试恢复已有资料；提交进入表单时才按需创建匿名身份并保存资料。客户端校验 `/api/world` 响应，等待房间初始状态后，用本玩家 `mapId` 选择地图；`initialMap` 是目录中的初始入口。
+打开页面只尝试恢复已有资料；提交进入表单时才按需创建匿名身份并保存资料。客户端校验 `/api/world` 响应并从按 registry 顺序显示的 Space 列表中选择一个，加入时提交其 `spaceId`；等待房间初始状态后，用本玩家 `mapId` 选择地图。所选 Space 的 `initialMap` 是初始入口。
 
 界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 在浏览器中保存 3 个命名造型。界面配色、造型槽位、柔和区锁定、昵称显隐和聊天背景都只存在 localStorage，不进入身份资料或房间状态，也不跨设备同步；服务端仍只按 `appearanceSchema` 校验六位 RGB，不强制柔和区。保存造型槽位时会同时调用 `PATCH /api/me` 保存当前造型。
 
-当前只有公共 `space` 房间类型，每房间最多 32 个连接。房间包含整个已登记地图集合；地图 ID 不是房间 ID。客户端调用 `joinOrCreate`，私密区域是在同一房间中的临时空间上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
+Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建额外实例。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 
@@ -97,9 +97,9 @@ sequenceDiagram
 | 规范化 Tiled JSON | Phaser | 保留地图渲染数据；外置 JSON tileset 展开，图片路径改写为地图资源 API URL |
 | 资源索引 | HTTP 资源路由 | 该地图显式引用的图片文件与服务端生成的 asset ID 对应关系 |
 
-registry 配置条目是 `{ id, file, defaultSpawn }`，另有顶层 `initialMap`。`file` 相对 registry 文件所在目录解析；map ID 不要求与文件名相同。公共目录条目是 `{ id, url, defaultSpawn, world }`，不暴露源文件路径。客户端使用 `url` 获取渲染数据，无需知道默认示例地图的文件名。
+registry 的 `maps` 配置条目是 `{ id, file, defaultSpawn }`；`spaces` 定义每个 Space 的初始地图和成员地图。`file` 相对 registry 文件所在目录解析；map ID 不要求与文件名相同。公共目录响应为 `{ maps, spaces }`，其中地图条目是 `{ id, url, defaultSpawn, world }`，不暴露源文件路径。客户端使用 `url` 获取渲染数据，无需知道默认示例地图的文件名。
 
-registry 校验要求 map ID 唯一、initialMap 存在、各地图 defaultSpawn 存在，并逐一解析 Portal 的目标地图和 spawn。map ID、zone ID、spawn 名称采用非空、最多 128 字符的标识约束，已知资源型交互的 resourceId 也采用该约束；未知 kind 可不提供 resourceId。zone ID 和 spawn 名称在各自地图内唯一，resourceId 可以跨地图复用。
+registry 校验要求 map ID 和 Space ID 各自唯一、每个 Space 的 initialMap 属于自身地图集合、各成员地图 defaultSpawn 存在，并逐 Space 验证 Portal 的目标地图和 spawn。map ID、zone ID、spawn 名称采用非空、最多 128 字符的标识约束，已知资源型交互的 resourceId 也采用该约束；未知 kind 可不提供 resourceId。zone ID 和 spawn 名称在各自地图内唯一，resourceId 可以跨地图复用。
 
 所有坐标和移动规则使用像素。标准 tile 为 16×16；地图宽高从 tile 数换算为像素。tile 不直接决定碰撞，服务端碰撞来自 Tiled 的语义对象层。
 
@@ -205,7 +205,7 @@ wardrobe 是原生入口，打开已有 Wardrobe 实例及其外观编辑 UI。�
 4. [Portal handler](../apps/backend/src/interactions/portal/handler.ts) 从服务端 Tiled 属性读取目标地图和命名 spawn，更新 mapId、坐标和 zoneId，并清除旧移动输入。
 5. `main.ts` 观察本玩家 mapId，清除当前交互区域，获取目标渲染 JSON，等待旧 Phaser Game 的 DESTROY 生命周期完成后创建新场景；旧画布立即移除，过期场景区域回调被忽略。异步加载以 generation 和 room 引用检查丢弃过期结果。
 
-Portal 保留同一房间、连接、身份和聊天。加入房间使用 initialMap 的 defaultSpawn；Portal 使用其明确指定的 targetSpawn，不强制使用目标地图默认出生点。目标地图和 spawn 在启动时已验证。失败请求不会改变地图；客户端需要重新进入区域才再次尝试。
+Portal 保留同一 Space room、连接、身份和聊天。加入时提交必填 `spaceId`，从该 Space 的 `initialMap` 和对应地图 `defaultSpawn` 出生；Portal 使用明确指定的 `targetSpawn`，不强制使用目标地图默认出生点。启动时逐 Space 验证初始地图、成员地图及 Portal 目标。失败请求不会改变地图；客户端需要重新进入区域才再次尝试。
 
 ### 4.4 断线和资源清理
 
@@ -267,6 +267,12 @@ iframe sandbox 默认仅开放 `allow-scripts allow-forms allow-popups`，referr
 
 ## 6. 身份、权限和数据生命周期
 
+### Space registry 与运行时边界
+
+地图 registry 的 `maps` 保存可复用的地图定义；`spaces` 是有序数组，提供开始页显示顺序及 `{id, name, description?, cover, initialMap, maps}` 元数据。Space ID 匹配 `/^[a-z0-9][a-z0-9_-]*$/` 且应保持稳定；名称用于展示，cover 是静态图片路径。`GET /api/world` 返回 `{maps, spaces}`，其中 maps 是规范化地图。启动时验证每个 Space 的 `initialMap` 与地图列表，并要求 Portal 目标留在该 Space 地图集合中。
+
+客户端使用 `spaceJoinSchema`（join schema 加必填 `spaceId`）加入；`PATCH /api/me` 仍只更新全局身份资料，不涉及 Space。Room state 发布 `spaceId`。单进程每个 Space 最多有一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建第二个实例。空间列表元数据、地图目录和工具配置由启动配置提供。玩家、聊天、语音、地图对象、私密区域与番茄钟状态按 Space room 隔离；同一 Space room 内跨地图共享其对应状态。空房仍按既有 autoDispose 规则销毁。
+
 Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校验，未打包进浏览器。session 有效期为 30 天，cookie cache 关闭；绑定码使用哈希存储，有效期 3 分钟且单次兑换。新设备兑换后共享同一认证 session，撤销它会影响所有绑定设备。正式注册、登录和账号恢复尚未实现。
 
 `SpaceRoom.onAuth` 从 HTTP headers/cookie 验证身份并检查提供的 Origin，不接受客户端声明的 userId 或 role。入房时保存服务端验证得到的认证 session 引用；每条受保护消息及每秒巡检通过 Better Auth adapter 复验有效性，再读取最新 profile。资料和角色因此可在线更新；失效连接会被关闭。前端检查只改善交互反馈。
@@ -277,20 +283,20 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | --- | --- | --- |
 | auth user/session/verification 等 | SQLite；跨浏览器绑定共享身份 | Better Auth |
 | 昵称、avatar ID、appearance、member/admin role | SQLite profiles；按持久 userId | identity.ts；换装选项由共享 Schema 校验；role 通过本地 CLI 更新 |
-| 玩家脚点、mapId、appearance、zoneId、connected、facing、motion、action/actionAnimated/actionTargetId | 房间内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
+| Space ID、玩家脚点、mapId、appearance、zoneId、connected、facing、motion、action/actionAnimated/actionTargetId | 对应 Space room 内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
 | 对象 variant/variantCleared/occupiedBy | 房间内存；新选择器和目标以地图与数字 Tiled ID 共享，释放选择点时恢复 authored 基础显示；房间销毁后重置 | SpaceState.worldObjects / action handler |
 | 私密区域 locked/members/resetAt | 房间内存；地图 + Tiled ID；临时连接成员、物理空置 60 秒重置 | privateArea handler / SpaceState.privateAreas |
 | 聊天 | 房间广播；没有服务端历史 | SpaceRoom |
-| 留言 | SQLite board_notes；同一进程所有房间按 resourceId 共享 | [BoardStore](../apps/backend/src/interactions/board/store.ts) |
-| 番茄钟 | 每房间按 resourceId 共享；房间销毁或服务重启后重置 | [pomodoro handler](../apps/backend/src/interactions/pomodoro/handler.ts) |
+| 留言 | SQLite board_notes；按 space_id + resourceId 持久化，同一 Space 的地图共享 | [BoardStore](../apps/backend/src/interactions/board/store.ts) |
+| 番茄钟 | 每 Space 的 live room 按 resourceId 共享；不同 Space 隔离，房间销毁或服务重启后重置 | [pomodoro handler](../apps/backend/src/interactions/pomodoro/handler.ts) |
 | 地图目录和工具配置 | 启动时载入；整个后端实例共享 | [world.ts](../apps/backend/src/world.ts) / [web/config.ts](../apps/backend/src/interactions/web/config.ts) |
 | 第三方内容及工具会话 | 第三方服务拥有 | 不写入项目 Schema 或数据库 |
 
-留言写入后，进程级 BoardStore 通知所有活跃房间的 board handler 更新 Schema。容量检查和插入在 SQLite 事务中完成，每资源最多 100 条；作者依据持久 userId 删除，admin 可删除其他作者留言。旧记录的 author_user_id 保持 NULL，不按昵称认领；Schema 中对应空字符串。详细规则见 [integrations](integrations.md)。
+留言写入后，BoardStore 只通知同一 Space 的活跃 board handler 更新 Schema。容量检查和插入在 SQLite 事务中完成，每资源最多 100 条；作者依据持久 userId 删除，admin 可删除其他作者留言。旧记录的 author_user_id 保持 NULL，不按昵称认领；Schema 中对应空字符串。详细规则见 [integrations](integrations.md)。
 
-番茄钟以服务端 endsAt 为准，handler 每秒更新 serverTime 和完成状态。前端用收到的服务端时间加本地单调时间推算显示，每 250ms 刷新；这只影响显示，暂停/继续/重置都由服务端决定。同一房间中跨地图引用同一 resourceId 的区域共用计时器。
+番茄钟以服务端 endsAt 为准，handler 每秒更新 serverTime 和完成状态。前端用收到的服务端时间加本地单调时间推算显示，每 250ms 刷新；这只影响显示，暂停/继续/重置都由服务端决定。同一 Space room 中跨地图引用同一 resourceId 的区域共用计时器；不同 Space 的计时器隔离。
 
-项目表由 `PRAGMA user_version` 的 v1–v4 迁移管理；v4 为 profiles 增加 `appearance_json`；Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
+项目表由 `PRAGMA user_version` 迁移管理；v4 为 profiles 增加 `appearance_json`，v5 为留言增加 `space_id` 并将旧留言迁入 `main`；Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
 
 ## 7. HTTP 接口和部署边界
 
@@ -298,7 +304,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 | 接口 | 访问与用途 |
 | --- | --- |
-| `GET /api/world` | 公开地图目录与所有权威地图语义 |
+| `GET /api/world` | 公开规范化地图目录及按 registry 顺序排列的 Space 元数据 |
 | `GET /api/maps/:id/map.json` | 公开规范化 Tiled JSON；未知地图返回 404 |
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
 | `GET /api/tools` | 公开工具 resourceId、URL 和可选展示配置；不能放凭据 |
@@ -312,7 +318,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 开发时 [vite.config.ts](../apps/frontend/vite.config.ts) 代理 `/api`、`/health`、`/matchmake` 和 Colyseus WebSocket。Vite 的 publicDir 指向根 assets，构建也会复制其中的资源；运行时地图选择仍通过后端目录。生产环境默认由独立服务托管前端；设置 `FRONTEND_DIST_PATH` 后，backend 同端口提供该目录中的静态文件，Docker 镜像采用此方式。registry、地图、tileset 和图片文件必须随后端部署。
 
-当前部署模型为单后端实例和本地 SQLite。房间状态、BoardStore 通知和配置索引都在进程内；直接增加多个进程无法保留现有跨房间共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
+当前部署模型为单后端实例和本地 SQLite。每 Space 单 live room、Space 内状态及 BoardStore 通知都在进程内；直接增加多个进程无法保留现有 Space 内共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
 
 语音 ICE 配置来自 `VOICE_ICE_SERVERS` JSON 环境变量；连接半径、断开半径、最大节点数和扫描间隔分别由 `VOICE_CONNECT_RADIUS`（默认 160）、`VOICE_DISCONNECT_RADIUS`（192）、`VOICE_MAX_PEERS`（6）和 `VOICE_SCAN_INTERVAL_MS`（1000）控制。配置经公开 HTTP 接口返回给浏览器，TURN 用户名和凭据对客户端可见；部署时应使用受限且定期轮换的 TURN 凭据，更新环境变量并重启后端；项目不签发 TURN 凭据。STUN/TURN 服务由部署者提供。
 
