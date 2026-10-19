@@ -146,8 +146,8 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":360,
-                 "y":128
+                 "x":40,
+                 "y":208
                 }, 
                 {
                  "height":0,
@@ -456,8 +456,8 @@
                  "type":"Portal",
                  "visible":true,
                  "width":48,
-                 "x":113.5,
-                 "y":213
+                 "x":32,
+                 "y":160
                 }, 
                 {
                  "height":64,
@@ -760,7 +760,7 @@
                  "width":0,
                  "x":168,
                  "y":76
-                },
+                }, 
                 {
                  "height":0,
                  "id":67,
@@ -794,7 +794,7 @@
                  "width":0,
                  "x":200,
                  "y":76
-                },
+                }, 
                 {
                  "height":0,
                  "id":70,
@@ -828,7 +828,7 @@
                  "width":0,
                  "x":120,
                  "y":76
-                },
+                }, 
                 {
                  "height":0,
                  "id":72,
@@ -862,7 +862,7 @@
                  "width":0,
                  "x":136,
                  "y":76
-                },
+                }, 
                 {
                  "height":0,
                  "id":74,
@@ -896,7 +896,7 @@
                  "width":0,
                  "x":296,
                  "y":172
-                },
+                }, 
                 {
                  "height":0,
                  "id":76,
@@ -930,7 +930,7 @@
                  "width":0,
                  "x":328,
                  "y":172
-                },
+                }, 
                 {
                  "height":0,
                  "id":78,
@@ -964,7 +964,7 @@
                  "width":0,
                  "x":392,
                  "y":172
-                },
+                }, 
                 {
                  "height":0,
                  "id":80,
@@ -998,8 +998,7 @@
                  "width":0,
                  "x":424,
                  "y":172
-                }
-,
+                }, 
                 {
                  "height":0,
                  "id":82,
@@ -1033,7 +1032,7 @@
                  "width":0,
                  "x":40,
                  "y":76
-                },
+                }, 
                 {
                  "height":0,
                  "id":84,
@@ -1067,7 +1066,7 @@
                  "width":0,
                  "x":88,
                  "y":76
-                },
+                }, 
                 {
                  "height":0,
                  "id":86,
@@ -1101,7 +1100,7 @@
                  "width":0,
                  "x":40,
                  "y":108
-                },
+                }, 
                 {
                  "height":0,
                  "id":88,
@@ -1135,7 +1134,7 @@
                  "width":0,
                  "x":88,
                  "y":108
-                },
+                }, 
                 {
                  "height":0,
                  "id":90,
@@ -1169,7 +1168,7 @@
                  "width":0,
                  "x":120,
                  "y":124
-                },
+                }, 
                 {
                  "height":0,
                  "id":92,
@@ -1203,7 +1202,7 @@
                  "width":0,
                  "x":136,
                  "y":124
-                },
+                }, 
                 {
                  "height":0,
                  "id":94,
@@ -1237,7 +1236,7 @@
                  "width":0,
                  "x":168,
                  "y":124
-                },
+                }, 
                 {
                  "height":0,
                  "id":96,
@@ -1271,7 +1270,7 @@
                  "width":0,
                  "x":200,
                  "y":124
-                },
+                }, 
                 {
                  "height":0,
                  "id":98,
@@ -1305,7 +1304,7 @@
                  "width":0,
                  "x":312,
                  "y":172
-                },
+                }, 
                 {
                  "height":0,
                  "id":100,
@@ -1339,7 +1338,7 @@
                  "width":0,
                  "x":408,
                  "y":172
-                },
+                }, 
                 {
                  "height":0,
                  "id":102,
@@ -1373,7 +1372,7 @@
                  "width":0,
                  "x":296,
                  "y":220
-                },
+                }, 
                 {
                  "height":0,
                  "id":104,
@@ -1407,7 +1406,7 @@
                  "width":0,
                  "x":312,
                  "y":220
-                },
+                }, 
                 {
                  "height":0,
                  "id":106,
@@ -1441,7 +1440,7 @@
                  "width":0,
                  "x":328,
                  "y":220
-                },
+                }, 
                 {
                  "height":0,
                  "id":108,
@@ -1475,7 +1474,7 @@
                  "width":0,
                  "x":392,
                  "y":220
-                },
+                }, 
                 {
                  "height":0,
                  "id":110,
@@ -1509,7 +1508,7 @@
                  "width":0,
                  "x":408,
                  "y":220
-                },
+                }, 
                 {
                  "height":0,
                  "id":112,
@@ -1543,7 +1542,7 @@
                  "width":0,
                  "x":424,
                  "y":220
-                },
+                }, 
                 {
                  "height":0,
                  "id":114,
@@ -1577,7 +1576,7 @@
                  "width":0,
                  "x":280,
                  "y":252
-                },
+                }, 
                 {
                  "height":0,
                  "id":116,
@@ -1611,7 +1610,7 @@
                  "width":0,
                  "x":328,
                  "y":252
-                },
+                }, 
                 {
                  "height":0,
                  "id":118,
@@ -1645,7 +1644,7 @@
                  "width":0,
                  "x":392,
                  "y":252
-                },
+                }, 
                 {
                  "height":0,
                  "id":120,
@@ -1679,7 +1678,7 @@
                  "width":0,
                  "x":440,
                  "y":252
-                },
+                }, 
                 {
                  "height":0,
                  "id":122,
@@ -1713,7 +1712,7 @@
                  "width":0,
                  "x":280,
                  "y":268
-                },
+                }, 
                 {
                  "height":0,
                  "id":124,
@@ -1747,7 +1746,7 @@
                  "width":0,
                  "x":328,
                  "y":268
-                },
+                }, 
                 {
                  "height":0,
                  "id":126,
@@ -1781,7 +1780,7 @@
                  "width":0,
                  "x":392,
                  "y":268
-                },
+                }, 
                 {
                  "height":0,
                  "id":128,
@@ -1815,7 +1814,7 @@
                  "width":0,
                  "x":440,
                  "y":268
-                },
+                }, 
                 {
                  "height":0,
                  "id":130,
@@ -1849,7 +1848,7 @@
                  "width":0,
                  "x":280,
                  "y":284
-                },
+                }, 
                 {
                  "height":0,
                  "id":132,
@@ -1883,7 +1882,7 @@
                  "width":0,
                  "x":328,
                  "y":284
-                },
+                }, 
                 {
                  "height":0,
                  "id":134,
@@ -1918,6 +1917,7 @@
                  "x":392,
                  "y":284
                 },
+            
                 {
                  "height":0,
                  "id":136,
@@ -1951,7 +1951,7 @@
                  "width":0,
                  "x":440,
                  "y":284
-                },
+                }, 
                 {
                  "height":0,
                  "id":138,
@@ -1985,7 +1985,7 @@
                  "width":0,
                  "x":312,
                  "y":364
-                },
+                }, 
                 {
                  "height":0,
                  "id":140,
@@ -2019,7 +2019,7 @@
                  "width":0,
                  "x":344,
                  "y":364
-                },
+                }, 
                 {
                  "height":0,
                  "id":142,
@@ -2053,7 +2053,7 @@
                  "width":0,
                  "x":376,
                  "y":364
-                },
+                }, 
                 {
                  "height":0,
                  "id":144,
@@ -2087,8 +2087,19 @@
                  "width":0,
                  "x":408,
                  "y":364
-                }
-],
+                }, 
+                {
+                 "height":16,
+                 "id":147,
+                 "name":"outside-mirror",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"wardrobe",
+                 "visible":true,
+                 "width":64,
+                 "x":464,
+                 "y":64
+                }],
          "opacity":1,
          "type":"objectgroup",
          "visible":true,
@@ -2107,16 +2118,16 @@
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 14, 0, 0, 4, 5, 6, 0, 0, 0, 4, 5, 6, 0, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 27, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 35, 36, 0, 0, 0, 0, 0, 35, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5, 5, 5, 5, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 33, 0, 0, 42, 0, 42, 0, 42, 0, 42, 0, 32, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -2527,7 +2538,7 @@
                  "width":16,
                  "x":416,
                  "y":176
-                },
+                }, 
                 {
                  "height":16,
                  "id":83,
@@ -2535,14 +2546,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2555,7 +2566,7 @@
                  "width":16,
                  "x":48,
                  "y":64
-                },
+                }, 
                 {
                  "height":16,
                  "id":85,
@@ -2563,14 +2574,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2583,7 +2594,7 @@
                  "width":16,
                  "x":64,
                  "y":64
-                },
+                }, 
                 {
                  "height":16,
                  "id":87,
@@ -2591,14 +2602,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2611,7 +2622,7 @@
                  "width":16,
                  "x":48,
                  "y":96
-                },
+                }, 
                 {
                  "height":16,
                  "id":89,
@@ -2619,14 +2630,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2639,7 +2650,7 @@
                  "width":16,
                  "x":64,
                  "y":96
-                },
+                }, 
                 {
                  "height":16,
                  "id":91,
@@ -2647,14 +2658,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2667,7 +2678,7 @@
                  "width":16,
                  "x":112,
                  "y":96
-                },
+                }, 
                 {
                  "height":16,
                  "id":93,
@@ -2675,14 +2686,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2695,7 +2706,7 @@
                  "width":16,
                  "x":128,
                  "y":96
-                },
+                }, 
                 {
                  "height":16,
                  "id":95,
@@ -2703,14 +2714,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2723,7 +2734,7 @@
                  "width":16,
                  "x":160,
                  "y":96
-                },
+                }, 
                 {
                  "height":16,
                  "id":97,
@@ -2731,14 +2742,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2751,7 +2762,7 @@
                  "width":16,
                  "x":192,
                  "y":96
-                },
+                }, 
                 {
                  "height":16,
                  "id":99,
@@ -2759,14 +2770,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":6
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":7
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":6
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2779,7 +2790,7 @@
                  "width":16,
                  "x":304,
                  "y":176
-                },
+                }, 
                 {
                  "height":16,
                  "id":101,
@@ -2787,14 +2798,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":6
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":7
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":6
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2807,7 +2818,7 @@
                  "width":16,
                  "x":400,
                  "y":176
-                },
+                }, 
                 {
                  "height":16,
                  "id":103,
@@ -2815,14 +2826,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2835,7 +2846,7 @@
                  "width":16,
                  "x":288,
                  "y":192
-                },
+                }, 
                 {
                  "height":16,
                  "id":105,
@@ -2843,14 +2854,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2863,7 +2874,7 @@
                  "width":16,
                  "x":304,
                  "y":192
-                },
+                }, 
                 {
                  "height":16,
                  "id":107,
@@ -2871,14 +2882,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2891,7 +2902,7 @@
                  "width":16,
                  "x":320,
                  "y":192
-                },
+                }, 
                 {
                  "height":16,
                  "id":109,
@@ -2899,14 +2910,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2919,7 +2930,7 @@
                  "width":16,
                  "x":384,
                  "y":192
-                },
+                }, 
                 {
                  "height":16,
                  "id":111,
@@ -2927,14 +2938,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2947,7 +2958,7 @@
                  "width":16,
                  "x":400,
                  "y":192
-                },
+                }, 
                 {
                  "height":16,
                  "id":113,
@@ -2955,14 +2966,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -2975,7 +2986,7 @@
                  "width":16,
                  "x":416,
                  "y":192
-                },
+                }, 
                 {
                  "height":16,
                  "id":115,
@@ -2983,14 +2994,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3003,7 +3014,7 @@
                  "width":16,
                  "x":288,
                  "y":240
-                },
+                }, 
                 {
                  "height":16,
                  "id":117,
@@ -3011,14 +3022,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3031,7 +3042,7 @@
                  "width":16,
                  "x":304,
                  "y":240
-                },
+                }, 
                 {
                  "height":16,
                  "id":119,
@@ -3039,14 +3050,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3059,7 +3070,7 @@
                  "width":16,
                  "x":400,
                  "y":240
-                },
+                }, 
                 {
                  "height":16,
                  "id":121,
@@ -3067,14 +3078,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3087,7 +3098,7 @@
                  "width":16,
                  "x":416,
                  "y":240
-                },
+                }, 
                 {
                  "height":16,
                  "id":123,
@@ -3095,14 +3106,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3115,7 +3126,7 @@
                  "width":16,
                  "x":288,
                  "y":256
-                },
+                }, 
                 {
                  "height":16,
                  "id":125,
@@ -3123,14 +3134,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3143,7 +3154,7 @@
                  "width":16,
                  "x":304,
                  "y":256
-                },
+                }, 
                 {
                  "height":16,
                  "id":127,
@@ -3151,14 +3162,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3171,7 +3182,7 @@
                  "width":16,
                  "x":400,
                  "y":256
-                },
+                }, 
                 {
                  "height":16,
                  "id":129,
@@ -3179,14 +3190,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3199,7 +3210,7 @@
                  "width":16,
                  "x":416,
                  "y":256
-                },
+                }, 
                 {
                  "height":16,
                  "id":131,
@@ -3207,14 +3218,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3227,7 +3238,7 @@
                  "width":16,
                  "x":288,
                  "y":272
-                },
+                }, 
                 {
                  "height":16,
                  "id":133,
@@ -3235,14 +3246,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3255,7 +3266,7 @@
                  "width":16,
                  "x":304,
                  "y":272
-                },
+                }, 
                 {
                  "height":16,
                  "id":135,
@@ -3263,14 +3274,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":21
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":22
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":21
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3283,7 +3294,7 @@
                  "width":16,
                  "x":400,
                  "y":272
-                },
+                }, 
                 {
                  "height":16,
                  "id":137,
@@ -3291,14 +3302,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":9
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":10
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":9
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3311,7 +3322,7 @@
                  "width":16,
                  "x":416,
                  "y":272
-                },
+                }, 
                 {
                  "height":16,
                  "id":139,
@@ -3319,14 +3330,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3339,7 +3350,7 @@
                  "width":16,
                  "x":304,
                  "y":336
-                },
+                }, 
                 {
                  "height":16,
                  "id":141,
@@ -3347,14 +3358,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3367,7 +3378,7 @@
                  "width":16,
                  "x":336,
                  "y":336
-                },
+                }, 
                 {
                  "height":16,
                  "id":143,
@@ -3375,14 +3386,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3395,7 +3406,7 @@
                  "width":16,
                  "x":368,
                  "y":336
-                },
+                }, 
                 {
                  "height":16,
                  "id":145,
@@ -3403,14 +3414,14 @@
                  "opacity":1,
                  "properties":[
                         {
-                         "name":"variant.computer",
-                         "type":"int",
-                         "value":18
-                        }, 
-                        {
                          "name":"variant.book",
                          "type":"int",
                          "value":19
+                        }, 
+                        {
+                         "name":"variant.computer",
+                         "type":"int",
+                         "value":18
                         }, 
                         {
                          "name":"variant.drawing-board",
@@ -3423,8 +3434,9 @@
                  "width":16,
                  "x":400,
                  "y":336
-                }
-],
+                }],
+         "offsetx":0,
+         "offsety":-5,
          "opacity":1,
          "type":"objectgroup",
          "visible":true,
@@ -3432,7 +3444,7 @@
          "y":0
         }],
  "nextlayerid":13,
- "nextobjectid":146,
+ "nextobjectid":148,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",
