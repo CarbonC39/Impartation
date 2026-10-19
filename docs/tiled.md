@@ -1,5 +1,7 @@
 # Tiled 地图契约
 
+本页面向地图制作者。托管者配置 Space、部署地图与封面、挂载 Docker 目录和更新回滚时，请参阅[托管指南](hosting.md)。
+
 Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数据。`assets/maps/registry.json` 定义可复用地图和有序 Space 列表；每个 Space 选择初始地图和成员地图：
 
 ```json
@@ -21,6 +23,8 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 ```
 
 `file` 相对于 registry 文件。`maps` 保存地图定义，每个条目包含 `id`、`file`、`defaultSpawn`；`spaces` 数组顺序就是开始页显示顺序。默认产品 Space 的稳定 ID 为 `main`。Space 的 `id` 必须匹配 `/^[a-z0-9][a-z0-9_-]*$/`，创建后应保持稳定；`name` 是展示名，`description` 可选，`cover` 是普通静态图片路径。每个 Space 的 `initialMap` 和 `maps` 都必须引用已登记地图，初始地图必须属于该 Space。地图可以被多个 Space 复用。Portal 的目标地图必须属于当前 Space，目标出生点也必须存在。
+
+上例的 `/covers/main.png` 需要另外发布到前端静态目录，例如构建前放入 `assets/covers/main.png`。地图 API 不会自动托管 `cover`；只改 `MAP_REGISTRY_PATH` 不会更新前端静态资源。共享地图里的 Portal 也必须对每个引用它的 Space 都有效，不能仅检查初始 Space。
 
 客户端从 `GET /api/world` 读取 `{ maps, spaces }`：`spaces` 提供列表元数据，`maps` 是规范化地图目录；再按地图 URL 请求对应渲染 JSON 和显式资源。服务端以源 `.tmj` 提取权威语义。单进程中每个 Space 最多有一个 live Colyseus room；`spaceJoinSchema` 要求客户端提交 `spaceId`，服务端按它匹配该 Space。满员时明确拒绝加入，不会再创建第二个 room。`SPACE_MAX_CLIENTS` 对所有 Space 共用，默认 32。
 

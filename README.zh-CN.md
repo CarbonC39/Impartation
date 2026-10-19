@@ -49,6 +49,8 @@ npm run dev
 
 ## 配置与部署
 
+自定义 Space 和地图请先看[托管指南](docs/hosting.md)，其中包括 registry 配置、Docker 地图与封面挂载、更新回滚和部署验收步骤。
+
 根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后会拒绝新连接，直到有空位。地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
 
 生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。单独托管前端时，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket；下方 Docker 镜像则在同一端口提供前后端。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
@@ -78,6 +80,7 @@ SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，�
 
 | 文档 | 内容 |
 | --- | --- |
+| [托管指南](docs/hosting.md) | Space 配置、地图与封面路径、Docker 挂载、更新回滚和排查 |
 | [架构](docs/architecture.md) | 模块、状态归属和功能边界 |
 | [匿名身份与权限](docs/account-system.md) | 跨设备绑定、身份 API、管理员 CLI 和迁移 |
 | [地图制作](docs/tiled.md) | Tiled 制图步骤、碰撞、交互区和验证 |

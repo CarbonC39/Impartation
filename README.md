@@ -49,6 +49,8 @@ Before the first browser test run, install Chromium with `npx playwright install
 
 ## Configuration and deployment
 
+For custom Spaces and maps, see the [hosting guide (简体中文)](docs/hosting.md): registry setup, Docker map and cover mounts, updates, rollback, and deployment checks.
+
 The root [`.env.example`](.env.example) contains configuration examples. The backend and Vite both read the root `.env`; restart services after changing it. `MAP_REGISTRY_PATH` defaults to `assets/maps/registry.json`, and map files are resolved relative to the registry. `SPACE_MAX_CLIENTS` sets the shared per-Space room capacity and defaults to `32`; a full Space rejects further joins until a slot opens. See [Tiled maps](docs/tiled.md) for the map contract and rendering limits.
 
 In production, set a random `IDENTITY_SECRET` of at least 32 characters, the public site URL in `IDENTITY_BASE_URL`, and the deployed frontend origins in `IDENTITY_TRUSTED_ORIGINS`. For a separate frontend host, use a same-origin reverse proxy for `/api`, `/matchmake`, and the Colyseus WebSocket. The Docker image below serves both frontend and backend on one port. `VITE_SERVER_URL` only controls the Colyseus connection; identity, map, and tool configuration APIs always use same-origin `/api`.
@@ -78,6 +80,7 @@ If voice reports a missing browser API on `http://127.0.0.1:5173/`, run `({ secu
 
 | Document | Contents |
 | --- | --- |
+| [Hosting guide (简体中文)](docs/hosting.md) | Space setup, map files and cover paths, Docker mounts, updates, and troubleshooting |
 | [Architecture](docs/architecture.md) | Modules, state ownership, and feature boundaries |
 | [Identity and permissions](docs/account-system.md) | Device linking, identity APIs, administrator CLI, and migrations |
 | [Tiled maps](docs/tiled.md) | Map authoring, collisions, interaction zones, and validation |
