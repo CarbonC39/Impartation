@@ -2,6 +2,9 @@ import type { Room } from '@colyseus/sdk';
 import { boardPostSchema, type SpaceProtocol, type Zone } from '@virtual-workspace/shared';
 import { PanelInteraction, element } from '../panel';
 
+// Trash icon: pixelarticons (MIT, © 2019 Gerrit Halfmann), https://github.com/halfmage/pixelarticons
+const TRASH_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 2v4h6v2h-2v14H4V8H2V6h6V2h8zm-2 2h-4v2h4V4zm0 4H6v12h12V8h-4zm-5 2h2v8H9v-8zm6 0h-2v8h2v-8z"/></svg>';
+
 export class BoardInteraction extends PanelInteraction {
   private notes = element<HTMLOListElement>('board-notes');
   private text = element<HTMLTextAreaElement>('board-text');
@@ -20,8 +23,9 @@ export class BoardInteraction extends PanelInteraction {
     }, options);
     this.notes.addEventListener('click', event => {
       const target = event.target;
-      if (!(target instanceof HTMLButtonElement) || !target.dataset.noteId || !this.current) return;
-      const payload = { resourceId: this.current.resourceId, id: target.dataset.noteId };
+      const button = target instanceof Element ? target.closest<HTMLButtonElement>('button[data-note-id]') : null;
+      if (!button?.dataset.noteId || !this.current) return;
+      const payload = { resourceId: this.current.resourceId, id: button.dataset.noteId };
       void this.run(() => this.room.request('boardDelete', payload));
     }, options);
   }
@@ -47,14 +51,23 @@ export class BoardInteraction extends PanelInteraction {
       meta.textContent = `${note.name} · ${new Date(note.createdAt).toLocaleString()}`;
       const body = document.createElement('p');
       body.textContent = note.text;
-      item.append(meta, body);
+      const row = document.createElement('div');
+      row.className = 'note-row';
+      const content = document.createElement('div');
+      content.append(meta, body);
+      row.append(content);
+      item.append(row);
       if (player && (note.authorUserId === player.userId || player.role === 'admin')) {
         const button = document.createElement('button');
+        const label = note.authorUserId === player.userId ? '删除我的留言' : '管理员删除';
         button.type = 'button';
-        button.textContent = note.authorUserId === player.userId ? '删除我的留言' : '管理员删除';
+        button.className = 'note-delete';
+        button.innerHTML = TRASH_SVG;
+        button.setAttribute('aria-label', label);
+        button.title = label;
         button.dataset.noteId = id;
         button.disabled = !this.connected || this.pending;
-        item.append(button);
+        row.append(button);
       }
       return item;
     });

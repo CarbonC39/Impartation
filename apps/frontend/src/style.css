@@ -147,7 +147,6 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .name-tag { margin-top: 8px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 900; color: var(--ink);
   text-shadow: 1px 0 0 var(--panel), -1px 0 0 var(--panel), 0 1px 0 var(--panel), 0 -1px 0 var(--panel); }
 .mirror-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-.name-field small { font-weight: 500; font-size: 12px; }
 .appearance-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .wardrobe { flex: 999 1 600px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
 .wardrobe-tabs { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -307,6 +306,24 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .feature-panel ol { max-height: 180px; overflow: auto; padding-left: 22px; }
 .feature-panel form, .timer-controls { display: flex; flex-direction: column; gap: 10px; }
 .timer-controls { flex-flow: row wrap; align-items: end; }
+/* Desk item picker shown while seated. */
+.variant-choices { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.variant-choices button { min-height: 48px; padding: 8px 12px; }
+.variant-choices button[aria-pressed="true"]:disabled { opacity: 1; }
+.variant-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 2px dashed var(--line); }
+.variant-footer p { flex: 1; margin: 0; color: var(--ink2); }
+.variant-footer button { flex: none; }
+
+/* Message board notes: own/admin notes get a trash button centred on the right. */
+#board-notes li { margin-bottom: 8px; }
+/* Only grows vertically, from its initial three rows up to a bound that keeps it inside the panel. */
+#board-text { resize: vertical; min-height: calc(3lh + 20px); max-height: 30vh; }
+.note-row { display: flex; align-items: center; gap: 8px; }
+.note-row > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#board-notes li p { margin: 2px 0 0; }
+.note-delete { flex: none; width: 32px; min-height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: transparent; box-shadow: none; color: var(--ink2); }
+.note-delete:hover:not(:disabled) { background: #ffd2c2; color: #4a3d60; }
+.note-delete svg { width: 16px; height: 16px; }
 #pomodoro-time { display: block; margin: 8px 0; font-family: var(--pixel); font-size: 36px; }
 #feature-status { color: #fff; font-size: 13px; text-shadow: 0 1px 3px #14202dcc; }
 
