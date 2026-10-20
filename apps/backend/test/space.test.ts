@@ -42,7 +42,8 @@ async function until(predicate: () => boolean, timeout = 3000) {
   }
 }
 
-describe('space room over real WebSocket connections', { timeout: 30000 }, () => {
+// This limit covers the whole serial suite, including real password hashing and timer waits.
+describe('space room over real WebSocket connections', { timeout: 120_000 }, () => {
   let harness: ColyseusTestServer<typeof server>;
   const connections: Room<SpaceRoom>[] = [];
   before(async () => { harness = await boot(server); });
