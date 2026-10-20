@@ -2,7 +2,7 @@
 
 本文描述当前代码的组织方式、运行流程和扩展契约。启动命令见 [README](../README.md)，地图格式见 [Tiled 契约](tiled.md)，身份 API 和绑定流程见 [身份说明](account-system.md)，工具配置见 [integration 配置](integration-plan.md)。尚未实现的能力见 [待办](roadmap.md)。
 
-Virtual Workspace 由浏览器客户端和一个 Node.js 后端组成。浏览器使用 Phaser 4 渲染地图，通过 HTTP 获取身份、地图和工具配置，通过 Colyseus 0.18 WebSocket 收发输入、状态和交互请求。后端拥有玩家位置、地图归属和内置 integration 状态的写入权；SQLite 保存身份、资料和留言。Tiled 文件决定世界几何与交互语义，第三方服务拥有自己的内容、账号和权限。
+Virtual Workspace 由浏览器客户端和一个 Node.js 后端组成。浏览器使用 Phaser 4 渲染地图，通过 HTTP 获取账号、资料、地图和工具配置，通过 Colyseus 0.18 WebSocket 收发输入、状态和交互请求。后端拥有玩家位置、地图归属和内置 integration 状态的写入权；SQLite 保存账号资料、已保存造型、在线断开命令和留言。Tiled 文件决定世界几何与交互语义，第三方服务拥有自己的内容、账号和权限。
 
 ## 1. 代码结构与依赖方向
 
@@ -66,9 +66,10 @@ sequenceDiagram
     participant Room as SpaceRoom
     UI->>API: GET /api/world
     UI->>API: GET /api/me
-    opt 首次进入且没有有效身份
-        UI->>API: POST /api/auth/sign-in/anonymous
-        API-->>UI: session cookie
+    alt 尚未登录
+        UI->>API: POST /api/auth/sign-in/username 或 /api/register
+        API-->>UI: Better Auth session cookie
+        UI->>API: GET /api/me
     end
     UI->>API: PATCH /api/me {name, avatar}
     UI->>Room: joinOrCreate("space", {spaceId, name, avatar}) + cookie
@@ -79,9 +80,9 @@ sequenceDiagram
     UI->>UI: 创建 Phaser 场景
 ```
 
-打开页面只尝试恢复已有资料；提交进入表单时才按需创建匿名身份并保存资料。客户端校验 `/api/world` 响应并从按 registry 顺序显示的 Space 列表中选择一个，加入时提交其 `spaceId`；等待房间初始状态后，用本玩家 `mapId` 选择地图。所选 Space 的 `initialMap` 是初始入口。
+打开页面时恢复已有资料；没有有效账号 session 时，用户先注册或登录。账号注册由 `REGISTRATION_MODE` 控制，认证成功后才可保存资料和加入空间。客户端校验 `/api/world` 响应并从按 registry 顺序显示的 Space 列表中选择一个，加入时提交其 `spaceId`；等待房间初始状态后，用本玩家 `mapId` 选择地图。所选 Space 的 `initialMap` 是初始入口。
 
-界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 在浏览器中保存 3 个命名造型。界面配色、造型槽位、柔和区锁定、昵称显隐和聊天背景都只存在 localStorage，不进入身份资料或房间状态，也不跨设备同步；服务端仍只按 `appearanceSchema` 校验六位 RGB，不强制柔和区。保存造型槽位时会同时调用 `PATCH /api/me` 保存当前造型。
+界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、柔和区锁定、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观，不强制柔和区。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
 
 Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建额外实例。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 
@@ -273,7 +274,7 @@ iframe sandbox 默认仅开放 `allow-scripts allow-forms allow-popups`，referr
 
 客户端使用 `spaceJoinSchema`（join schema 加必填 `spaceId`）加入；`PATCH /api/me` 仍只更新全局身份资料，不涉及 Space。Room state 发布 `spaceId`。单进程每个 Space 最多有一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建第二个实例。空间列表元数据、地图目录和工具配置由启动配置提供。玩家、聊天、语音、地图对象、私密区域与番茄钟状态按 Space room 隔离；同一 Space room 内跨地图共享其对应状态。空房仍按既有 autoDispose 规则销毁。
 
-Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校验，未打包进浏览器。session 有效期为 30 天，cookie cache 关闭；绑定码使用哈希存储，有效期 3 分钟且单次兑换。新设备兑换后共享同一认证 session，撤销它会影响所有绑定设备。正式注册、登录和账号恢复尚未实现。
+Better Auth 负责用户名/密码凭据、session cookie 和密码重置 token，未打包进浏览器。session 有效期为 30 天，cookie cache 关闭。注册策略为公开、注册码或仅管理员创建。密码变更与重置成功后撤销该用户全部 session；管理员生成重置链接时不提前撤销 session。账号冻结会撤销 session 并使在线连接下线；单独 kick 只排队断开当前连接，不阻止用户重新登录。
 
 `SpaceRoom.onAuth` 从 HTTP headers/cookie 验证身份并检查提供的 Origin，不接受客户端声明的 userId 或 role。入房时保存服务端验证得到的认证 session 引用；每条受保护消息及每秒巡检通过 Better Auth adapter 复验有效性，再读取最新 profile。资料和角色因此可在线更新；失效连接会被关闭。前端检查只改善交互反馈。
 
@@ -281,8 +282,10 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 | 数据 | 持久化和共享范围 | 实现 |
 | --- | --- | --- |
-| auth user/session/verification 等 | SQLite；跨浏览器绑定共享身份 | Better Auth |
-| 昵称、avatar ID、appearance、member/admin role | SQLite profiles；按持久 userId | identity.ts；换装选项由共享 Schema 校验；role 通过本地 CLI 更新 |
+| 用户名、密码凭据、session、verification 等 | SQLite；跨浏览器登录共享账号 | Better Auth |
+| 显示名称、avatar ID、当前 appearance、member/admin role | SQLite profiles；按 userId | identity.ts；外观由共享 Schema 校验；role 通过管理员 API 或本地 CLI 更新 |
+| 三个已保存造型 | SQLite `saved_outfits`，按 userId；同一账号的设备共享 | outfits.ts；每次通过单槽接口更新 |
+| 在线断开命令 | SQLite `moderation_commands` 队列；单后端实例共享 | 管理接口写入，SpaceRoom 每秒轮询 |
 | Space ID、玩家脚点、mapId、appearance、zoneId、connected、facing、motion、action/actionAnimated/actionTargetId | 对应 Space room 内存；网络重连可保留，最终离开后删除 | SpaceRoom / Player Schema |
 | 对象 variant/variantCleared/occupiedBy | 房间内存；新选择器和目标以地图与数字 Tiled ID 共享，释放选择点时恢复 authored 基础显示；房间销毁后重置 | SpaceState.worldObjects / action handler |
 | 私密区域 locked/members/resetAt | 房间内存；地图 + Tiled ID；临时连接成员、物理空置 60 秒重置 | privateArea handler / SpaceState.privateAreas |
@@ -296,7 +299,7 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 
 番茄钟以服务端 endsAt 为准，handler 每秒更新 serverTime 和完成状态。前端用收到的服务端时间加本地单调时间推算显示，每 250ms 刷新；这只影响显示，暂停/继续/重置都由服务端决定。同一 Space room 中跨地图引用同一 resourceId 的区域共用计时器；不同 Space 的计时器隔离。
 
-项目表由 `PRAGMA user_version` 迁移管理；v4 为 profiles 增加 `appearance_json`，v5 为留言增加 `space_id` 并将旧留言迁入 `main`；Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
+项目表由 `PRAGMA user_version` 迁移管理；v4 为 profiles 增加 `appearance_json`，v5 为留言增加 `space_id` 并将旧留言迁入 `main`，v6 增加造型槽与在线断开队列。Better Auth 表单独通过库的 migration 管理。SQLite 启用 WAL、外键和 5000ms busy timeout；管理员 CLI 可在线修改角色和管理账号。迁移应在备份后执行，数据库持久化路径由 `DATABASE_PATH` 指定。
 
 ## 7. HTTP 接口和部署边界
 
@@ -311,7 +314,11 @@ Better Auth 负责匿名 user、session cookie、一次性绑定码及凭据校�
 | `GET /api/voice-config` | 发布浏览器建立 WebRTC 连接所需的 ICE server 配置；不要放长期 TURN 凭据 |
 | `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
 | `PATCH /api/me` | JSON 更新昵称/avatar/appearance，校验提供的 Origin，不接受 role 更新 |
-| `/api/auth/*` | 只开放匿名登录、session 查询、退出和绑定码生成/兑换的指定方法，其余返回 404 |
+| `GET /api/registration`、`POST /api/register` | 查询注册策略；按策略创建账号并登录 |
+| `POST /api/me/password` | 验证当前密码、更新密码并撤销全部 session |
+| `GET /api/me/outfits`、`PUT /api/me/outfits/:index` | 读取 3 个已保存槽位；只更新指定槽位 |
+| `/api/admin/users*` | 仅管理员可列出、创建及管理账号；管理动作要求确认字段 |
+| `/api/auth/*` | 只开放用户名登录、session 查询、退出和密码重置的指定方法，其余返回 404 |
 | `GET /health` | 执行 SQLite `SELECT 1` 后返回状态 |
 
 项目 `/api` JSON parser 的请求体限制为 16KB；auth 路由在它之前交给 Better Auth 处理。Colyseus 自身提供 matchmaking 与 WebSocket 路由。`VITE_SERVER_URL` 仅改变 Colyseus 连接目标，身份、地图和工具 API 始终请求当前页面同源 `/api`；改变连接地址时需确保两侧服务使用一致的身份和地图配置。

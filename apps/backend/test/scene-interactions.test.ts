@@ -65,7 +65,9 @@ after(async () => {
   await harness.shutdown(); db.close(); rmSync(directory, { recursive: true, force: true });
 });
 async function connect(name: string, spaceId = 'main') {
-  const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const response = await fetch(endpoint + '/api/register', { method: 'POST', headers: { Origin: endpoint, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: `scene_${randomUUID().replaceAll('-', '').slice(0, 16)}`, password: 'password1234', displayName: name }) });
+  assert.equal(response.status, 200, await response.clone().text());
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space', { name, avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId });
   room.onMessage('chat', () => {}); room.onError(() => {}); room.reconnection.minUptime = 0;

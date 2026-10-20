@@ -38,14 +38,17 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | WebTool 配置 | 跨地图资源一致性、embed/external mode、手动外链与同源选项、非法 JSON/URL 与额外凭据字段拒绝 | [web-tools.test.ts](../apps/backend/test/web-tools.test.ts) |
 | 交互架构 | 通用前后端分发、handler 清理、消息冲突、展示策略与 shared 协议一致性 | [architecture.test.ts](../apps/backend/test/architecture.test.ts) |
 | 多地图与 Space 服务 | registry/API、Space 顺序与 metadata、多图层和外置 TSJ 资源、Space 内 Portal 转换/成员地图校验、目标地图碰撞和身份保留；同名对象按地图隔离 | [portal.test.ts](../apps/backend/test/portal.test.ts) |
-| SQLite | v1-v5 迁移、旧留言归入 `main`、按 Space/resource 持久化、容量与作者权限 | [db.test.ts](../apps/backend/test/db.test.ts) |
-| 管理员 CLI | 真实磁盘子进程执行 role/list，持久化角色并拒绝无效参数 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
+| SQLite | v1-v6 迁移、旧留言归入 `main`、按 Space/resource 持久化、作者权限、saved outfits 持久化 | [db.test.ts](../apps/backend/test/db.test.ts) |
+| 管理员 CLI | 真实磁盘子进程创建账号、role/list、冻结/解冻、重置链接、kick 队列和删除；密码仅从 stdin 输入、危险操作要求确认 | [identity-cli.test.ts](../apps/backend/test/identity-cli.test.ts) |
 | Space 交互与并发 | 初始地图、复用地图下的选择器/私密区域隔离、runtime 容量与并发满员拒绝 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
 | 后端容量配置 | 默认值、环境覆盖和非法上限拒绝 | [config.test.ts](../apps/backend/test/config.test.ts) |
-| HTTP 与 WebSocket | Space 必填 join、每 Space 单 room、满员拒绝与配置容量、Space runtime 隔离；匿名 session、资料、绑定码单次/过期、撤销与降权、留言权限、聊天限流、正在输入状态的设置/发送聊天清除/超时清除、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消；语音 opt-in、地图/距离、节点容量、信令转发和范围退出 | [space.test.ts](../apps/backend/test/space.test.ts) |
-| 浏览器 | Space 列表顺序、选择后的初始地图与玩家隔离；界面引导、身份绑定、聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；衣橱单品预览、3 个造型槽位的保存/覆盖确认/刷新保留、自定义界面配色、昵称显隐和聊天背景偏好的保存；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理；语音点击麦克风键授权、开麦/闭麦、断开语音、喇叭键静音来声、双浏览器音轨交换和离开清理；进入前准备的开麦/不开麦/返回、只请求一次麦克风、静音进入；说话时自己和对方头顶的麦克风标识；正在输入省略号的显示、发送后消失与设置关闭；方向键手柄提示、双击进入布局调整、缩放方向键、拖动方向键与动作按钮并保存 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
+| 正式账号 | 用户名唯一与显示名称重复、登录与密码修改、重置令牌单次使用和过期、session 撤销、三槽造型隔离与输入校验、管理员权限和删除清理 | [accounts.test.ts](../apps/backend/test/accounts.test.ts) |
+| HTTP 与 WebSocket | Space 必填 join、每 Space 单 room、满员拒绝与配置容量、Space runtime 隔离；用户名账号注册策略、登录、session、profile、冻结与撤销、saved outfits、管理员操作权限、留言权限、聊天限流、正在输入状态、移动、重连、计时器、公开配置 API；角色动作身份校验、服务端锚点匹配、姿态同步和移动取消；语音 opt-in、地图/距离、节点容量、信令转发和范围退出 | [space.test.ts](../apps/backend/test/space.test.ts) |
+| 浏览器 | Space 列表顺序、选择后的初始地图与玩家隔离；注册/登录、跨浏览器登录、个人资料与留言权限；聊天、移动、留言、计时器、窄屏；屏幕方向按钮的 pointer 按住/松开与权威移动；角色资源加载、帧切片、脚点锚定、相机缩放下的世界/屏幕尺寸及窗口调整、行走与 idle 帧；窄屏动作列表、动画选项及移动取消动作；聊天气泡、聊天折叠与未读数；衣橱单品预览、服务端三个造型槽位的保存/覆盖确认/刷新恢复和跨账号隔离、自定义界面配色、昵称显隐和聊天背景偏好的保存；多地图 Portal 与多图层/tileset；区域上方入口提示、显式打开 embed/external、电视框窗口居中/拖动/关闭、手动外链和离开区域清理；语音点击麦克风键授权、开麦/闭麦、断开语音、喇叭键静音来声、双浏览器音轨交换和离开清理；进入前准备的开麦/不开麦/返回、只请求一次麦克风、静音进入；说话时自己和对方头顶的麦克风标识；正在输入省略号的显示、发送后消失与设置关闭；方向键手柄提示、双击进入布局调整、缩放方向键、拖动方向键与动作按钮并保存 | [space.spec.ts](../apps/frontend/e2e/space.spec.ts) |
 
 显式交互浏览器用例检查选择器按钮和目标 GID 画面、私密区域锁定按钮，以及镜子打开原有衣橱、保存/返回后保留房间和 session。自动化用例使用临时测试地图和独立 Space fixtures；仓库另提供可从大厅进入的交互试验场，手动体验路径见 [地图说明](tiled.md#交互试验场)。
+
+账号浏览器用例检查注册、登录、退出、修改密码、跨设备资料与造型槽，以及同源标签页切换账号后的草稿隔离。[accounts.spec.ts](../apps/frontend/e2e/accounts.spec.ts) 的管理员面板与重置表单用 HTTP 响应替身检查二次确认、自我管理限制、链接展示和重置 token 的地址清理；真实管理员授权、重置令牌生命周期及 session 撤销由 Node HTTP/WebSocket 测试验证。
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 

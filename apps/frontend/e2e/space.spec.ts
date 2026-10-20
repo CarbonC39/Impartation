@@ -5,9 +5,31 @@ import type Phaser from 'phaser';
 import type { SpaceScene } from '../src/SpaceScene';
 import { avatars } from '../src/characters';
 
-async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => Promise<void>) {
+const E2E_PASSWORD = 'e2e-workspace-password';
+let accountSequence = 0;
+function nextUsername() { return `e2e${Date.now().toString(36)}${(++accountSequence).toString(36)}`; }
+type TestAccount = { username: string; password: string; id: string };
+
+async function createTestAccount(page: Page, displayName: string): Promise<TestAccount> {
+  const username = nextUsername();
+  const response = await page.request.post(new URL('/api/register', test.info().project.use.baseURL!).toString(), {
+    headers: { Origin: test.info().project.use.baseURL! },
+    data: { username, password: E2E_PASSWORD, displayName },
+  });
+  expect(response.status()).toBe(200);
+  const profile = await response.json() as { id: string };
+  return { username, password: E2E_PASSWORD, id: profile.id };
+}
+
+async function signInFresh(page: Page, displayName: string): Promise<TestAccount> {
+  const account = await createTestAccount(page, displayName);
   await page.goto('/');
-  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#account-status')).toContainText(`@${account.username}`);
+  return account;
+}
+
+async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => Promise<void>): Promise<TestAccount> {
+  const account = await signInFresh(page, name);
   await prepare?.();
   await openAvatarScreen(page);
   await page.locator('#name').fill(name);
@@ -22,7 +44,111 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
   await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
+  return account;
 }
+
+test('registration and sign-in create a session and clear credential fields after success', async ({ page }) => {
+  await page.goto('/');
+  const username = nextUsername();
+  const password = E2E_PASSWORD;
+  await page.locator('#show-register').click();
+  await page.locator('#register-form [name="username"]').fill(username);
+  await page.locator('#register-form [name="displayName"]').fill('同名显示');
+  await page.locator('#register-form [name="password"]').fill(password);
+  await page.locator('#register-form [name="confirmPassword"]').fill(password);
+  await page.locator('#register-form button[type="submit"]').click();
+  await expect(page.locator('#account-status')).toContainText(`@${username}`);
+  await expect(page.locator('#register-form [name="password"]')).toHaveValue('');
+  await page.locator('#sign-out').click();
+  await expect(page.locator('#account-status')).toHaveText('请登录或注册账号后进入空间。');
+  await expect(page.locator('#welcome-name')).toHaveText('小访客');
+  await page.locator('#sign-in-form [name="username"]').fill(username);
+  await page.locator('#sign-in-form [name="password"]').fill(password);
+  await page.locator('#sign-in-form button[type="submit"]').click();
+  await expect(page.locator('#account-status')).toContainText(`@${username}`);
+  await expect(page.locator('#sign-in-form [name="password"]')).toHaveValue('');
+});
+
+test('choosing a world refreshes remote appearance while preserving only edited wardrobe layers', async ({ page, browser }) => {
+  const account = await signInFresh(page, 'E2EAppearanceSync');
+  const secondDevice = await browser.newPage();
+  try {
+    await secondDevice.goto('/');
+    await secondDevice.locator('#sign-in-form [name="username"]').fill(account.username);
+    await secondDevice.locator('#sign-in-form [name="password"]').fill(account.password);
+    await secondDevice.locator('#sign-in-form button[type="submit"]').click();
+    await expect(secondDevice.locator('#account-status')).toContainText(`@${account.username}`);
+
+    const remoteAppearance = structuredClone(DEFAULT_APPEARANCE);
+    remoteAppearance.top.assetId = 'shirt';
+    const updated = await secondDevice.request.patch(new URL('/api/me', test.info().project.use.baseURL!).toString(), {
+      data: { name: 'E2EAppearanceSync', avatar: 'mint', appearance: remoteAppearance },
+    });
+    expect(updated.status()).toBe(200);
+    await page.locator('#world-list [data-world="main"]').click();
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await page.locator('[data-appearance-category="top"]').click();
+    await expect(page.locator('#appearance-choices [data-appearance-item="shirt"]')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.locator('[data-appearance-category="hair"]').click();
+    await page.locator('#appearance-choices [data-appearance-item="hair2"]').click();
+    await page.locator('#avatar-screen [data-back="login-screen"]').click();
+    const latestAppearance = structuredClone(DEFAULT_APPEARANCE);
+    latestAppearance.top.assetId = 'suit';
+    latestAppearance.hair.assetId = 'hair3';
+    const latestUpdate = await secondDevice.request.patch(new URL('/api/me', test.info().project.use.baseURL!).toString(), {
+      data: { name: 'E2EAppearanceSync', avatar: 'mint', appearance: latestAppearance },
+    });
+    expect(latestUpdate.status()).toBe(200);
+
+    await page.locator('#world-list [data-world="main"]').click();
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await page.locator('[data-appearance-category="hair"]').click();
+    await expect(page.locator('#appearance-choices [data-appearance-item="hair2"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('[data-appearance-category="top"]').click();
+    await expect(page.locator('#appearance-choices [data-appearance-item="suit"]')).toHaveAttribute('aria-pressed', 'true');
+  } finally { await secondDevice.close(); }
+});
+
+test('a second tab switching the shared session cannot receive another account tab draft', async ({ page }) => {
+  const first = await signInFresh(page, 'E2EFirstTab');
+  await openAvatarScreen(page);
+  await page.locator('[data-appearance-category="hair"]').click();
+  await page.locator('#appearance-choices [data-appearance-item="hair2"]').click();
+  await page.locator('#avatar-screen [data-back="login-screen"]').click();
+
+  const second = await page.context().newPage();
+  try {
+    const username = nextUsername();
+    const response = await second.request.post(new URL('/api/register', test.info().project.use.baseURL!).toString(), {
+      headers: { Origin: test.info().project.use.baseURL! },
+      data: { username, password: E2E_PASSWORD, displayName: 'E2ESecondTab' },
+    });
+    expect(response.status()).toBe(200);
+    await expect.poll(async () => (await page.request.get(new URL('/api/me', test.info().project.use.baseURL!).toString())).status()).toBe(200);
+    await page.locator('#world-list [data-world="main"]').click();
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await expect(page.locator('#name')).toHaveValue('E2ESecondTab');
+    await page.locator('[data-appearance-category="hair"]').click();
+    await expect(page.locator(`#appearance-choices [data-appearance-item="${DEFAULT_APPEARANCE.hair.assetId}"]`)).toHaveAttribute('aria-pressed', 'true');
+    const latest = await page.request.get(new URL('/api/me', test.info().project.use.baseURL!).toString());
+    const profile = await latest.json() as { id: string; appearance: typeof DEFAULT_APPEARANCE; currentAppearance?: typeof DEFAULT_APPEARANCE };
+    expect(profile.id).not.toBe(first.id);
+    expect(profile.currentAppearance?.hair ?? profile.appearance.hair).toEqual(DEFAULT_APPEARANCE.hair);
+  } finally { await second.close(); }
+});
+
+test('a display name edited in the wardrobe is saved when entering a world', async ({ page }) => {
+  await signInFresh(page, 'E2EDisplayNameBefore');
+  await openAvatarScreen(page);
+  await page.locator('#name').fill('衣橱里改的名字');
+  await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  const response = await page.request.get(new URL('/api/me', test.info().project.use.baseURL!).toString());
+  const profile = await response.json() as { displayName: string; name: string };
+  expect(profile.displayName ?? profile.name).toBe('衣橱里改的名字');
+});
 
 test('voice requests microphone only after opt-in and clears controls on leave', async ({ page }) => {
   await page.addInitScript(() => {
@@ -179,8 +305,7 @@ test('pre-join check opens the microphone once, enters muted, and shows a mic ov
     } });
   });
   const captures = () => page.evaluate(() => (window as Window & { voiceCaptureCalls?: number }).voiceCaptureCalls);
-  await page.goto('/');
-  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await signInFresh(page, 'VoicePrejoin');
   await captureRenderedScene(page);
   await openAvatarScreen(page);
   await page.locator('#name').fill('VoicePrejoin');
@@ -210,8 +335,7 @@ test('pre-join check opens the microphone once, enters muted, and shows a mic ov
 });
 
 test('pre-join check without the microphone enters with voice off and can go back', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await signInFresh(page, 'VoicePrejoinCancel');
   await openAvatarScreen(page);
   await page.locator('#join').click();
   await expect(page.locator('#prejoin-mic')).toHaveAttribute('aria-checked', 'false');
@@ -309,7 +433,7 @@ test('map zoom choice persists across visits', async ({ page }) => {
   await page.locator('#camera-zoom').selectOption('6');
   await page.reload();
   await expect(page.locator('#camera-zoom')).toHaveValue('6');
-  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#account-status')).toContainText('@');
   await captureRenderedScene(page);
   await openAvatarScreen(page);
   await page.locator('#join').click();
@@ -397,7 +521,9 @@ async function joinSavedProfile(page: Page) {
 }
 async function observe(): Promise<Room<SpaceProtocol>> {
   const endpoint = test.info().project.use.baseURL!;
-  const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const username = nextUsername();
+  const response = await fetch(endpoint + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: endpoint },
+    body: JSON.stringify({ username, password: E2E_PASSWORD, displayName: 'E2EObserver' }) });
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
@@ -540,7 +666,7 @@ test('map board panel publishes safe text, synchronizes browsers and keeps notes
     await expect(retained).toBeVisible();
     await expect(retained.getByRole('button')).toHaveCount(1);
     await page.reload();
-    await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+    await expect(page.locator('#account-status')).toContainText('@');
     await expect(page.locator('#name')).toHaveValue('E2EBoardAlice');
     await joinSavedProfile(page);
     await walkTo(page, observer, 'E2EBoardAlice', 'board');
@@ -1015,9 +1141,16 @@ test('health and Tiled assets are reachable through the dev server', async ({ re
 });
 
 
-test('binding a second browser restores the same identity, profile and note permissions', async ({ page, browser }) => {
-  await enter(page, 'E2EBound', 'violet');
+test('logging into a second browser restores the same account, profile, outfits and note permissions', async ({ page, browser }) => {
+  const account = await enter(page, 'E2EBound', 'violet');
+  const profileResponse = await page.request.get(new URL('/api/me', test.info().project.use.baseURL!).toString());
+  const profile = await profileResponse.json() as { id: string; currentAppearance: typeof DEFAULT_APPEARANCE };
+  const outfitResponse = await page.request.put(new URL('/api/me/outfits/0', test.info().project.use.baseURL!).toString(), {
+    data: { name: '跨设备造型', appearance: profile.currentAppearance },
+  });
+  expect(outfitResponse.status()).toBe(200);
   const target = await browser.newPage();
+  const outsider = await browser.newPage();
   const observer = await observe();
   try {
     await walkTo(page, observer, 'E2EBound', 'board');
@@ -1027,27 +1160,27 @@ test('binding a second browser restores the same identity, profile and note perm
     await expect(page.locator('#feature-status')).toContainText('留言已发布');
     await page.locator('#leave').click();
     await expect(page.locator('#status')).toContainText('已离开');
-    await page.locator('#login-screen summary').click();
-    await page.locator('#identity-export').click();
-    await expect(page.locator('#identity-code')).toHaveValue(/.{32}/);
-    const code = await page.locator('#identity-code').inputValue();
-    const identity = await page.locator('#identity-status').textContent();
-
     await target.goto('/');
-    await expect(target.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
-    await target.locator('#login-screen summary').click();
-    await target.locator('#identity-code').fill(code);
-    await target.locator('#identity-import').click();
-    await expect(target.locator('#identity-feedback')).toHaveText('已绑定同一身份');
-    await expect(target.locator('#identity-status')).toHaveText(identity!);
+    await target.locator('#sign-in-form [name="username"]').fill(account.username);
+    await target.locator('#sign-in-form [name="password"]').fill(account.password);
+    await target.locator('#sign-in-form button[type="submit"]').click();
+    await expect(target.locator('#account-status')).toContainText(`@${account.username}`);
     await expect(target.locator('#name')).toHaveValue('E2EBound');
     await expect.poll(async () => (await target.evaluate(async () =>
-      (await (await fetch('/api/me')).json()).appearance.top.assetId)) as string).toBe('shirt');
+      (await (await fetch('/api/me')).json()).currentAppearance.top.assetId)) as string).toBe('shirt');
+    const sharedOutfits = await target.request.get(new URL('/api/me/outfits', test.info().project.use.baseURL!).toString());
+    expect((await sharedOutfits.json() as Array<{ name: string } | null>)[0]?.name).toBe('跨设备造型');
     await joinSavedProfile(target);
     await walkTo(target, observer, 'E2EBound', 'board');
     await target.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
     await expect(target.locator('#feature-status')).toContainText('留言已删除');
-  } finally { if (observer.connection.isOpen) await observer.leave(); await target.close(); }
+    const outsiderAccount = await createTestAccount(outsider, 'E2EOutsider');
+    await outsider.goto('/');
+    await expect(outsider.locator('#account-status')).toContainText(`@${outsiderAccount.username}`);
+    const isolatedOutfits = await outsider.request.get(new URL('/api/me/outfits', test.info().project.use.baseURL!).toString());
+    expect(await isolatedOutfits.json()).toEqual([null, null, null]);
+    expect(account.id).toBe(profile.id);
+  } finally { if (observer.connection.isOpen) await observer.leave(); await target.close(); await outsider.close(); }
 });
 
 
@@ -1161,8 +1294,7 @@ test('Portal switches rendered maps, loads multiple tilesets and preserves the c
 
 test('wardrobe previews items, keeps three named outfit slots and remembers display preferences', async ({ page }) => {
   test.setTimeout(45000); // Two reloads plus a profile save and a room join.
-  await page.goto('/');
-  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await signInFresh(page, 'E2EWardrobe');
   await page.locator('#theme-toggle').click();
   await page.locator('.theme-option', { hasText: '自定义' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'custom');
@@ -1186,13 +1318,15 @@ test('wardrobe previews items, keeps three named outfit slots and remembers disp
   await slots.nth(0).getByRole('button', { name: '存到这里' }).click();
   await expect(page.locator('#outfit-status')).toContainText('已存到槽位 1「上班」');
   await expect(slots.nth(0)).toHaveAttribute('data-filled', 'true');
+  const savedOutfits = await page.request.get(new URL('/api/me/outfits', test.info().project.use.baseURL!).toString());
+  expect((await savedOutfits.json() as Array<{ name: string } | null>)[0]?.name).toBe('上班');
   await slots.nth(0).getByRole('button', { name: '覆盖' }).click();
   await expect(slots.nth(0).getByRole('button', { name: '确认覆盖？' })).toBeVisible();
   await page.keyboard.press('Escape');
 
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'custom');
-  await expect(page.locator('#identity-status')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#account-status')).toContainText('@');
   await openAvatarScreen(page);
   await page.locator('#save-appearance').click();
   await expect(page.locator('#outfit-slots .slot-card').nth(0).locator('input')).toHaveValue('上班');
@@ -1349,7 +1483,7 @@ test('selector choices survive state patches, take priority over web areas, and 
 test('Space tiles follow the registry and selecting a Space uses its own initial map', async ({ page }) => {
   const response = await page.request.get('/api/world');
   const registry = worldRegistryResponseSchema.parse(await response.json());
-  await page.goto('/');
+  await signInFresh(page, 'OtherSpace');
   await expect(page.locator('#world-list [data-world]')).toHaveCount(registry.spaces.length);
   expect(await page.locator('#world-list [data-world]').evaluateAll(tiles => tiles.map(tile => tile.getAttribute('data-world'))))
     .toEqual(registry.spaces.map(space => space.id));
