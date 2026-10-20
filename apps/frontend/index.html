@@ -19,9 +19,9 @@
         <section class="flow-screen active" id="login-screen" aria-labelledby="welcome-title">
           <div class="welcome-grid" id="welcome-grid">
             <section class="panel welcome-card" aria-labelledby="welcome-title">
-              <h1 id="welcome-title">欢迎来到<br />像素小镇</h1>
+              <h1 id="welcome-title">欢迎来到像素小镇</h1>
               <p class="lead">使用账号登录或注册后进入空间。用户名用于登录，显示名称可以与其他人相同。</p>
-              <div class="last-outfit">
+              <div class="last-outfit" id="welcome-outfit">
                 <span class="last-outfit-stage"><canvas id="welcome-canvas" width="16" height="24" aria-hidden="true"></canvas></span>
                 <span class="last-outfit-text"><small>当前造型</small><strong id="welcome-name">小访客</strong><small>选一个世界后可以换装</small></span>
               </div>
@@ -49,11 +49,11 @@
               </section>
             </section>
             <section class="panel worlds-card" aria-labelledby="world-title">
-              <div class="section-heading"><h2 id="world-title">去哪儿玩？</h2><span>选好世界后进入试衣间</span></div>
+              <div class="section-heading"><h2 id="world-title">去哪儿玩？</h2><span id="world-subtitle">选好世界后进入试衣间</span></div>
               <div class="world-grid" id="world-list" aria-live="polite">正在加载空间…</div>
+              <p class="key-hints" id="key-hints"><b>在地图里</b><span><kbd>WASD</kbd> 移动</span><span><kbd>E</kbd> 互动 / 坐下</span><span><kbd>Enter</kbd> 聊天</span><span>手机上用屏幕方向键</span></p>
             </section>
           </div>
-          <p class="key-hints" id="key-hints"><b>在地图里</b><span><kbd>WASD</kbd> 移动</span><span><kbd>E</kbd> 互动 / 坐下</span><span><kbd>Enter</kbd> 聊天</span><span>手机上用屏幕方向键</span></p>
           <dialog id="password-dialog" class="panel account-dialog" aria-labelledby="password-title">
             <h2 id="password-title">修改密码</h2>
             <form id="password-form" class="account-form"><label>当前密码<input name="currentPassword" type="password" autocomplete="current-password" required /></label><label>新密码<input name="newPassword" type="password" autocomplete="new-password" required minlength="8" /></label><label>再次输入新密码<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label><p id="password-feedback" role="status"></p><div class="account-buttons"><button class="primary" type="submit">修改密码</button><button id="close-password" class="secondary" type="button">关闭</button></div></form>
@@ -132,22 +132,27 @@
           <div class="map-topbar">
             <div class="hud-chip"><strong id="map-world-name">阳光大厅</strong><span id="status" role="status" aria-live="polite">连接中…</span><span id="voice-status" role="status" aria-live="polite">语音已关闭</span></div>
             <div class="hud-buttons">
-              <!-- Speaker and mic icons: pixelarticons (MIT, © 2019 Gerrit Halfmann), https://github.com/halfmage/pixelarticons -->
-              <button id="sound-toggle" class="secondary icon-button state-icon" type="button" aria-pressed="true" aria-label="关闭声音" title="关闭声音"><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M11 22H9v-2H7v-2h2V6H7V4h2V2h2v20Zm8 0h-6v-2h6v2Zm2-2h-2v-2h2v2ZM7 18H5v-2h2v2Zm10 0h-4v-2h4v2Zm6 0h-2V6h2v12ZM5 10H3v4h2v2H1V8h4v2Zm14 6h-2V8h2v8Zm-4-2h-2v-4h2v4ZM7 8H5V6h2v2Zm10 0h-4V6h4v2Zm4-2h-2V4h2v2Zm-2-2h-6V2h6v2Z"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13 22h-2v-2H9v-2h2V6H9V4h2V2h2v20Zm-4-4H7v-2h2v2Zm-2-8H5v4h2v2H3V8h4v2Zm10.001 5.224h-2v-2H17v-2h-1.999v-2h2v2H19v2h-1.999v2Zm3.999 0h-2v-2h2v2Zm0-4h-2v-2h2v2ZM9 8H7V6h2v2Z"/></svg></button>
-              <button id="voice-mic" class="secondary icon-button state-icon" type="button" aria-pressed="false" aria-label="开启麦克风" title="开启麦克风" disabled><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10 2h4v2h-4zM8 4h2v10H8zm2 10h4v2h-4zm4-10h2v10h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm2-6h2v6h-2zm-7 10h2v2h-2z"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10 2h4v2h-4zM8 8h2v6H8zm2 6h4v2h-4zm4-10h2v6h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm-2-2h2v2h-2zm-2-2h2v2h-2zm-2-2h2v2h-2zM8 8h2v2H8zM6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm16 16h2v2h-2zm2 2h2v2h-2zm-2-10h2v4h-2zm-7 10h2v2h-2z"/></svg></button>
               <button id="settings-toggle" class="secondary icon-button" type="button" aria-label="设置" aria-expanded="false" aria-controls="settings-panel"><svg viewBox="0 0 10 10" aria-hidden="true"><path fill="currentColor" d="M4 0h2v2h1V1h1v1h1v1H8v1h2v2H8v1h1v1H8v1H7V8H6v2H4V8H3v1H2V8H1V7h1V6H0V4h2V3H1V2h1V1h1v1h1zm0 4v2h2V4z"/></svg></button>
               <button id="leave" class="secondary" type="button">离开</button>
             </div>
           </div>
+          <div class="map-dock" role="toolbar" aria-label="语音">
+            <!-- Speaker and mic icons: pixelarticons (MIT, © 2019 Gerrit Halfmann), https://github.com/halfmage/pixelarticons -->
+            <button id="sound-toggle" class="secondary icon-button state-icon" type="button" aria-pressed="true" aria-label="关闭声音" title="关闭声音"><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M11 22H9v-2H7v-2h2V6H7V4h2V2h2v20Zm8 0h-6v-2h6v2Zm2-2h-2v-2h2v2ZM7 18H5v-2h2v2Zm10 0h-4v-2h4v2Zm6 0h-2V6h2v12ZM5 10H3v4h2v2H1V8h4v2Zm14 6h-2V8h2v8Zm-4-2h-2v-4h2v4ZM7 8H5V6h2v2Zm10 0h-4V6h4v2Zm4-2h-2V4h2v2Zm-2-2h-6V2h6v2Z"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13 22h-2v-2H9v-2h2V6H9V4h2V2h2v20Zm-4-4H7v-2h2v2Zm-2-8H5v4h2v2H3V8h4v2Zm10.001 5.224h-2v-2H17v-2h-1.999v-2h2v2H19v2h-1.999v2Zm3.999 0h-2v-2h2v2Zm0-4h-2v-2h2v2ZM9 8H7V6h2v2Z"/></svg></button>
+            <button id="voice-mic" class="secondary icon-button state-icon" type="button" aria-pressed="false" aria-label="开启麦克风" title="开启麦克风" disabled><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10 2h4v2h-4zM8 4h2v10H8zm2 10h4v2h-4zm4-10h2v10h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm2-6h2v6h-2zm-7 10h2v2h-2z"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10 2h4v2h-4zM8 8h2v6H8zm2 6h4v2h-4zm4-10h2v6h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm-2-2h2v2h-2zm-2-2h2v2h-2zm-2-2h2v2h-2zM8 8h2v2H8zM6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm16 16h2v2h-2zm2 2h2v2h-2zm-2-10h2v4h-2zm-7 10h2v2h-2z"/></svg></button>
+          </div>
           <section id="settings-panel" class="panel settings-panel" aria-label="设置" hidden>
             <h2>显示</h2>
-            <label>地图缩放<select id="camera-zoom"><option value="auto">自动（3x）</option><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option></select></label>
+            <div class="zoom-field">
+              <div class="zoom-head"><label for="camera-zoom">地图缩放</label><output id="camera-zoom-value" for="camera-zoom">自动 · 3x</output></div>
+              <div class="zoom-row"><div class="zoom-track"><input id="camera-zoom" class="range" type="range" step="1" /><div id="camera-zoom-ticks" class="zoom-ticks" aria-hidden="true"></div></div><button id="camera-zoom-auto" class="secondary zoom-auto" type="button" aria-pressed="true">自动</button></div>
+            </div>
             <button id="names-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>显示昵称</button>
             <button id="typing-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>让别人看到我正在输入</button>
             <div role="radiogroup" aria-labelledby="chat-mode-title" class="chat-modes"><span id="chat-mode-title">聊天栏背景</span><div><button type="button" role="radio" data-chat-mode="clear">透明</button><button type="button" role="radio" data-chat-mode="half">半透明</button><button type="button" role="radio" data-chat-mode="solid">实心</button></div></div>
             <h2>附近语音</h2>
             <label class="mic-field">麦克风<select id="voice-device"></select></label>
-            <p class="hint">右上角麦克风键开麦或闭麦，喇叭键开关所有声音。首次开麦请求麦克风权限，仅与同地图附近的人通话。</p>
+            <p class="hint">底部麦克风键开麦或闭麦，喇叭键开关所有声音。首次开麦请求麦克风权限，仅与同地图附近的人通话。</p>
             <button id="voice-disconnect" class="secondary" type="button" hidden>断开语音并释放麦克风</button>
             <button id="chat-reset" class="secondary" type="button">聊天框位置与大小复原</button>
             <button id="layout-edit" class="secondary touch-only" type="button">调整按键布局</button>
@@ -161,7 +166,7 @@
           <section id="layout-panel" class="panel layout-panel" aria-labelledby="layout-title" hidden>
             <h2 id="layout-title">调整按键布局</h2>
             <p class="hint">拖动方向键和动作按钮到顺手的位置。</p>
-            <label class="layout-scale">方向键大小<span><input id="pad-scale" type="range" step="5" /><output id="pad-scale-value" for="pad-scale">100%</output></span></label>
+            <label class="layout-scale">方向键大小<span><input id="pad-scale" class="range" type="range" step="5" /><output id="pad-scale-value" for="pad-scale">100%</output></span></label>
             <div class="layout-actions"><button id="layout-reset" class="secondary" type="button">复原</button><button id="layout-done" class="primary" type="button">完成</button></div>
           </section>
           <div id="positional-controls" class="positional-controls">
