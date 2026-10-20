@@ -84,8 +84,6 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .picker { width: 300px; max-width: 100%; display: flex; flex-direction: column; gap: 14px; }
 .picker-field { --picker-hue: 330; position: relative; height: 180px; cursor: crosshair; touch-action: none; box-shadow: var(--px-flat);
   background-color: hsl(var(--picker-hue), 100%, 50%); background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
-.picker-zone { position: absolute; top: 0; outline: 2px dashed #fff; box-shadow: 0 0 0 2px #5a4b72; pointer-events: none; }
-.picker-zone-label { position: absolute; margin: 4px 0 0 4px; padding: 1px 5px; background: #5a4b72; color: #fff; font-size: 11px; font-weight: 700; pointer-events: none; }
 .picker-knob { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #5a4b72; pointer-events: none; }
 .picker-row { display: flex; align-items: center; gap: 12px; }
 .picker-swatch { width: 36px; height: 36px; flex: none; border-radius: 50%; box-shadow: var(--px-flat); }
@@ -94,13 +92,10 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .picker-hue-knob { position: absolute; top: -4px; width: 8px; height: 24px; margin-left: -4px; background: #fff; box-shadow: 0 0 0 2px #5a4b72; pointer-events: none; }
 .picker-dropper { width: 36px; min-height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; box-shadow: none; }
 .picker-dropper svg { width: 20px; height: 20px; }
-.picker-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.picker-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); gap: 8px; }
 .picker-fields label { align-items: center; gap: 4px; font-size: 12px; }
 .picker-fields input { min-height: 40px; padding: 8px 2px; text-align: center; }
 .picker-hex { font-family: var(--pixel); font-size: 13px; }
-.picker-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; }
-.picker-badge { padding: 3px 8px; font-size: 12px; font-weight: 700; color: #4a3d60; background: #fff0b0; }
-.picker-badge[data-soft="true"] { background: #e3f4ec; }
 
 /* Start screen */
 .welcome-grid { display: flex; flex-wrap: wrap; gap: 32px; align-items: stretch; }
@@ -159,10 +154,19 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .item-card[aria-pressed="true"] .item-cell::after { content: ''; position: absolute; top: 5px; right: 5px; width: 10px; height: 10px; background: var(--accent); box-shadow: 0 0 0 2px var(--field), 0 0 0 4px var(--line); }
 .color-section { display: flex; flex-direction: column; gap: 14px; padding-top: 20px; border-top: 3px dashed var(--soft); }
 .color-section h3 { font-size: 20px; }
-.color-columns { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
-.swatch-column { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.swatch-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; max-width: 340px; }
-.swatch { min-height: 36px; aspect-ratio: 1; padding: 0; }
+/* Swatches take the free width beside a fixed picker; a narrow section stacks them. */
+.color-section { container-type: inline-size; }
+.color-columns { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 32px; align-items: start; }
+.swatch-column { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.swatch-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.swatch { min-height: 32px; aspect-ratio: 1; padding: 0; }
+.picker-column .picker { width: 100%; }
+.picker-column .picker-field { height: 150px; }
+@container (max-width: 520px) {
+  .color-columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .swatch-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
+  .picker-column .picker { max-width: 360px; }
+}
 .swatch[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 4px; }
 .picker-column { display: flex; flex-direction: column; gap: 10px; }
 .avatar-actions { flex-basis: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
@@ -300,8 +304,19 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 
 /* Interaction panels */
 #interaction-panels { position: absolute; z-index: 6; top: 130px; left: 16px; display: grid; gap: 12px; pointer-events: none; }
-.feature-panel { width: min(340px, calc(100vw - 32px)); max-height: 50vh; overflow: auto; padding: 16px; background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); pointer-events: auto; }
-.feature-panel h2 { margin-bottom: 8px; font-size: 18px; }
+.feature-panel { position: relative; width: var(--panel-width, min(340px, calc(100vw - 32px))); height: var(--panel-height, auto); max-height: var(--panel-height, 50vh); display: flex; flex-direction: column; padding: 12px 16px 16px; background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); pointer-events: auto; }
+/* Dragged panels leave the default stack; viewport coordinates come from PanelLayout. */
+.feature-panel.floating { position: fixed; }
+.feature-panel.collapsed { width: auto; height: auto; max-height: none; padding-bottom: 12px; }
+.feature-panel.adjusting { user-select: none; -webkit-user-select: none; }
+.panel-heading { display: flex; align-items: center; gap: 8px; cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; }
+.panel-heading h2 { flex: 1; margin: 0; font-size: 18px; }
+.panel-toggle { flex: none; min-height: 32px; padding: 0 8px; background: none; box-shadow: none; font-size: 13px; }
+/* Padding keeps pixel outlines, button drop shadows and the hover lift inside the scroll clip;
+   negative margins cancel it so the visible spacing is unchanged. */
+.panel-body { flex: 1; min-height: 0; overflow: auto; margin: 4px -4px -4px; padding: 4px 4px 8px; }
+.panel-resize { position: absolute; right: -6px; bottom: -6px; z-index: 1; width: 20px; height: 20px; cursor: nwse-resize; touch-action: none; }
+.feature-panel.collapsed .panel-resize { display: none; }
 .feature-panel p { margin: 6px 0; font-size: 13px; }
 .feature-panel ol { max-height: 180px; overflow: auto; padding-left: 22px; }
 .feature-panel form, .timer-controls { display: flex; flex-direction: column; gap: 10px; }
@@ -315,6 +330,9 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .variant-footer button { flex: none; }
 
 /* Message board notes: own/admin notes get a trash button centred on the right. */
+/* The note list takes the space a resized panel gives it; the form stays in view. */
+#board-body { display: flex; flex-direction: column; }
+#board-notes { flex: 1 1 auto; min-height: 60px; max-height: none; }
 #board-notes li { margin-bottom: 8px; }
 /* Only grows vertically, from its initial three rows up to a bound that keeps it inside the panel. */
 #board-text { resize: vertical; min-height: calc(3lh + 20px); max-height: 30vh; }
@@ -341,6 +359,66 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .tv-knobs span { width: 18px; height: 18px; background: var(--soft); box-shadow: var(--px-flat); }
 .tv-knobs span:last-child { width: 10px; height: 10px; margin-top: auto; background: var(--accent); }
 .tv-stand { width: 30%; height: 14px; background: var(--line); clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
+
+/* Desktop wardrobe fits one screen: the page stops scrolling, the mirror and join button stay in view,
+   and the item list scrolls inside the wardrobe when the window is short. Phones keep page scrolling. */
+@media (min-width: 900px) and (min-height: 480px) {
+  body.avatar-open { height: 100dvh; min-height: 0; overflow: hidden; }
+  body.avatar-open #app-shell { height: 100dvh; display: flex; flex-direction: column; padding: 12px 20px 16px; }
+  body.avatar-open .masthead { margin-bottom: 10px; }
+  body.avatar-open .brand-icon { width: 28px; height: 28px; }
+  body.avatar-open .brand b { font-size: 19px; }
+  body.avatar-open main, #avatar-screen.active { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #avatar-screen .steps { margin-bottom: 12px; gap: 10px; font-size: 13px; }
+  #avatar-screen .steps li { padding: 3px 12px; }
+  .avatar-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: clamp(270px, 27vw, 330px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-auto-rows: auto; align-items: stretch; gap: 14px 24px; }
+  .avatar-actions, .join-feedback { grid-column: 1 / -1; }
+  .avatar-actions .big { min-height: 44px; padding: 6px 26px; font-size: 17px; }
+  .mirror h1, .wardrobe h2 { font-size: 22px; }
+
+  .mirror { min-height: 0; overflow: auto; padding: 14px 16px 16px; gap: 10px; }
+  .mirror-stage { flex: 1 1 0; height: auto; min-height: 130px; padding-bottom: 10px; }
+  .mirror-stage canvas { width: auto; height: clamp(72px, calc(100% - 44px), 192px); }
+  .mirror-shadow { bottom: 38px; width: min(104px, 40%); }
+  .mirror-controls button, .appearance-actions button { min-height: 38px; }
+  .appearance-actions { gap: 8px; }
+  .appearance-actions button { padding: 6px 4px; font-size: 13px; }
+  .name-field { flex-direction: row; align-items: center; gap: 10px; white-space: nowrap; }
+  .name-field input { min-height: 38px; padding: 6px 10px; }
+
+  .wardrobe { min-height: 0; padding: 14px 16px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px 20px; }
+  .wardrobe > .section-heading { align-self: center; }
+  .wardrobe-tabs { gap: 8px; }
+  .wardrobe-tabs button { min-height: 34px; padding: 4px 12px; font-size: 14px; }
+  .item-grid, .color-section { grid-column: 1 / -1; }
+  .item-grid { min-height: 0; overflow: auto; align-content: start; grid-auto-rows: max-content; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 12px; padding: 4px 4px 8px; }
+  .item-card { gap: 4px; padding: 6px 6px 8px; font-size: 12px; }
+  .item-cell { height: clamp(56px, 9vh, 92px); }
+  .item-cell canvas { width: 32px; height: 48px; }
+
+  .color-section { padding-top: 12px; gap: 8px; }
+  .color-section h3 { display: none; } /* The swatch title already names the layer's palette. */
+  .color-columns { grid-template-columns: auto minmax(0, 1fr); gap: 28px; }
+  .swatch-column, .picker-column { gap: 8px; }
+  .swatch-grid { grid-template-columns: repeat(8, 28px); gap: 8px; }
+  .swatch { min-height: 28px; box-shadow: var(--px-flat); }
+  .swatch[aria-pressed="true"] { outline-width: 2px; outline-offset: 3px; }
+  .picker-column .picker { display: grid; grid-template-columns: minmax(90px, 0.8fr) minmax(170px, 1.5fr); gap: 10px 12px; }
+  .picker-column .picker-field { grid-row: 1 / 3; height: 104px; }
+  .picker-column .picker-swatch { display: none; }
+  .picker-column .picker-fields { gap: 6px; }
+  .picker-column .picker-fields input { min-height: 34px; padding: 4px 2px; font-size: 13px; }
+  .picker-column .picker-hex { font-size: 11px; }
+}
+/* Taller windows get the full-size sprites (integer 3x scale) and roomier colour controls. */
+@media (min-width: 900px) and (min-height: 700px) {
+  .item-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 14px; }
+  .item-cell { height: 92px; }
+  .item-cell canvas { width: 48px; height: 72px; }
+  .swatch-grid { grid-template-columns: repeat(8, 34px); gap: 10px; }
+  .swatch { min-height: 34px; }
+  .picker-column .picker-field { height: 136px; }
+}
 
 @media (max-width: 700px) {
   .welcome-card h1 { font-size: 30px; }

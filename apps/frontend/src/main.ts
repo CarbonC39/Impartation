@@ -20,6 +20,7 @@ import { ProximityVoice } from './voice';
 import { TouchPad } from './touchPad';
 import { LayoutEditor } from './layoutEditor';
 import { ChatLayout } from './chatLayout';
+import { PanelLayout } from './panelLayout';
 import { mountPrejoin, type VoicePlan } from './prejoin';
 import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
 import { automaticCameraZoom, cameraZoomPreference, setCameraZoomPreference } from './cameraZoom';
@@ -118,6 +119,7 @@ element<HTMLButtonElement>('chat-reset').addEventListener('click', event => {
   chatLayout.reset();
   (event.currentTarget as HTMLButtonElement).blur();
 });
+for (const panel of document.querySelectorAll<HTMLElement>('#interaction-panels .feature-panel')) new PanelLayout(panel);
 chatToggle.addEventListener('click', () => {
   setChatCollapsed(!chatCard.classList.contains('collapsed'));
   chatToggle.blur(); // Return keyboard movement to the map.
@@ -169,6 +171,7 @@ function showScreen(id: string) {
     screen.hidden = !active;
   });
   document.body.classList.toggle('map-open', id === 'map-screen');
+  document.body.classList.toggle('avatar-open', id === 'avatar-screen');
   if (id === 'map-screen') { touchPad.refresh(); layoutEditor.refresh(); chatLayout.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
   if (id === 'login-screen') renderWelcome();
 }
