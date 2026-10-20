@@ -1,7 +1,5 @@
-import { SOFT_COLOR_ZONE, clampSoftHsv, hexToHsv, hexToRgb, hsvToHex, isSoftColor, rgbToHex, type Hsv } from '@virtual-workspace/shared';
-import { readPreference, writePreference } from './preferences';
+import { hexToHsv, hexToRgb, hsvToHex, rgbToHex, type Hsv } from '@virtual-workspace/shared';
 
-const LOCK_KEY = 'virtual-workspace-soft-lock';
 const HEX = /^#[0-9a-fA-F]{6}$/;
 type EyeDropperWindow = Window & { EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> } };
 
@@ -14,14 +12,10 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string,
   return node;
 }
 
-/**
- * Saturation/value field, hue strip, RGB/HEX fields and an optional eyedropper.
- * The soft range is always outlined in the field's top-left; locking clamps every pick into it.
- */
+/** Saturation/value field, hue strip, RGB/HEX fields and an optional eyedropper. */
 export function createColorPicker(label: string, initial: string, onChange: (hex: string) => void): ColorPicker {
   let value = initial.toLowerCase();
   let hsv: Hsv = hexToHsv(value);
-  let locked = readPreference(LOCK_KEY) === 'true';
 
   const root = make('div', 'picker');
   root.setAttribute('role', 'group');
@@ -31,15 +25,8 @@ export function createColorPicker(label: string, initial: string, onChange: (hex
   field.tabIndex = 0;
   field.setAttribute('role', 'slider');
   field.setAttribute('aria-label', `${label}：饱和度与明度`);
-  const zone = make('span', 'picker-zone');
-  zone.style.left = `${SOFT_COLOR_ZONE.minSaturation * 100}%`;
-  zone.style.width = `${(SOFT_COLOR_ZONE.maxSaturation - SOFT_COLOR_ZONE.minSaturation) * 100}%`;
-  zone.style.height = `${(1 - SOFT_COLOR_ZONE.minValue) * 100}%`;
-  const zoneLabel = make('span', 'picker-zone-label', '柔和区');
-  zoneLabel.style.left = zone.style.left;
-  zoneLabel.style.top = zone.style.height;
   const fieldKnob = make('span', 'picker-knob');
-  field.append(zone, zoneLabel, fieldKnob);
+  field.append(fieldKnob);
 
   const row = make('div', 'picker-row');
   const swatch = make('span', 'picker-swatch');
@@ -91,15 +78,7 @@ export function createColorPicker(label: string, initial: string, onChange: (hex
   hexWrapper.prepend(hexInput);
   fields.append(hexWrapper);
 
-  const footer = make('div', 'picker-footer');
-  const lock = make('button', 'switch');
-  lock.type = 'button';
-  lock.setAttribute('role', 'switch');
-  lock.append(make('span', 'switch-track'), document.createTextNode('锁定在柔和区'));
-  const badge = make('span', 'picker-badge');
-  badge.setAttribute('role', 'status');
-  footer.append(lock, badge);
-  root.append(field, row, fields, footer);
+  root.append(field, row, fields);
 
   function render() {
     field.style.setProperty('--picker-hue', String(Math.round(hsv.h)));
@@ -112,13 +91,9 @@ export function createColorPicker(label: string, initial: string, onChange: (hex
     swatch.style.background = value;
     hexToRgb(value).forEach((channel, index) => { channels[index]!.value = String(channel); });
     if (document.activeElement !== hexInput) hexInput.value = value;
-    lock.setAttribute('aria-checked', String(locked));
-    const soft = isSoftColor(value);
-    badge.textContent = soft ? '在柔和区内' : '在柔和区外，可能偏艳';
-    badge.dataset.soft = String(soft);
   }
   function commit(next: Hsv) {
-    hsv = locked ? clampSoftHsv(next) : next;
+    hsv = next;
     value = hsvToHex(hsv);
     render();
     onChange(value);
@@ -156,11 +131,6 @@ export function createColorPicker(label: string, initial: string, onChange: (hex
     if (delta === undefined) return;
     event.preventDefault();
     commit({ ...hsv, h: (hsv.h + delta + 360) % 360 });
-  });
-  lock.addEventListener('click', () => {
-    locked = !locked;
-    writePreference(LOCK_KEY, String(locked));
-    if (locked && !isSoftColor(value)) commit(hsv); else render();
   });
   render();
   return {

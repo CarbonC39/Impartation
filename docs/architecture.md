@@ -82,7 +82,7 @@ sequenceDiagram
 
 打开页面时恢复已有资料；没有有效账号 session 时，用户先注册或登录。账号注册由 `REGISTRATION_MODE` 控制，认证成功后才可保存资料和加入空间。客户端校验 `/api/world` 响应并从按 registry 顺序显示的 Space 列表中选择一个，加入时提交其 `spaceId`；等待房间初始状态后，用本玩家 `mapId` 选择地图。所选 Space 的 `initialMap` 是初始入口。
 
-界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、柔和区锁定、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观，不强制柔和区。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
+界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
 
 Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建额外实例。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 

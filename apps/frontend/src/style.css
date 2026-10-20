@@ -84,8 +84,6 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .picker { width: 300px; max-width: 100%; display: flex; flex-direction: column; gap: 14px; }
 .picker-field { --picker-hue: 330; position: relative; height: 180px; cursor: crosshair; touch-action: none; box-shadow: var(--px-flat);
   background-color: hsl(var(--picker-hue), 100%, 50%); background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
-.picker-zone { position: absolute; top: 0; outline: 2px dashed #fff; box-shadow: 0 0 0 2px #5a4b72; pointer-events: none; }
-.picker-zone-label { position: absolute; margin: 4px 0 0 4px; padding: 1px 5px; background: #5a4b72; color: #fff; font-size: 11px; font-weight: 700; pointer-events: none; }
 .picker-knob { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #5a4b72; pointer-events: none; }
 .picker-row { display: flex; align-items: center; gap: 12px; }
 .picker-swatch { width: 36px; height: 36px; flex: none; border-radius: 50%; box-shadow: var(--px-flat); }
@@ -94,13 +92,10 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .picker-hue-knob { position: absolute; top: -4px; width: 8px; height: 24px; margin-left: -4px; background: #fff; box-shadow: 0 0 0 2px #5a4b72; pointer-events: none; }
 .picker-dropper { width: 36px; min-height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; box-shadow: none; }
 .picker-dropper svg { width: 20px; height: 20px; }
-.picker-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.picker-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); gap: 8px; }
 .picker-fields label { align-items: center; gap: 4px; font-size: 12px; }
 .picker-fields input { min-height: 40px; padding: 8px 2px; text-align: center; }
 .picker-hex { font-family: var(--pixel); font-size: 13px; }
-.picker-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; }
-.picker-badge { padding: 3px 8px; font-size: 12px; font-weight: 700; color: #4a3d60; background: #fff0b0; }
-.picker-badge[data-soft="true"] { background: #e3f4ec; }
 
 /* Start screen */
 .welcome-grid { display: flex; flex-wrap: wrap; gap: 32px; align-items: stretch; }
@@ -150,18 +145,22 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .key-hints b { color: var(--ink); }
 
 /* Wardrobe screen */
-.steps { list-style: none; margin: 0 0 24px; padding: 0; display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; font-weight: 700; }
-.steps li { display: flex; align-items: center; gap: 8px; padding: 6px 14px; background: var(--panel); color: var(--ink2); box-shadow: var(--px-sm); }
+.steps { list-style: none; margin: 0; padding: 0; display: none; gap: 10px; flex-wrap: wrap; font-size: 14px; font-weight: 700; }
+/* The progress steps sit in the masthead between the brand and the theme button, only while choosing an outfit. */
+body.avatar-open .masthead { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+body.avatar-open .masthead .steps { display: flex; justify-self: center; }
+body.avatar-open #theme-toggle { justify-self: end; }
+.steps li { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: var(--panel); color: var(--ink2); box-shadow: var(--px-sm); }
 .steps li[aria-current="step"] { background: var(--sel); color: var(--sel-ink); }
 .steps li > span:first-child { font-family: var(--pixel); }
 .avatar-layout { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
 .mirror { flex: 1 1 340px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 .mirror h1, .wardrobe h2 { font-size: 28px; }
-.mirror-stage { position: relative; height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 24px; overflow: hidden; box-shadow: var(--px-sm);
-  background-color: var(--soft); background-image: linear-gradient(transparent 62%, var(--drop) 62%), repeating-conic-gradient(var(--cell) 0 25%, var(--soft) 0 50%); background-size: 100% 100%, 32px 32px; }
-.mirror-stage canvas { position: relative; width: 128px; height: 192px; image-rendering: pixelated; }
-.mirror-shadow { position: absolute; bottom: 52px; width: 104px; height: 14px; background: var(--line); opacity: .35; }
-.name-tag { margin-top: 8px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 900; color: var(--ink);
+.mirror-stage { position: relative; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 4%; overflow: hidden; box-shadow: var(--px-sm);
+  background-color: var(--soft); background-image: linear-gradient(transparent 64%, var(--drop) 64%), repeating-conic-gradient(var(--cell) 0 25%, var(--soft) 0 50%); background-size: 100% 100%, 32px 32px; }
+.mirror-stage canvas { position: relative; z-index: 1; width: 128px; height: 192px; image-rendering: pixelated; }
+.mirror-shadow { position: relative; order: 1; width: min(104px, 40%); height: 12px; margin-top: -10px; background: var(--line); opacity: .35; }
+.name-tag { order: 2; margin-top: 8px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 900; color: var(--ink);
   text-shadow: 1px 0 0 var(--panel), -1px 0 0 var(--panel), 0 1px 0 var(--panel), 0 -1px 0 var(--panel); }
 .mirror-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .appearance-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -173,14 +172,26 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .item-cell { position: relative; width: 100%; height: 92px; display: flex; align-items: center; justify-content: center; background: var(--cell); }
 .item-cell canvas { width: 48px; height: 72px; image-rendering: pixelated; }
 .item-card[aria-pressed="true"] .item-cell { background: var(--panel); }
-.item-card[aria-pressed="true"] .item-cell::after { content: ''; position: absolute; top: 5px; right: 5px; width: 10px; height: 10px; background: var(--accent); box-shadow: 0 0 0 2px var(--field), 0 0 0 4px var(--line); }
+/* Empty inventory slots keep the grid full when a category has few items; purely decorative. */
+.item-slot { min-height: var(--item-height, 0); background: var(--cell); box-shadow: inset 0 0 0 2px var(--soft); opacity: .7; pointer-events: none; }
 .color-section { display: flex; flex-direction: column; gap: 14px; padding-top: 20px; border-top: 3px dashed var(--soft); }
 .color-section h3 { font-size: 20px; }
-.color-columns { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
-.swatch-column { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.swatch-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; max-width: 340px; }
-.swatch { min-height: 36px; aspect-ratio: 1; padding: 0; }
+/* Swatches take the free width beside a fixed picker; a narrow section stacks them. */
+.color-section { container-type: inline-size; }
+.color-columns { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 32px; align-items: start; }
+.swatch-column { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.swatch-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.swatch { min-height: 32px; aspect-ratio: 1; padding: 0; }
+.picker-column .picker { width: 100%; }
+.picker-column .picker-field { height: 150px; }
+@container (max-width: 520px) {
+  .color-columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .swatch-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
+  .picker-column .picker { max-width: 360px; }
+}
 .swatch[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 4px; }
+/* Invisible fillers give every layer's palette the same 24-swatch footprint, so switching tabs never resizes the wardrobe. */
+.swatch-slot { aspect-ratio: 1; visibility: hidden; }
 .picker-column { display: flex; flex-direction: column; gap: 10px; }
 .avatar-actions { flex-basis: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
 .join-feedback { flex-basis: 100%; font-size: 14px; font-weight: 700; }
@@ -317,8 +328,19 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 
 /* Interaction panels */
 #interaction-panels { position: absolute; z-index: 6; top: 130px; left: 16px; display: grid; gap: 12px; pointer-events: none; }
-.feature-panel { width: min(340px, calc(100vw - 32px)); max-height: 50vh; overflow: auto; padding: 16px; background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); pointer-events: auto; }
-.feature-panel h2 { margin-bottom: 8px; font-size: 18px; }
+.feature-panel { position: relative; width: var(--panel-width, min(340px, calc(100vw - 32px))); height: var(--panel-height, auto); max-height: var(--panel-height, 50vh); display: flex; flex-direction: column; padding: 12px 16px 16px; background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); pointer-events: auto; }
+/* Dragged panels leave the default stack; viewport coordinates come from PanelLayout. */
+.feature-panel.floating { position: fixed; }
+.feature-panel.collapsed { width: auto; height: auto; max-height: none; padding-bottom: 12px; }
+.feature-panel.adjusting { user-select: none; -webkit-user-select: none; }
+.panel-heading { display: flex; align-items: center; gap: 8px; cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; }
+.panel-heading h2 { flex: 1; margin: 0; font-size: 18px; }
+.panel-toggle { flex: none; min-height: 32px; padding: 0 8px; background: none; box-shadow: none; font-size: 13px; }
+/* Padding keeps pixel outlines, button drop shadows and the hover lift inside the scroll clip;
+   negative margins cancel it so the visible spacing is unchanged. */
+.panel-body { flex: 1; min-height: 0; overflow: auto; margin: 4px -4px -4px; padding: 4px 4px 8px; }
+.panel-resize { position: absolute; right: -6px; bottom: -6px; z-index: 1; width: 20px; height: 20px; cursor: nwse-resize; touch-action: none; }
+.feature-panel.collapsed .panel-resize { display: none; }
 .feature-panel p { margin: 6px 0; font-size: 13px; }
 .feature-panel ol { max-height: 180px; overflow: auto; padding-left: 22px; }
 .feature-panel form, .timer-controls { display: flex; flex-direction: column; gap: 10px; }
@@ -332,6 +354,9 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .variant-footer button { flex: none; }
 
 /* Message board notes: own/admin notes get a trash button centred on the right. */
+/* The note list takes the space a resized panel gives it; the form stays in view. */
+#board-body { display: flex; flex-direction: column; }
+#board-notes { flex: 1 1 auto; min-height: 60px; max-height: none; }
 #board-notes li { margin-bottom: 8px; }
 /* Only grows vertically, from its initial three rows up to a bound that keeps it inside the panel. */
 #board-text { resize: vertical; min-height: calc(3lh + 20px); max-height: 30vh; }
@@ -359,6 +384,149 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .tv-knobs span:last-child { width: 10px; height: 10px; margin-top: auto; background: var(--accent); }
 .tv-stand { width: 30%; height: 14px; background: var(--line); clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
 
+/* Desktop wardrobe fits one screen: the page stops scrolling. The masthead, the mirror + wardrobe panels and the join bar
+   stack with even gaps; the panels take the remaining height and the 12-slot wardrobe (4 per row) grows into it.
+   Short windows scroll the items inside the wardrobe instead. Phones keep page scrolling. */
+@media (min-width: 900px) and (min-height: 480px) {
+  body.avatar-open { height: 100dvh; min-height: 0; overflow: hidden; }
+  body.avatar-open #app-shell { max-width: 1600px; height: 100dvh; display: flex; flex-direction: column; padding: 12px clamp(16px, 2.5vw, 40px) clamp(18px, 4vh, 44px); }
+  body.avatar-open .masthead { margin-bottom: clamp(20px, 5vh, 48px); }
+  body.avatar-open .brand-icon { width: 28px; height: 28px; }
+  body.avatar-open .brand b { font-size: 19px; }
+  body.avatar-open main, #avatar-screen.active { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .avatar-layout { flex: 1; min-height: 0; width: 100%; max-width: 1400px; margin-inline: auto; padding-inline: clamp(0px, 6vw - 8px, 96px);
+    display: grid; grid-template-columns: clamp(220px, 21vw, 320px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto;
+    align-items: stretch; gap: clamp(20px, 5vh, 48px) clamp(18px, 2vw, 32px); }
+  .avatar-actions, .join-feedback { grid-column: 1 / -1; }
+  .avatar-actions .big { min-height: 44px; padding: 6px 26px; font-size: 17px; }
+  .mirror h1, .wardrobe h2 { font-size: 22px; }
+
+  /* The mirror matches the wardrobe's height: the stage takes what the controls leave and shrinks first when space is short. */
+  .mirror { min-height: 0; overflow: auto; padding: 14px 16px 16px; gap: 12px; }
+  .mirror-stage { flex: 1 1 150px; height: auto; min-height: 130px; }
+  .mirror-stage canvas { width: auto; height: clamp(72px, calc(100% - 64px), 192px); }
+  .name-field { margin-top: auto; }
+  .mirror-controls { gap: 8px; }
+  .mirror-controls button, .appearance-actions button { min-height: 38px; }
+  .mirror-controls #preview-sit { padding: 6px 12px; }
+  .appearance-actions { gap: 6px; }
+  .appearance-actions button { padding: 6px 2px; font-size: 13px; }
+  .name-field { flex-direction: row; align-items: center; gap: 10px; white-space: nowrap; }
+  .name-field input { min-height: 38px; padding: 6px 10px; }
+
+  /* Wardrobe: title and tabs on top; items and the colour panel for the same layer sit side by side and share the height. */
+  .wardrobe { --cell-h: 64px; min-height: 0; padding: 14px 18px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr) clamp(236px, 21vw, 290px);
+    grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "title tabs tabs" "items items colors"; gap: 14px clamp(18px, 1.8vw, 28px); }
+  .wardrobe > .section-heading { grid-area: title; align-self: center; }
+  .wardrobe-tabs { grid-area: tabs; gap: 8px; }
+  .wardrobe-tabs button { min-height: 34px; padding: 4px 12px; font-size: 14px; }
+  /* Four columns and equal rows share the wardrobe's size; --cell-h is the smallest a card's preview may get. */
+  .item-grid { grid-area: items; min-height: 0; overflow: auto; grid-auto-rows: 1fr; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 4px 4px 8px; }
+  .item-card { gap: 4px; padding: 6px 6px 8px; font-size: 12px; }
+  .item-cell { flex: 1 0 auto; height: auto; min-height: var(--cell-h); }
+  .item-slot { min-height: 0; } /* Equal rows already size the slots; a measured height would feed back into the rows. */
+  /* A fixed one-line label keeps every row the same height whatever fonts the label falls back to. */
+  .item-card > span:last-child { display: block; max-width: 100%; line-height: 16px; height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-cell canvas { width: 32px; height: 48px; }
+
+  .color-section { grid-area: colors; min-height: 0; overflow: auto; padding: 2px 4px 8px 20px; gap: 10px; border-top: 0; border-left: 3px dashed var(--soft); }
+  .color-section h3 { font-size: 16px; }
+  .color-columns { grid-template-columns: minmax(0, 1fr); gap: clamp(28px, 5vh, 44px); }
+  .swatch-column, .picker-column { gap: 8px; }
+  .swatch-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+  .swatch { min-height: 0; box-shadow: var(--px-flat); }
+  .swatch[aria-pressed="true"] { outline-width: 2px; outline-offset: 2px; }
+  .picker-column .picker { width: 100%; gap: 10px; }
+  .picker-column .picker-field { height: clamp(72px, 18vh, 160px); }
+  .picker-column .picker-swatch { display: none; }
+  .picker-column .picker-row { gap: 8px; }
+  .picker-column .picker-dropper { width: 28px; min-height: 28px; }
+  .picker-column .picker-fields { gap: 6px; }
+  .picker-column .picker-fields input { min-height: 34px; padding: 4px 2px; font-size: 13px; }
+  .picker-column .picker-hex { font-size: 11px; }
+}
+/* Short desktop windows: the colour panel drops its sub-titles (the panel title names the layer) and shrinks the field to stay unscrolled. */
+@media (min-width: 900px) and (min-height: 480px) and (max-height: 699px) {
+  .color-section { gap: 8px; }
+  .color-columns { gap: 26px; }
+  .color-section .small-title { display: none; }
+  .swatch-grid { gap: 4px; }
+  .picker-column .picker { gap: 8px; }
+  .picker-column .picker-field { height: clamp(56px, 13vh, 90px); }
+  .picker-column .picker-dropper { min-height: 24px; }
+}
+/* Short desktop windows: the masthead and step chips shrink so the wardrobe keeps its height. */
+@media (min-width: 900px) and (min-height: 480px) and (max-height: 620px) {
+  body.avatar-open #app-shell { padding-top: 8px; padding-bottom: 18px; }
+  body.avatar-open .masthead { margin-bottom: 22px; }
+  body.avatar-open .brand small { display: none; }
+  body.avatar-open .masthead .steps { font-size: 13px; }
+  body.avatar-open #theme-toggle { min-height: 36px; padding: 4px 12px; }
+  .mirror { gap: 8px; padding-top: 10px; }
+  .mirror h1, .wardrobe h2 { font-size: 20px; }
+  .avatar-layout { column-gap: 18px; }
+  .wardrobe { --cell-h: 56px; }
+  .avatar-actions .big { min-height: 40px; }
+  .avatar-actions > button.secondary { min-height: 40px; }
+}
+/* Taller windows get the full-size sprites (integer 3x scale). */
+@media (min-width: 900px) and (min-height: 700px) {
+  .wardrobe { --cell-h: 92px; }
+  .item-grid { gap: 14px; }
+  .item-cell canvas { width: 48px; height: 72px; }
+  .swatch-grid { gap: 8px; }
+}
+/* Large monitors: bigger item cards (4x sprites), a larger colour field and mirror sprite. */
+@media (min-width: 1280px) and (min-height: 900px) {
+  .wardrobe { --cell-h: 120px; }
+  .item-grid { gap: 16px; }
+  .item-cell canvas { width: 64px; height: 96px; }
+  .item-card { font-size: 14px; gap: 6px; padding: 8px 8px 10px; }
+  .picker-column .picker-field { height: clamp(140px, 20vh, 220px); }
+  .mirror-stage canvas { height: clamp(72px, calc(100% - 64px), 240px); }
+}
+/* Phones and narrow windows: one scrolling column built for thumbs. The mirror becomes a compact card (stage beside its
+   controls) that stays pinned while the items scroll; tabs scroll sideways in one row; the join bar sticks to the bottom. */
+@media (max-width: 899px), (max-height: 479px) {
+  body.avatar-open .masthead { grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; margin-bottom: 14px; }
+  body.avatar-open .masthead .steps { grid-column: 1 / -1; grid-row: 2; gap: 8px; font-size: 13px; }
+  body.avatar-open .brand-icon { width: 28px; height: 28px; }
+  body.avatar-open .brand b { font-size: 18px; }
+  body.avatar-open .brand small { display: none; }
+  body.avatar-open .brand b { white-space: nowrap; }
+  body.avatar-open #theme-toggle { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+  body.avatar-open #app-shell { padding-bottom: 0; }
+  .avatar-layout { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 16px; }
+  .mirror { flex: none; padding: 12px; display: grid; grid-template-columns: clamp(120px, 38%, 220px) minmax(0, 1fr);
+    grid-template-areas: "stage head" "stage controls" "stage name" "stage actions"; align-content: start; gap: 8px 12px; }
+  .mirror > .section-heading { grid-area: head; }
+  .mirror h1, .wardrobe h2 { font-size: 20px; }
+  .mirror-stage { grid-area: stage; height: auto; min-height: 196px; }
+  .mirror-stage canvas { width: 96px; height: 144px; }
+  .name-tag { font-size: 13px; max-width: 100%; }
+  .mirror-controls { grid-area: controls; justify-content: flex-start; gap: 8px; }
+  .mirror-controls #preview-sit { flex: 1; padding: 8px 10px; }
+  .name-field { grid-area: name; flex-direction: row; align-items: center; gap: 8px; white-space: nowrap; }
+  .name-field input { font-size: 16px; } /* iOS zooms into inputs below 16px on focus. */
+  .appearance-actions { grid-area: actions; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .appearance-actions button { padding: 8px 4px; font-size: 13px; }
+  .appearance-actions button:last-child { grid-column: 1 / -1; }
+  .wardrobe { flex: none; padding: 12px; gap: 14px; }
+  .wardrobe-tabs { flex-wrap: nowrap; gap: 8px; overflow-x: auto; margin: 0 -12px; padding: 4px 12px 8px; scrollbar-width: none; }
+  .wardrobe-tabs::-webkit-scrollbar { display: none; }
+  .wardrobe-tabs button { flex: none; padding: 8px 14px; }
+  .item-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .item-cell { height: 80px; }
+  .color-section { padding-top: 14px; }
+  .color-section h3 { font-size: 17px; }
+  .avatar-actions { position: sticky; bottom: 0; z-index: 5; margin: 0 -16px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--bg); box-shadow: 0 -2px 0 var(--line); flex-wrap: nowrap; }
+  .avatar-actions .big { flex: 1; min-height: 48px; font-size: 18px; }
+}
+/* Tall enough phones keep the outfit in view while picking items. */
+@media (max-width: 899px) and (min-height: 640px) {
+  .mirror { position: sticky; top: 0; z-index: 4; }
+}
 @media (max-width: 700px) {
   .welcome-card h1 { font-size: 30px; }
   .appearance-actions { grid-template-columns: 1fr 1fr; }

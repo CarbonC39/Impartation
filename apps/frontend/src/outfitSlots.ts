@@ -187,5 +187,7 @@ export function mountOutfitSlots(dialog: HTMLDialogElement, list: HTMLElement, s
         render();
       });
     },
+    /** Whether this account already has a saved outfit; false when the slots cannot be read (e.g. signed out). */
+    hasSaved: () => loadSlots().then(list => list.some(Boolean), () => false),
   };
 }

@@ -21,6 +21,7 @@ import { ProximityVoice } from './voice';
 import { TouchPad } from './touchPad';
 import { LayoutEditor } from './layoutEditor';
 import { ChatLayout } from './chatLayout';
+import { PanelLayout } from './panelLayout';
 import { mountPrejoin, type VoicePlan } from './prejoin';
 import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
 import { automaticCameraZoom, cameraZoomPreference, setCameraZoomPreference } from './cameraZoom';
@@ -130,6 +131,7 @@ element<HTMLButtonElement>('chat-reset').addEventListener('click', event => {
   chatLayout.reset();
   (event.currentTarget as HTMLButtonElement).blur();
 });
+for (const panel of document.querySelectorAll<HTMLElement>('#interaction-panels .feature-panel')) new PanelLayout(panel);
 chatToggle.addEventListener('click', () => {
   setChatCollapsed(!chatCard.classList.contains('collapsed'));
   chatToggle.blur(); // Return keyboard movement to the map.
@@ -181,8 +183,10 @@ function showScreen(id: string) {
     screen.hidden = !active;
   });
   document.body.classList.toggle('map-open', id === 'map-screen');
+  document.body.classList.toggle('avatar-open', id === 'avatar-screen');
   if (id === 'map-screen') { touchPad.refresh(); layoutEditor.refresh(); chatLayout.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
   if (id === 'login-screen') renderWelcome();
+  if (id === 'avatar-screen') labelSaveAppearance();
 }
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -325,7 +329,19 @@ const outfits = mountOutfitSlots(element<HTMLDialogElement>('outfit-dialog'), el
     catch (error) { return `但同步到身份失败：${error instanceof Error ? error.message : String(error)}`; }
   },
 });
-element<HTMLButtonElement>('save-appearance').addEventListener('click', () => outfits.open());
+/** The button reads 保存造型 only until it is first used (or an outfit already exists); after that it opens 我的造型. */
+const saveAppearance = element<HTMLButtonElement>('save-appearance');
+const OUTFITS_OPENED_KEY = 'virtual-workspace-outfits-opened';
+function labelSaveAppearance() {
+  const opened = readPreference(OUTFITS_OPENED_KEY) === '1';
+  saveAppearance.textContent = opened ? '我的造型' : '保存造型';
+  if (!opened) void outfits.hasSaved().then(saved => { if (saved) saveAppearance.textContent = '我的造型'; });
+}
+saveAppearance.addEventListener('click', () => {
+  outfits.open();
+  writePreference(OUTFITS_OPENED_KEY, '1');
+  labelSaveAppearance();
+});
 renderWelcome();
 const touchPad = new TouchPad(element('touch-controls'), element('touch-grip'), element('touch-hint'));
 window.addEventListener('blur', () => touchPad.clear());
