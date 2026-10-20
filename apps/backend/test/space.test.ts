@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { before, after, beforeEach, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
@@ -7,7 +8,7 @@ import { matchMaker } from '@colyseus/core';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
-import { CHARACTER_ACTION_NAMES } from '@virtual-workspace/shared';
+import { CHARACTER_ACTION_NAMES, DEFAULT_APPEARANCE } from '@virtual-workspace/shared';
 
 process.env.DATABASE_PATH = ':memory:';
 const fixture = createRoomWorldFixture();
@@ -21,7 +22,8 @@ const { db } = await import('../src/db.js');
 const { setRole } = await import('../src/identity.js');
 const endpoint = 'http://127.0.0.1:2568';
 async function createIdentity() {
-  const response = await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const response = await fetch(endpoint + '/api/register', { method: 'POST', headers: { Origin: endpoint, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: `user_${randomUUID().replaceAll('-', '').slice(0, 16)}`, password: 'password1234', displayName: '访客' }) });
   assert.equal(response.status, 200, await response.clone().text());
   return response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; ');
 }
@@ -29,7 +31,7 @@ function sdk(cookie: string) { return new Client<typeof server>(endpoint, { head
 async function me(cookie: string) {
   const response = await fetch(endpoint + '/api/me', { headers: { Cookie: cookie } });
   assert.equal(response.status, 200);
-  return await response.json() as { id: string; name: string; avatar: string; appearance: object; role: 'member' | 'admin' };
+  return await response.json() as { id: string; name: string; avatar: string; username: string; appearance: object; role: 'member' | 'admin' };
 }
 
 async function until(predicate: () => boolean, timeout = 3000) {
@@ -56,7 +58,13 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     rmSync(fixture.directory, { recursive: true, force: true });
   });
   async function join(name: string, avatar: 'mint' | 'amber' | 'violet' = 'mint', cookie?: string, spaceId = 'main') {
-    const room = await sdk(cookie ?? await createIdentity()).joinOrCreate('space', { name, avatar, spaceId });
+    const identityCookie = cookie ?? await createIdentity();
+    if (!cookie) {
+      const profile = await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: identityCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, avatar }) });
+      assert.equal(profile.status, 200, await profile.clone().text());
+    }
+    const room = await sdk(identityCookie).joinOrCreate('space', { name, avatar, spaceId });
     room.onMessage('chat', () => {});
     room.onError(() => {});
     room.reconnection.minUptime = 0;
@@ -523,6 +531,8 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     const response = await fetch(endpoint + '/api/me');
     assert.equal(response.status, 401);
     assert.equal((await fetch(endpoint + '/api/auth/sign-up/email', { method: 'POST' })).status, 404);
+    assert.equal((await fetch(endpoint + '/api/auth/sign-up/username', { method: 'POST' })).status, 404);
+    assert.equal((await fetch(endpoint + '/api/auth/sign-in/anonymous', { method: 'POST' })).status, 404);
   });
 
   test('only the current identity can update its profile and role claims are ignored', async () => {
@@ -545,6 +555,17 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal(updated.status, 200);
     await until(() => second.state.players.get(alice.sessionId)?.name === 'Changed');
     await until(() => second.state.players.get(second.sessionId)?.avatar === 'amber');
+    const currentAppearance = { ...DEFAULT_APPEARANCE, hair: { ...DEFAULT_APPEARANCE.hair, color: '#a24dcc' } };
+    const aliased = await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'AliasName', name: 'IgnoredName', currentAppearance, appearance: DEFAULT_APPEARANCE }) });
+    assert.equal(aliased.status, 200);
+    const aliasProfile = await aliased.json() as { name: string; displayName: string; currentAppearance: typeof DEFAULT_APPEARANCE };
+    assert.equal(aliasProfile.name, 'AliasName');
+    assert.equal(aliasProfile.displayName, 'AliasName');
+    assert.deepEqual(aliasProfile.currentAppearance, currentAppearance);
+    await until(() => second.state.players.get(alice.sessionId)?.name === 'AliasName');
+    await until(() => second.state.players.get(alice.sessionId)?.appearance === JSON.stringify(currentAppearance));
+    await until(() => second.state.players.get(second.sessionId)?.name === 'AliasName');
     assert.equal((await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: '{"name":"Evil"}' })).status, 403);
     assert.equal((await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, 'Content-Type': 'text/plain' }, body: '{"name":"Evil"}' })).status, 403);
     assert.equal((await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"name":"Evil"}' })).status, 401);
@@ -607,42 +628,6 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal((await alice.request('boardDelete', { resourceId: 'message-wall', id })).ok, true);
   });
 
-  test('one-time binding transfers the verified identity and admin role, consumes once and stores only a hash', async () => {
-    const cookie = await createIdentity();
-    const owner = await me(cookie);
-    setRole(owner.id, 'admin');
-    const generated = await fetch(endpoint + '/api/auth/one-time-token/generate', { headers: { Cookie: cookie, Authorization: 'Basic ignored' } });
-    assert.equal(generated.status, 200);
-    const { token } = await generated.json() as { token: string };
-    assert.equal(db.prepare('SELECT id FROM auth_verification WHERE identifier = ?').get('one-time-token:' + token), undefined);
-    const responses = await Promise.all([1, 2].map(() => fetch(endpoint + '/api/auth/one-time-token/verify', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) })));
-    assert.deepEqual(responses.map(response => response.status).sort(), [200, 400]);
-    const boundCookie = responses.find(response => response.status === 200)!.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-    assert.deepEqual(await me(boundCookie), { ...owner, role: 'admin' });
-    const source = await join('Source', 'mint', cookie);
-    const target = await join('Target', 'amber', boundCookie);
-    assert.notEqual(source.sessionId, target.sessionId);
-    assert.equal(target.state.players.get(target.sessionId)?.userId, owner.id);
-    place(source, 500, 350); place(target, 500, 350);
-    await source.request('boardPost', { resourceId: 'message-wall', text: 'cross-device' });
-    await until(() => target.state.notes.size === 1);
-    assert.equal((await target.request('boardDelete', { resourceId: 'message-wall', id: [...target.state.notes.keys()][0] })).ok, true);
-  });
-
-  test('expired and invalid binding tokens do not create a session', async () => {
-    const cookie = await createIdentity();
-    const generated = await fetch(endpoint + '/api/auth/one-time-token/generate', { headers: { Cookie: cookie } });
-    const { token } = await generated.json() as { token: string };
-    db.prepare('UPDATE auth_verification SET expiresAt = ?').run(new Date(Date.now() - 1000).toISOString());
-    for (const value of [token, 'invalid']) {
-      const response = await fetch(endpoint + '/api/auth/one-time-token/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: value }) });
-      assert.equal(response.status, 400);
-      assert.equal(response.headers.get('set-cookie'), null);
-    }
-    assert.equal((await fetch(endpoint + '/api/auth/one-time-token/generate')).status, 401);
-  });
-
   test('sign-out revokes the session immediately for writes and then disconnects the room', async () => {
     const cookie = await createIdentity();
     const alice = await join('Alice', 'mint', cookie);
@@ -655,6 +640,59 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal(await left, 4003);
     assert.equal((await fetch(endpoint + '/api/me', { headers: { Cookie: cookie } })).status, 401);
     await assert.rejects(sdk(cookie).joinOrCreate('space', { name: 'revoked', avatar: 'mint', spaceId: 'main' }));
+  });
+
+  test('admin kick disconnects every Space session, invalidates reconnect tokens and allows a fresh join', async () => {
+    const adminCookie = await createIdentity();
+    const adminId = (await me(adminCookie)).id;
+    assert.equal(setRole(adminId, 'admin'), true);
+    const userCookie = await createIdentity();
+    const account = await me(userCookie);
+    const userId = account.id;
+    const main = await join('跨空间访客', 'mint', userCookie, 'main');
+    const other = await join('跨空间访客', 'mint', userCookie, 'other');
+    const mainToken = main.reconnectionToken;
+    const otherToken = other.reconnectionToken;
+    main.reconnection.enabled = false;
+    other.reconnection.enabled = false;
+    const mainLeft = new Promise<number>(resolve => main.onLeave.once(resolve));
+    const otherLeft = new Promise<number>(resolve => other.onLeave.once(resolve));
+    const kicked = await fetch(`${endpoint}/api/admin/users/${encodeURIComponent(userId)}/kick`, { method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true }) });
+    assert.equal(kicked.status, 200, await kicked.clone().text());
+    assert.equal(await mainLeft, 4011);
+    assert.equal(await otherLeft, 4011);
+    await assert.rejects(sdk(userCookie).reconnect(mainToken));
+    await assert.rejects(sdk(userCookie).reconnect(otherToken));
+    const fresh = await join('跨空间访客', 'mint', userCookie);
+    assert.equal(fresh.state.players.get(fresh.sessionId)?.userId, userId);
+    await delay(1100);
+    assert.equal(fresh.connection.isOpen, true);
+    assert.equal(fresh.state.players.has(fresh.sessionId), true);
+  });
+
+  test('suspending an account disconnects live room sessions and blocks joins until unsuspended', async () => {
+    const adminCookie = await createIdentity();
+    const adminId = (await me(adminCookie)).id;
+    assert.equal(setRole(adminId, 'admin'), true);
+    const userCookie = await createIdentity();
+    const account = await me(userCookie);
+    const userId = account.id;
+    const player = await join('被暂停成员', 'mint', userCookie);
+    const left = new Promise<number>(resolve => player.onLeave.once(resolve));
+    const suspended = await fetch(`${endpoint}/api/admin/users/${encodeURIComponent(userId)}/suspend`, { method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true }) });
+    assert.equal(suspended.status, 200, await suspended.clone().text());
+    assert.equal(await left, 4011);
+    await assert.rejects(sdk(userCookie).joinOrCreate('space', { name: 'Paused', avatar: 'mint', spaceId: 'main' }));
+    const unsuspended = await fetch(`${endpoint}/api/admin/users/${encodeURIComponent(userId)}/unsuspend`, { method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true }) });
+    assert.equal(unsuspended.status, 200, await unsuspended.clone().text());
+    const signedIn = await fetch(endpoint + '/api/auth/sign-in/username', { method: 'POST', headers: { Origin: endpoint, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: account.username, password: 'password1234' }) });
+    assert.equal(signedIn.status, 200, await signedIn.clone().text());
+    const fresh = await join('被暂停成员', 'mint', signedIn.headers.getSetCookie().map(value => value.split(';')[0]).join('; '));
+    assert.equal(fresh.state.players.get(fresh.sessionId)?.userId, userId);
   });
 
   test('profile responses forward refreshed session cookies to the browser', async () => {
@@ -683,7 +721,7 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     await until(() => !authoritative.state.players.has(alice.sessionId));
   });
 
-  test('expired anonymous sessions cannot join a room or read profiles', async () => {
+  test('expired account sessions cannot join a room or read profiles', async () => {
     const cookie = await createIdentity();
     const owner = await me(cookie);
     db.prepare('UPDATE auth_session SET expiresAt = ? WHERE userId = ?').run(new Date(Date.now() - 1000).toISOString(), owner.id);

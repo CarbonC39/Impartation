@@ -15,17 +15,22 @@ test('SQLite migration is idempotent and data survives reopen', () => {
   const path = join(directory, 'world.sqlite');
   let database = openDatabase(path);
   try {
-    assert.equal(database.pragma('user_version', { simple: true }), 5);
+    assert.equal(database.pragma('user_version', { simple: true }), 6);
     assert.equal(database.pragma('journal_mode', { simple: true }), 'wal');
     assert.equal(database.pragma('foreign_keys', { simple: true }), 1);
     database.prepare('INSERT INTO profiles (user_id, avatar_id, updated_at) VALUES (?, ?, ?)').run('test-profile', 'violet', 123);
+    database.prepare('INSERT INTO saved_outfits (user_id, slots_json, updated_at) VALUES (?, ?, ?)')
+      .run('without-auth-foreign-key', '[null,null,null]', 456);
     assert.equal(new BoardStore(database).post('message-wall', 'guest-session', '访客', '<b>saved</b>'), true);
     database.close();
     database = openDatabase(path);
     assert.deepEqual(database.prepare('SELECT * FROM profiles').get(), {
       user_id: 'test-profile', avatar_id: 'violet', updated_at: 123, name: '', role: 'member', appearance_json: '{}',
     });
-    assert.equal(database.pragma('user_version', { simple: true }), 5);
+    assert.equal(database.pragma('user_version', { simple: true }), 6);
+    assert.deepEqual(database.prepare('SELECT user_id, slots_json, updated_at FROM saved_outfits').get(), {
+      user_id: 'without-auth-foreign-key', slots_json: '[null,null,null]', updated_at: 456,
+    });
     const notes = new BoardStore(database).list('message-wall');
     assert.equal(notes.length, 1);
     assert.equal(notes[0].text, '<b>saved</b>');
@@ -40,7 +45,7 @@ test('a database from a newer application is rejected', () => {
   const directory = mkdtempSync(join(tmpdir(), 'virtual-space-new-db-'));
   const path = join(directory, 'world.sqlite');
   const database = openDatabase(path);
-  database.pragma('user_version = 6');
+  database.pragma('user_version = 7');
   database.close();
   try { assert.throws(() => openDatabase(path), /newer/); }
   finally { rmSync(directory, { recursive: true, force: true }); }
@@ -58,7 +63,7 @@ test('version 1 databases migrate without losing existing profiles', () => {
     old.close();
     const upgraded = openDatabase(path);
     try {
-      assert.equal(upgraded.pragma('user_version', { simple: true }), 5);
+      assert.equal(upgraded.pragma('user_version', { simple: true }), 6);
       assert.deepEqual(upgraded.prepare('SELECT user_id FROM profiles').get(), { user_id: 'existing' });
       assert.equal(new BoardStore(upgraded).post('wall', 'guest', 'Guest', 'works'), true);
     } finally { upgraded.close(); }
@@ -110,7 +115,7 @@ test('version 4 notes migrate into main and do not appear in another Space', () 
 
     const upgraded = openDatabase(path);
     try {
-      assert.equal(upgraded.pragma('user_version', { simple: true }), 5);
+      assert.equal(upgraded.pragma('user_version', { simple: true }), 6);
       const main = new BoardStore(upgraded);
       const other = new BoardStore(upgraded, 'studio');
       assert.deepEqual(main.list('wall'), [{ id: 'legacy-v4', resourceId: 'wall', authorSessionId: 'old-session',
