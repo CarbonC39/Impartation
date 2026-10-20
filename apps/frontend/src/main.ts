@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
+import { ROOM_NAME, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -9,7 +9,8 @@ import { createInteractions } from './interactions';
 import type { InteractionDispatcher } from './interactions/dispatcher';
 import { z } from 'zod';
 import { zoneLabels } from './interactions/labels';
-import { loadProfile, saveProfile, generateBinding, importBinding, type Profile } from './identity';
+import { loadProfile, saveProfile, type Profile } from './identity';
+import { mountAccounts } from './accounts';
 import './style.css';
 import { createCharacterActions, type CharacterActions } from './interactions/actions';
 import { readPreference, writePreference } from './preferences';
@@ -94,6 +95,17 @@ let renderingMap = '';
 let renderGeneration = 0;
 let selectedWorld = '阳光大厅';
 let leavingIntentionally = false;
+let currentProfile: Profile | undefined;
+
+function mergeAppearanceDraft(draft: JoinOptions['appearance'], previous: Profile, latest: Profile): JoinOptions['appearance'] {
+  if (previous.id !== latest.id) return latest.currentAppearance ?? latest.appearance;
+  const before = previous.currentAppearance ?? previous.appearance;
+  const merged: Record<string, unknown> = structuredClone(latest.currentAppearance ?? latest.appearance);
+  for (const layer of APPEARANCE_LAYERS) {
+    if (JSON.stringify(draft[layer]) !== JSON.stringify(before[layer])) merged[layer] = draft[layer];
+  }
+  return appearanceSchema.parse(merged);
+}
 
 const chatCard = element('chat-card');
 const chatToggle = element<HTMLButtonElement>('chat-toggle');
@@ -174,6 +186,7 @@ function showScreen(id: string) {
   document.body.classList.toggle('avatar-open', id === 'avatar-screen');
   if (id === 'map-screen') { touchPad.refresh(); layoutEditor.refresh(); chatLayout.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
   if (id === 'login-screen') renderWelcome();
+  if (id === 'avatar-screen') labelSaveAppearance();
 }
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -181,9 +194,41 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
     promise.then(value => { window.clearTimeout(timer); resolve(value); }, error => { window.clearTimeout(timer); reject(error); });
   });
 }
-function chooseWorld(spaceId: string) {
+async function chooseWorld(spaceId: string) {
   const space = spaceDirectory?.spaces.find(entry => entry.id === spaceId);
   if (!space) return;
+  if (!currentProfile) {
+    element('account-feedback').textContent = '请先登录或注册账号，再进入空间。';
+    element('sign-in-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const previousProfile = currentProfile;
+  const wardrobeDraft = wardrobe.value;
+  const displayNameDraft = nameInput.value;
+  try {
+    const latest = await loadProfile();
+    if (!latest) {
+      syncAccountProfile(undefined);
+      clearIdentity();
+      element('account-feedback').textContent = '登录已失效，请重新登录后进入空间。';
+      return;
+    }
+    const sameAccount = latest.id === previousProfile.id;
+    showIdentity(latest);
+    if (sameAccount) {
+      wardrobe.replace(mergeAppearanceDraft(wardrobeDraft, previousProfile, latest), false);
+      if (displayNameDraft.trim() !== (previousProfile.displayName ?? previousProfile.name)) {
+        nameInput.value = displayNameDraft;
+        wardrobe.renderName();
+        renderWelcome();
+      }
+    } else {
+      joinFeedback.textContent = '当前登录账号已切换；已清除原账号未保存的造型草稿，请确认新账号资料。';
+    }
+  } catch (error) {
+    element('account-feedback').textContent = `读取账号失败：${error instanceof Error ? error.message : String(error)}`;
+    return;
+  }
   selectedSpaceId = space.id;
   selectedWorld = space.name;
   element('chosen-world-label').textContent = space.name;
@@ -193,7 +238,7 @@ function chooseWorld(spaceId: string) {
 }
 element<HTMLDivElement>('world-list').addEventListener('click', event => {
   const tile = (event.target as HTMLElement).closest<HTMLButtonElement>('.world-tile[data-world]');
-  if (tile?.dataset.world) chooseWorld(tile.dataset.world);
+  if (tile?.dataset.world) void chooseWorld(tile.dataset.world);
 });
 async function loadSpaces() {
   const list = element('world-list');
@@ -252,6 +297,27 @@ function renderWelcome() {
 }
 async function persistProfile() {
   await identityReady;
+  const previousProfile = currentProfile;
+  if (!previousProfile) throw new Error('请先登录账号');
+  const wardrobeDraft = wardrobe.value;
+  const displayNameDraft = nameInput.value;
+  const latest = await loadProfile();
+  if (!latest) {
+    syncAccountProfile(undefined);
+    clearIdentity();
+    throw new Error('登录已失效，请重新登录');
+  }
+  if (latest.id !== previousProfile.id) {
+    showIdentity(latest);
+    throw new Error('登录账号已切换，原账号的未保存资料没有提交；请确认新账号资料后重试');
+  }
+  showIdentity(latest);
+  wardrobe.replace(mergeAppearanceDraft(wardrobeDraft, previousProfile, latest), false);
+  if (displayNameDraft.trim() !== (previousProfile.displayName ?? previousProfile.name)) {
+    nameInput.value = displayNameDraft;
+    wardrobe.renderName();
+    renderWelcome();
+  }
   const options = joinSchema.parse({ name: nameInput.value, avatar: currentAvatar, appearance: wardrobe.value });
   showIdentity(await saveProfile(options));
 }
@@ -267,15 +333,15 @@ const outfits = mountOutfitSlots(element<HTMLDialogElement>('outfit-dialog'), el
 const saveAppearance = element<HTMLButtonElement>('save-appearance');
 const OUTFITS_OPENED_KEY = 'virtual-workspace-outfits-opened';
 function labelSaveAppearance() {
-  const used = readPreference(OUTFITS_OPENED_KEY) === '1' || outfits.hasSaved();
-  saveAppearance.textContent = used ? '我的造型' : '保存造型';
+  const opened = readPreference(OUTFITS_OPENED_KEY) === '1';
+  saveAppearance.textContent = opened ? '我的造型' : '保存造型';
+  if (!opened) void outfits.hasSaved().then(saved => { if (saved) saveAppearance.textContent = '我的造型'; });
 }
 saveAppearance.addEventListener('click', () => {
   outfits.open();
   writePreference(OUTFITS_OPENED_KEY, '1');
   labelSaveAppearance();
 });
-labelSaveAppearance();
 renderWelcome();
 const touchPad = new TouchPad(element('touch-controls'), element('touch-grip'), element('touch-hint'));
 window.addEventListener('blur', () => touchPad.clear());
@@ -292,39 +358,32 @@ element<HTMLButtonElement>('layout-edit').addEventListener('click', () => {
   layoutEditor.open();
 });
 
+let syncAccountProfile: (value: Profile | undefined) => void = () => {};
 function showIdentity(value: Profile) {
-  element('identity-status').textContent = `身份：${value.id} · ${value.role === 'admin' ? '管理员' : '成员'}`;
-  nameInput.value = value.name;
+  currentProfile = value;
+  nameInput.value = value.displayName ?? value.name;
   currentAvatar = value.avatar;
-  wardrobe.replace(appearanceSchema.parse(value.appearance), false);
+  wardrobe.replace(appearanceSchema.parse(value.currentAppearance ?? value.appearance), false);
+  element('account-status').textContent = `已登录：${value.displayName ?? value.name}（@${value.username ?? '匿名'} · ${value.role === 'admin' ? '管理员' : '成员'}）`;
+  syncAccountProfile(value);
   renderWelcome();
-  element<HTMLButtonElement>('identity-export').disabled = false;
 }
-join.disabled = true;
-const identityReady = loadProfile().then(value => { if (value) showIdentity(value); }).catch(error => {
-  status.textContent = error instanceof Error ? error.message : String(error);
-}).finally(() => { join.disabled = false; element('identity-status').dataset.ready = 'true'; });
-
-element<HTMLButtonElement>('identity-export').addEventListener('click', async () => {
-  try {
-    element<HTMLInputElement>('identity-code').value = await generateBinding();
-    element('identity-feedback').textContent = '绑定码 3 分钟内有效，只能使用一次。获得绑定码的设备将拥有此身份及权限。';
-  } catch (error) { element('identity-feedback').textContent = error instanceof Error ? error.message : String(error); }
+function clearIdentity() {
+  currentProfile = undefined;
+  nameInput.value = '小访客';
+  currentAvatar = 'mint';
+  wardrobe.replace(appearanceSchema.parse(DEFAULT_APPEARANCE), false);
+  syncAccountProfile(undefined);
+  renderWelcome();
+}
+const accounts = mountAccounts(value => {
+  currentProfile = value;
+  if (value) showIdentity(value);
+  else clearIdentity();
 });
-element<HTMLFormElement>('identity-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  if (room) { element('identity-feedback').textContent = '请先离开空间再绑定身份'; return; }
-  const button = element<HTMLButtonElement>('identity-import');
-  button.disabled = true;
-  join.disabled = true;
-  try {
-    await identityReady;
-    showIdentity(await importBinding(element<HTMLInputElement>('identity-code').value.trim()));
-    element<HTMLInputElement>('identity-code').value = '';
-    element('identity-feedback').textContent = '已绑定同一身份';
-  } catch (error) { element('identity-feedback').textContent = error instanceof Error ? error.message : String(error); }
-  finally { button.disabled = false; join.disabled = Boolean(room); }
-});
+syncAccountProfile = accounts.syncProfile;
+const identityReady = accounts.ready.then(value => { currentProfile = value; if (value) showIdentity(value); })
+  .catch(error => { status.textContent = error instanceof Error ? error.message : String(error); });
 
 function setConnected(value: boolean) {
   connected = value;
@@ -354,7 +413,6 @@ function cleanup() {
   setConnected(false);
   join.disabled = false;
   leave.disabled = true;
-  element<HTMLButtonElement>('identity-import').disabled = false;
   zone.textContent = '当前区域：无';
 }
 const prejoin = mountPrejoin({
@@ -381,15 +439,21 @@ element<HTMLFormElement>('join-form').addEventListener('submit', event => {
   prejoin.open(selectedWorld);
 });
 async function enterWorld(plan: VoicePlan) {
+  if (!currentProfile) {
+    element('account-feedback').textContent = '请先登录或注册账号，再进入空间。';
+    showScreen('login-screen');
+    plan.stream?.getTracks().forEach(track => track.stop());
+    return;
+  }
   showScreen('map-screen');
   join.disabled = true;
   joinFeedback.textContent = '';
   status.textContent = '连接中…';
   try {
     await identityReady;
+    if (!currentProfile) throw new Error('登录已失效，请重新登录');
+    await persistProfile();
     const options = joinSchema.parse({ name: nameInput.value, avatar: currentAvatar, appearance: wardrobe.value });
-    showIdentity(await saveProfile(options));
-    element<HTMLButtonElement>('identity-import').disabled = true;
     const space = spaceDirectory?.spaces.find(entry => entry.id === selectedSpaceId);
     if (!space || !spaceDirectory) throw new Error('请先选择空间');
     worldRegistry = { initialMap: space.initialMap, maps: spaceDirectory.maps.filter(map => space.maps.includes(map.id)) };
@@ -447,7 +511,11 @@ async function enterWorld(plan: VoicePlan) {
     });
     room.onDrop(() => { setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
     room.onReconnect(() => { setConnected(true); status.textContent = '连接已恢复'; });
-    room.onLeave(() => { cleanup(); status.textContent = '已离开，可以重新进入'; });
+    room.onLeave(() => {
+      cleanup(); status.textContent = '已离开，可以重新进入';
+      void accounts.refreshProfile().then(value => { if (!value) showScreen('login-screen'); })
+        .catch(error => { status.textContent = `无法刷新登录状态：${error instanceof Error ? error.message : String(error)}`; });
+    });
     room.onError((_code, message) => { status.textContent = `房间错误：${message}`; });
     const activeRoom = room;
     room.onStateChange(() => {
@@ -471,7 +539,7 @@ async function enterWorld(plan: VoicePlan) {
     plan.stream?.getTracks().forEach(track => track.stop());
     void room?.leave().catch(() => {});
     cleanup();
-    showScreen('avatar-screen');
+    showScreen(currentProfile ? 'avatar-screen' : 'login-screen');
     joinFeedback.textContent = `进入失败：${error instanceof Error ? error.message : String(error)}`;
   }
 }

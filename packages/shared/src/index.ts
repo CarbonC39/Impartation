@@ -128,6 +128,7 @@ export type WebTool = z.infer<typeof webToolSchema>;
 export * from './world.js';
 export * from './interactions.js';
 export * from './character.js';
+export * from './accounts.js';
 export * from './color.js';
 export * from './voice.js';
 export type { SpaceProtocol } from './protocol.js';

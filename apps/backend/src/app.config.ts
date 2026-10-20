@@ -3,9 +3,9 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { SpaceRoom } from './rooms/SpaceRoom.js';
 import { db } from './db.js';
 import express from 'express';
-import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
-import { auth, identityFromHeaders, ensureProfile, updateProfile } from './identity.js';
-import { joinSchema } from '@virtual-workspace/shared';
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from './identity.js';
+import { accountRoutes } from './account-routes.js';
 import { config, voiceConfig } from './config.js';
 import { worldRegistry, renderMaps, worldAssets } from './world.js';
 import { loadWebTools } from './interactions/web/config.js';
@@ -19,8 +19,8 @@ export const server = defineServer({
     app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
     const handleAuth = toNodeHandler(auth);
     const identityRoutes = new Map([
-      ['/sign-in/anonymous', 'POST'], ['/get-session', 'GET'], ['/sign-out', 'POST'],
-      ['/one-time-token/generate', 'GET'], ['/one-time-token/verify', 'POST'],
+      ['/sign-in/username', 'POST'], ['/get-session', 'GET'], ['/sign-out', 'POST'],
+      ['/reset-password', 'POST'],
     ]);
     app.all('/api/auth/*splat', (req, res) => {
       if (identityRoutes.get(req.path.slice('/api/auth'.length)) !== req.method) {
@@ -29,7 +29,7 @@ export const server = defineServer({
       }
       return handleAuth(req, res);
     });
-    app.use('/api', express.json({ limit: '16kb' }));
+    app.use('/api', express.json({ limit: '16kb', strict: false }));
     app.get('/api/world', (_req, res) => { res.json(worldRegistry); });
     app.get('/api/voice-config', (_req, res) => { res.json(voiceConfig); });
     app.get('/api/maps/:id/map.json', (req, res) => {
@@ -43,25 +43,7 @@ export const server = defineServer({
       res.sendFile(file);
     });
     app.get('/api/tools', (_req, res) => { res.json(webTools); });
-    app.get('/api/me', async (req, res) => {
-      const identity = await identityFromHeaders(fromNodeHeaders(req.headers), cookies => {
-        for (const cookie of cookies) res.append('Set-Cookie', cookie);
-      });
-      if (!identity) { res.status(401).json({ error: 'Identity required' }); return; }
-      res.json(ensureProfile(identity.userId));
-    });
-    app.patch('/api/me', async (req, res) => {
-      if (!req.is('application/json') || (req.headers.origin && !config.IDENTITY_TRUSTED_ORIGINS.split(',').map(value => value.trim()).includes(req.headers.origin))) {
-        res.status(403).json({ error: 'Untrusted profile request' }); return;
-      }
-      const identity = await identityFromHeaders(fromNodeHeaders(req.headers), cookies => {
-        for (const cookie of cookies) res.append('Set-Cookie', cookie);
-      });
-      if (!identity) { res.status(401).json({ error: 'Identity required' }); return; }
-      const parsed = joinSchema.safeParse(req.body);
-      if (!parsed.success) { res.status(400).json({ error: 'Invalid profile' }); return; }
-      res.json(updateProfile(identity.userId, parsed.data));
-    });
+    app.use('/api', accountRoutes);
     app.get('/health', (_req, res) => {
       db.prepare('SELECT 1').get();
       res.json({ status: 'ok' });

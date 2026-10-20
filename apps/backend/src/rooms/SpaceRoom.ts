@@ -7,7 +7,8 @@ import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSc
 import { worldRegistry, worlds as allMaps } from '../world.js';
 import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
-import { activeProfile, ensureProfile, identityFromHeaders, type Identity } from '../identity.js';
+import { activeProfile, ensureProfile, identityFromHeaders, identityEvents, type Identity } from '../identity.js';
+import { db } from '../db.js';
 import { config, voiceConfig } from '../config.js';
 import { cancelAction } from '../interactions/action/handler.js';
 import { VoiceSignaling } from './VoiceSignaling.js';
@@ -22,6 +23,9 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
   private initialMap = '';
   reconnectionSeconds = 20;
   private identities = new Map<string, Identity>();
+  private joinedAt = new Map<string, number>();
+  private pendingReconnections = new Map<string, ReturnType<SpaceRoom['allowReconnection']>>();
+  private commandCursor = 0;
   private movementInputs = new Map<string, MovementInput & { receivedAt: number }>();
   private lastChat = new Map<string, number>();
   private typingUntil = new Map<string, number>();
@@ -33,6 +37,32 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     resetMovement: client => this.movementInputs.delete(client.sessionId),
     throttle: client => this.throttleInteraction(client),
   });
+
+  static disconnectUser(userId: string, cutoff = Date.now()) {
+    for (const room of SpaceRoom.instances.values()) room.disconnectUser(userId, cutoff);
+  }
+
+  private disconnectUser(userId: string, cutoff: number) {
+    for (const [sessionId, identity] of [...this.identities]) {
+      if (identity.userId !== userId || (this.joinedAt.get(sessionId) ?? 0) > cutoff) continue;
+      this.movementInputs.delete(sessionId);
+      const player = this.state.players.get(sessionId);
+      if (player) player.connected = false;
+      this.voice.clear(sessionId);
+      this.identities.delete(sessionId);
+      this.pendingReconnections.get(sessionId)?.reject(new Error('Disconnected by administrator'));
+      this.clients.find(client => client.sessionId === sessionId)?.leave(4011, 'Account connection closed');
+    }
+  }
+
+  private pollModeration() {
+    const commands = db.prepare('SELECT id, user_id AS userId, created_at AS cutoff FROM moderation_commands WHERE id > ? ORDER BY id')
+      .all(this.commandCursor) as { id: number; userId: string; cutoff: number }[];
+    for (const command of commands) {
+      this.commandCursor = command.id;
+      this.disconnectUser(command.userId, command.cutoff);
+    }
+  }
 
   messages = {
     input: validate(inputSchema, async (client: SpaceClient, input: MovementInput) => {
@@ -88,7 +118,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     const identity = this.identities.get(client.sessionId);
     const value = identity && await activeProfile(identity);
     const player = this.state.players.get(client.sessionId);
-    if (!value || !player?.connected) return;
+    if (!value || !player?.connected || this.identities.get(client.sessionId) !== identity) return;
     player.name = value.name; player.avatar = value.avatar; player.appearance = JSON.stringify(value.appearance); player.role = value.role;
     return value;
   }
@@ -122,6 +152,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     const existing = SpaceRoom.instances.get(space.id);
     if (existing) throw new ServerError(409, existing.locked ? 'Space is full' : 'Space already active; join the existing Space');
     SpaceRoom.instances.set(space.id, this);
+    this.commandCursor = (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM moderation_commands').get() as { id: number }).id;
     this.state.spaceId = space.id;
     this.metadata = { spaceId: space.id };
     this.initialMap = space.initialMap;
@@ -133,6 +164,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     this.patchRate = TICK_MS;
     for (const handler of this.interactions.registry.values()) handler.initialize?.();
     this.clock.setInterval(() => {
+      this.pollModeration();
       this.voice.tick();
       const now = Date.now();
       for (const [id, until] of this.typingUntil) if (until <= now) this.setTyping(id, false);
@@ -167,13 +199,15 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     const parsed = spaceJoinSchema.parse(options);
     if (parsed.spaceId !== this.state.spaceId) throw new ServerError(403, 'Space does not match this room');
     const identity = await identityFromHeaders(context.headers);
-    if (!identity) throw new Error('A valid anonymous identity is required');
+    if (!identity) throw new Error('A valid account session is required');
     ensureProfile(identity.userId, parsed);
     return identity;
   }
-  onJoin(client: SpaceClient, _options: SpaceJoinOptions, auth: Identity) {
+  async onJoin(client: SpaceClient, _options: SpaceJoinOptions, auth: Identity) {
+    if (!await activeProfile(auth)) throw new ServerError(401, 'Account session expired');
     for (const handler of this.interactions.registry.values()) handler.tick?.();
     this.identities.set(client.sessionId, auth);
+    this.joinedAt.set(client.sessionId, Date.now());
     const { name, avatar, appearance, role } = ensureProfile(auth.userId);
     const map = this.maps.get(this.initialMap)!;
     const world = map.world;
@@ -200,7 +234,9 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     // Match SDK retryable close codes. Validation failures must release their seats.
     if ([CloseCode.NO_STATUS_RECEIVED, CloseCode.ABNORMAL_CLOSURE,
       CloseCode.GOING_AWAY, CloseCode.MAY_TRY_RECONNECT].some(retryCode => retryCode === code)) {
-      this.allowReconnection(client, this.reconnectionSeconds).catch(() => {});
+      const pending = this.allowReconnection(client, this.reconnectionSeconds);
+      this.pendingReconnections.set(client.sessionId, pending);
+      pending.catch(() => {}).finally(() => this.pendingReconnections.delete(client.sessionId));
     }
   }
   async onReconnect(client: SpaceClient) {
@@ -227,6 +263,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     const player = this.state.players.get(client.sessionId);
     if (player) cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
     this.identities.delete(client.sessionId);
+    this.joinedAt.delete(client.sessionId);
+    this.pendingReconnections.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     this.lastChat.delete(client.sessionId);
@@ -239,3 +277,5 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     for (const handler of this.interactions.registry.values()) handler.dispose?.();
   }
 }
+
+identityEvents.on('disconnect', (userId: string, cutoff?: number) => SpaceRoom.disconnectUser(userId, cutoff));

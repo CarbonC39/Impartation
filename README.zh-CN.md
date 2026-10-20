@@ -8,7 +8,7 @@ Tiled JSON 是地图几何与交互的源数据；服务端 registry 按顺序�
 
 地图作者直接选择 `action`、`variantSelector`、`privateArea`、`wardrobe`、`web` 或 `Portal` 类型。选择器独占动作点并切换目标图块；私密区域支持平等成员、锁定和服务端物理准入，连续 60 秒无成员在区域内时重置；镜子入口复用现有衣橱。新类型需在 Tiled 中显式制作，见[制图示例](docs/tiled.md)。聊天和附近语音按私密区域隔离：区域内的人只与同一区域内的人互通文字和语音，区域外的人留在公共频道；不同 Space 的运行时状态彼此隔离；位置、正在输入标识等同步状态对所属 Space 内整个房间可见。
 
-地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。进入区域只在区域上方显示小提示；点击提示后才用 `external` 新标签页打开，或在居中、可拖动的电视框窗口中展示 `embed` 沙盒 iframe；外置服务保留自己的账号和权限。正式注册/登录与账号恢复留待以后。
+地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。进入区域只在区域上方显示小提示；点击提示后才用 `external` 新标签页打开，或在居中、可拖动的电视框窗口中展示 `embed` 沙盒 iframe；外置服务保留自己的账号和权限。
 
 ## 本地运行
 
@@ -20,7 +20,7 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，在开始页从服务端 Space 列表中选择空间，进入试衣间换装后进入空间。衣橱里每件衣服都直接穿在当前造型上预览；每个图层都提供糖果色预设和自由取色器。试衣镜可转身、预览坐姿；造型可从预设随机搭配、撤销，并保存到本浏览器的 3 个可命名造型槽位（保存时同时更新身份资料，资料随跨设备身份同步）。界面配色在开始页和试衣间右上角切换，提供 6 套预设和由四个颜色生成的自定义配色，按浏览器保存。素材放在 `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/` 对应目录，构建时自动按文件夹生成分类；PNG 文件名就是素材 ID。上衣、下装、鞋子和配饰可选择“不穿”。预览与地图使用相同图层、16×24 帧和脚点；每层保存素材 ID 与可编辑的 RGB 颜色。没有账号和密码：开始页直接使用持久匿名身份，并提供跨设备一次性绑定码。地图内昵称显示在角色脚下，坐下时不变；HUD 可隐藏昵称，并把聊天栏背景切换为透明、半透明（默认）或实心，这些显示偏好按浏览器保存。
+打开 <http://localhost:5173>，使用用户名和密码注册或登录，再从服务端 Space 列表选择空间，进入试衣间换装。注册默认开放；设 `REGISTRATION_MODE=code` 并配置 `REGISTRATION_CODE` 可要求注册码，设为 `admin` 则仅管理员能创建账号。衣橱里每件衣服都直接穿在当前造型上预览；每个图层都提供糖果色预设和自由取色器。试衣镜可转身、预览坐姿；造型可随机搭配、撤销，并保存到账号的 3 个可命名造型槽位，可在已登录设备间使用。界面配色在开始页和试衣间右上角切换，提供 6 套预设和自定义配色，按浏览器保存。素材放在 `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/` 对应目录，构建时自动按文件夹生成分类；PNG 文件名就是素材 ID。上衣、下装、鞋子和配饰可选择“不穿”。预览与地图使用相同图层、16×24 帧和脚点；每层保存素材 ID 与可编辑的 RGB 颜色。地图内昵称显示在角色脚下，坐下时不变；HUD 可隐藏昵称，并把聊天栏背景切换为透明、半透明（默认）或实心，这些显示偏好按浏览器保存。
 
 使用 WASD、方向键或屏幕方向按钮移动。触屏上按住或在方向键上滑动即可走动（支持斜向）；拖动中间的手柄可移动方向键；单击或长按手柄会在旁边显示提示，双击手柄（或设置里的“调整按键布局”）进入布局调整，可缩放方向键大小、把方向键和动作按钮拖到任意位置，或一键复原。布局保存在本浏览器。动作列表来自 shared 的动作目录 `CHARACTER_ACTIONS`（目前只有“坐下”），服务端拒绝目录外的动作名。点击列表中的动作即执行；按 E 执行角色脚下锚点的动作，不在锚点上时执行上次选择的动作；动画选项只对有动画帧的动作生效。移动会取消当前动作。在地图上按 Enter 打开聊天输入；输入框聚焦时所有按键都用于编辑文字（方向键移动光标）。按 Enter 发送并自动回到地图继续行走；按 Esc 或 Tab 不发送直接退出，草稿保留。其他输入框聚焦时键盘移动也会暂停。聊天框可拖动标题栏移动、拖右上角调整大小，双击标题栏或在设置中复原。服务端根据玩家权威位置验证动作请求并查找锚点。
 
@@ -41,9 +41,13 @@ npm run dev
 | `npm run check:all` | 执行以上两组检查 |
 | `npm run build` | 构建 shared、backend 和 frontend |
 | `npm start` | 启动已构建的后端，前端需单独托管 |
-| `npm run identity -- list` | 列出本地身份资料 |
-| `npm run identity -- role USER_ID admin` | 授予项目管理员 |
-| `npm run identity -- role USER_ID member` | 移除项目管理员 |
+| `npm run identity -- create USERNAME '显示名称' --password-stdin` | 从标准输入读取密码并创建账号 |
+| `npm run identity -- list` | 列出本地账号资料 |
+| `npm run identity -- role USER_ID admin --yes` | 确认后授予项目管理员 |
+| `npm run identity -- role USER_ID member --yes` | 确认后移除项目管理员 |
+| `npm run identity -- suspend USER_ID --yes` | 撤销会话并冻结账号 |
+| `npm run identity -- reset-password USER_ID --yes` | 输出一次性密码重置链接 |
+| `npm run identity -- unsuspend USER_ID --yes` / `kick USER_ID --yes` / `delete USER_ID --yes` | 解冻、断开在线连接或删除账号 |
 
 浏览器测试首次运行前执行 `npx playwright install chromium`。覆盖范围、隔离方式和 NixOS 配置见[测试说明](docs/testing.md)。
 
@@ -51,7 +55,7 @@ npm run dev
 
 自定义 Space 和地图请先看[托管指南](docs/hosting.md)，其中包括 registry 配置、Docker 地图与封面挂载、更新回滚和部署验收步骤。
 
-根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后会拒绝新连接，直到有空位。地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
+根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`REGISTRATION_MODE` 默认为 `open`；`code` 模式还需设置 `REGISTRATION_CODE`，`admin` 模式关闭公开注册。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后会拒绝新连接，直到有空位。地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
 
 生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。单独托管前端时，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket；下方 Docker 镜像则在同一端口提供前后端。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
 
@@ -82,7 +86,7 @@ SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，�
 | --- | --- |
 | [托管指南](docs/hosting.md) | Space 配置、地图与封面路径、Docker 挂载、更新回滚和排查 |
 | [架构](docs/architecture.md) | 模块、状态归属和功能边界 |
-| [匿名身份与权限](docs/account-system.md) | 跨设备绑定、身份 API、管理员 CLI 和迁移 |
+| [账号与权限](docs/account-system.md) | 注册策略、session、服务端造型槽、管理员 CLI 和数据库迁移 |
 | [地图制作](docs/tiled.md) | Tiled 制图步骤、碰撞、交互区和验证 |
 | [外部工具入口](docs/integration-plan.md) | 地址配置、公开 API 和入口行为 |
 | [Integrations](docs/integrations.md) | 内置工具与外置服务的接入和权限 |

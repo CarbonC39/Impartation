@@ -106,11 +106,28 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .last-outfit-stage canvas { width: 80px; height: 120px; image-rendering: pixelated; }
 .last-outfit-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .last-outfit-text strong { font-size: 18px; overflow-wrap: anywhere; }
-.identity-options { font-size: 13px; color: var(--ink2); }
-.identity-options summary { cursor: pointer; font-weight: 700; color: var(--ink); min-height: 32px; }
-.identity-options form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
-.identity-options label { flex: 1; min-width: 160px; }
-.identity-options p { margin-top: 8px; overflow-wrap: anywhere; }
+.account-panel { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 2px dashed var(--soft); }
+.account-panel > #account-status { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.account-form { display: flex; flex-direction: column; gap: 12px; }
+.account-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.account-feedback { min-height: 1.4em; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.account-feedback:empty { display: none; }
+.account-dialog { width: min(560px, calc(100vw - 32px)); max-height: min(88vh, 900px); overflow: auto; border: 0; padding: 24px; color: var(--ink); }
+.account-dialog::backdrop { background: #2a223566; }
+.account-dialog[open] { display: flex; flex-direction: column; gap: 18px; }
+.account-dialog h2 { font-size: 25px; }
+.account-reset { width: min(480px, 100%); margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.account-reset h2 { font-size: 28px; }
+.admin-dialog { width: min(900px, calc(100vw - 32px)); }
+.admin-create { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; gap: 12px; padding: 16px; background: var(--soft); }
+.admin-create h3 { grid-column: 1 / -1; font-size: 18px; }
+.admin-users { display: flex; flex-direction: column; gap: 12px; }
+.admin-user { display: grid; grid-template-columns: 48px minmax(120px, 1fr); align-items: center; gap: 8px 12px; padding: 12px; background: var(--cell); }
+.admin-user-preview { width: 40px; height: 60px; grid-row: span 2; image-rendering: pixelated; background: var(--soft); }
+.admin-user-identity { min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.admin-user-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-user-actions button { min-height: 38px; padding: 6px 10px; font-size: 12px; }
+@media (min-width: 620px) { .admin-user { grid-template-columns: 48px minmax(150px, 1fr) minmax(300px, 2fr); } .admin-user-preview { grid-row: auto; } .admin-user-actions { grid-column: auto; } }
 .worlds-card { flex: 999 1 560px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .worlds-card h2 { font-size: 30px; }
 .world-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; }

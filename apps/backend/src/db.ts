@@ -11,7 +11,7 @@ export function openDatabase(path: string) {
     database.pragma('foreign_keys = ON');
     database.pragma('busy_timeout = 5000');
     const version = database.pragma('user_version', { simple: true }) as number;
-    if (version > 5) throw new Error('Database is newer than this application');
+    if (version > 6) throw new Error('Database is newer than this application');
     if (version < 1) database.transaction(() => {
       database.exec(`CREATE TABLE profiles (
         user_id TEXT PRIMARY KEY,
@@ -48,6 +48,19 @@ export function openDatabase(path: string) {
         DROP INDEX IF EXISTS board_notes_resource;
         CREATE INDEX board_notes_space_resource ON board_notes(space_id, resource_id, created_at);`);
       database.pragma('user_version = 5');
+    })();
+    if (version < 6) database.transaction(() => {
+      database.exec(`CREATE TABLE saved_outfits (
+        user_id TEXT PRIMARY KEY,
+        slots_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE moderation_commands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );`);
+      database.pragma('user_version = 6');
     })();
     return database;
   } catch (error) {

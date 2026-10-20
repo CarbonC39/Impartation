@@ -8,7 +8,7 @@ Tiled JSON is the source of map geometry and interaction semantics. The server r
 
 Map authors choose explicit `action`, `variantSelector`, `privateArea`, `wardrobe`, `web`, or `Portal` types. Selectors exclusively claim an action point and switch an authored target tile; temporary private areas support peer membership, locking and server-enforced physical admission, resetting after 60 seconds without members inside. Mirrors can open the existing Wardrobe. These types are opt-in Tiled data; see [authoring examples](docs/tiled.md). Chat and proximity voice are isolated by private area: players inside an area only exchange messages and voice with others inside the same area, and players outside stay in the public room. Positions, typing dots and other replicated state remain visible to everyone in the room.
 
-External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows a small hint above the zone, and clicking it launches a new tab (`external`) or opens a sandboxed iframe in a centered, draggable TV-style window (`embed`). External services keep their own accounts and permissions. Formal sign-up/login and account recovery are deferred.
+External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows a small hint above the zone, and clicking it launches a new tab (`external`) or opens a sandboxed iframe in a centered, draggable TV-style window (`embed`). External services keep their own accounts and permissions.
 
 ## Run locally
 
@@ -20,7 +20,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>, choose a Space listed by the server, dress the character in the wardrobe, then enter. Every wardrobe item is previewed on your current outfit; each layer offers preset candy colors plus a free color picker. The mirror can turn the character and preview the sitting pose; outfits can be randomized from the presets, undone, and saved into three named outfit slots kept in this browser (saving also updates the persistent profile). The interface theme (six presets or a custom theme built from four colors) is chosen from the top-right button on the start and wardrobe screens and stored per browser. Put PNG assets in `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/`; the shared build generates category IDs and paths from these folders. Tops, bottoms, shoes, and accessories support a `none` choice. There is no account or password: the start screen uses the persistent anonymous identity and offers one-time binding codes for other devices.
+Open <http://localhost:5173>, register or sign in with a username and password, choose a Space listed by the server, dress the character in the wardrobe, then enter. Registration is open by default; set `REGISTRATION_MODE=code` with `REGISTRATION_CODE`, or `REGISTRATION_MODE=admin` to limit account creation to administrators. Every wardrobe item is previewed on your current outfit; each layer offers preset candy colors plus a free color picker. The mirror can turn the character and preview the sitting pose; outfits can be randomized from the presets, undone, and saved into three named account slots that are available on other signed-in devices. The interface theme (six presets or a custom theme built from four colors) is chosen from the top-right button on the start and wardrobe screens and stored per browser. Put PNG assets in `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/`; the shared build generates category IDs and paths from these folders. Tops, bottoms, shoes, and accessories support a `none` choice.
 
 Move with WASD, the arrow keys, or the on-screen direction pad. On touch screens, hold or slide a finger across the pad (diagonals included); drag its centre grip to move the pad. Tap or hold the grip for a hint; double-tap it (or use Settings → Adjust control layout) to open the layout editor, where you can resize the pad and drag the pad and the action buttons anywhere, or reset them. Layout is stored per browser. Nicknames are drawn under the characters' feet and stay unchanged while sitting; Settings can hide nicknames and switch the chat background between transparent, half-transparent (default) and solid. These display choices are stored per browser. The action list shows the character actions defined in the shared catalog (`CHARACTER_ACTIONS`, currently **Sit**); the server rejects any other action name. Click an action to perform it, or press E to perform the action of the anchor under the character (otherwise the last chosen action); the animation option applies to actions with animated frames. Movement cancels the current action. Press Enter on the map to open the chat line; while it has focus every key edits text (arrow keys move the caret). Enter sends and returns the keyboard to the map so you can keep walking; Esc or Tab leaves without sending and keeps the draft. Other text fields also pause keyboard movement. The chat box can be dragged by its heading and resized from its top-right corner; double-click the heading or use settings to reset it. The server validates action requests and resolves anchors from the player's authoritative position.
 
@@ -41,9 +41,13 @@ The backend health check is at <http://localhost:2567/health>. The development s
 | `npm run check:all` | Runs both checks above |
 | `npm run build` | Builds shared, backend, and frontend workspaces |
 | `npm start` | Starts the built backend; host the frontend separately |
-| `npm run identity -- list` | Lists local identity profiles |
-| `npm run identity -- role USER_ID admin` | Grants project administrator role |
-| `npm run identity -- role USER_ID member` | Removes project administrator role |
+| `npm run identity -- create USERNAME 'Display Name' --password-stdin` | Creates an account; reads its password from stdin |
+| `npm run identity -- list` | Lists local account profiles |
+| `npm run identity -- role USER_ID admin --yes` | Grants project administrator role after confirmation |
+| `npm run identity -- role USER_ID member --yes` | Removes project administrator role after confirmation |
+| `npm run identity -- suspend USER_ID --yes` | Revokes sessions and freezes an account |
+| `npm run identity -- reset-password USER_ID --yes` | Prints a one-time reset URL |
+| `npm run identity -- unsuspend USER_ID --yes` / `kick USER_ID --yes` / `delete USER_ID --yes` | Re-enable, disconnect online sessions, or delete an account |
 
 Before the first browser test run, install Chromium with `npx playwright install chromium`. See [testing](docs/testing.md) for coverage, isolation, and NixOS setup.
 
@@ -51,7 +55,7 @@ Before the first browser test run, install Chromium with `npx playwright install
 
 For custom Spaces and maps, see the [hosting guide (简体中文)](docs/hosting.md): registry setup, Docker map and cover mounts, updates, rollback, and deployment checks.
 
-The root [`.env.example`](.env.example) contains configuration examples. The backend and Vite both read the root `.env`; restart services after changing it. `MAP_REGISTRY_PATH` defaults to `assets/maps/registry.json`, and map files are resolved relative to the registry. `SPACE_MAX_CLIENTS` sets the shared per-Space room capacity and defaults to `32`; a full Space rejects further joins until a slot opens. See [Tiled maps](docs/tiled.md) for the map contract and rendering limits.
+The root [`.env.example`](.env.example) contains configuration examples. The backend and Vite both read the root `.env`; restart services after changing it. `REGISTRATION_MODE` is `open` by default, `code` requires `REGISTRATION_CODE`, and `admin` disables public registration. `MAP_REGISTRY_PATH` defaults to `assets/maps/registry.json`, and map files are resolved relative to the registry. `SPACE_MAX_CLIENTS` sets the shared per-Space room capacity and defaults to `32`; a full Space rejects further joins until a slot opens. See [Tiled maps](docs/tiled.md) for the map contract and rendering limits.
 
 In production, set a random `IDENTITY_SECRET` of at least 32 characters, the public site URL in `IDENTITY_BASE_URL`, and the deployed frontend origins in `IDENTITY_TRUSTED_ORIGINS`. For a separate frontend host, use a same-origin reverse proxy for `/api`, `/matchmake`, and the Colyseus WebSocket. The Docker image below serves both frontend and backend on one port. `VITE_SERVER_URL` only controls the Colyseus connection; identity, map, and tool configuration APIs always use same-origin `/api`.
 
@@ -82,7 +86,7 @@ If voice reports a missing browser API on `http://127.0.0.1:5173/`, run `({ secu
 | --- | --- |
 | [Hosting guide (简体中文)](docs/hosting.md) | Space setup, map files and cover paths, Docker mounts, updates, and troubleshooting |
 | [Architecture](docs/architecture.md) | Modules, state ownership, and feature boundaries |
-| [Identity and permissions](docs/account-system.md) | Device linking, identity APIs, administrator CLI, and migrations |
+| [Accounts and permissions](docs/account-system.md) | Registration, sessions, saved outfits, administrator actions, CLI, and migrations |
 | [Tiled maps](docs/tiled.md) | Map authoring, collisions, interaction zones, and validation |
 | [External tool configuration](docs/integration-plan.md) | URL configuration, public APIs, and launch behavior |
 | [Integrations](docs/integrations.md) | Built-in tools, external services, and permissions |
