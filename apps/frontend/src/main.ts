@@ -263,7 +263,19 @@ const outfits = mountOutfitSlots(element<HTMLDialogElement>('outfit-dialog'), el
     catch (error) { return `但同步到身份失败：${error instanceof Error ? error.message : String(error)}`; }
   },
 });
-element<HTMLButtonElement>('save-appearance').addEventListener('click', () => outfits.open());
+/** The button reads 保存造型 only until it is first used (or an outfit already exists); after that it opens 我的造型. */
+const saveAppearance = element<HTMLButtonElement>('save-appearance');
+const OUTFITS_OPENED_KEY = 'virtual-workspace-outfits-opened';
+function labelSaveAppearance() {
+  const used = readPreference(OUTFITS_OPENED_KEY) === '1' || outfits.hasSaved();
+  saveAppearance.textContent = used ? '我的造型' : '保存造型';
+}
+saveAppearance.addEventListener('click', () => {
+  outfits.open();
+  writePreference(OUTFITS_OPENED_KEY, '1');
+  labelSaveAppearance();
+});
+labelSaveAppearance();
 renderWelcome();
 const touchPad = new TouchPad(element('touch-controls'), element('touch-grip'), element('touch-hint'));
 window.addEventListener('blur', () => touchPad.clear());

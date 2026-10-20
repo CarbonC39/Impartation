@@ -115,5 +115,6 @@ export function mountOutfitSlots(dialog: HTMLDialogElement, list: HTMLElement, s
       render();
       dialog.showModal();
     },
+    hasSaved: () => loadSlots().some(Boolean),
   };
 }

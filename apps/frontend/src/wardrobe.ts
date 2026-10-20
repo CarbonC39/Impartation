@@ -10,7 +10,7 @@ const CATEGORY_LABELS: Record<Part, string> = { body: '身体', face: '面部', 
 const ITEM_LABELS: Record<string, string> = {
   walk: '基础身体', eyes: '圆圆眼',
   hair1: '波波头', hair2: '偏分', hair3: '直短发', hair4: '长直发', hair5: '中分', hair6: '高马尾', hair7: '双马尾', hair8: 'M字刘海', hair9: '斜刘海', hair10: '长卷发', hair11: '总裁背头',
-  't-shirt': '短袖', shirt: '衬衫', school_uniform: '校服', suit: '西装', priest: '长袍', sweater: '毛衣', bunny: '兔女郎', hoodie: '卫衣',
+  't-shirt': '短袖', shirt: '衬衫', school_uniform: '校服', suit: '西装', priest: '长袍', sweater: '毛衣', bunny: '兔女郎', hoodie: '卫衣', jacket: '夹克',
   pants: '长裤', shorts: '短裤', skirt: '裙子', shoes: '小皮鞋', shortshoe: '短鞋', accessories: '围巾', beanie: '毛线帽', glass: '浅色眼镜', glasses: '眼镜',
 };
 const NONE_LABELS: Partial<Record<Part, string>> = { hair: '光头', top: '不穿', bottom: '不穿', shoes: '光脚', accessories: '不戴' };
@@ -23,6 +23,7 @@ const SKIN_COLORS = ['#ffffff', '#fff3ea', '#fde4d3', '#f4cdb2', '#e2b394', '#c7
 const EYE_COLORS = ['#3f3550', '#5a4b72', '#6e5747', '#4b6488', '#557a66', '#8b5a7b', '#7a4f4f', '#2f2a3a', '#6a6fa6', '#9a6f4f', '#4f7f86', '#835c99'];
 const FACINGS = [{ key: 'down', label: '正面' }, { key: 'left', label: '左侧' }, { key: 'up', label: '背面' }, { key: 'right', label: '右侧' }] as const;
 const HISTORY_LIMIT = 30;
+const WARDROBE_SLOTS = 12;
 
 export function itemLabel(id: string) { return ITEM_LABELS[id] ?? id; }
 function presetsFor(part: Part) { return part === 'body' ? SKIN_COLORS : part === 'face' ? EYE_COLORS : CANDY_COLORS; }
@@ -68,12 +69,12 @@ export class Wardrobe {
       const next = Object.fromEntries(APPEARANCE_LAYERS.map(part => {
         const assets: readonly string[] = APPEARANCE_ASSETS[part];
         const worn = assets.filter(id => id !== 'none');
-        const assetId = assets.includes('none') && Math.random() < 0.2 ? 'none' : random(worn.length ? worn : assets);
-        return [part, { assetId, color: random(part === 'body' ? SKIN_COLORS.slice(0, 7) : presetsFor(part)) }];
+        return [part, { assetId: random(worn.length ? worn : assets), color: random(part === 'body' ? SKIN_COLORS.slice(0, 7) : presetsFor(part)) }];
       }));
       this.replace(appearanceSchema.parse(next));
     });
     ui.nameInput.addEventListener('input', () => this.renderName());
+    new ResizeObserver(() => requestAnimationFrame(() => this.fillSlots())).observe(ui.items);
     this.render();
   }
 
@@ -152,11 +153,42 @@ export class Wardrobe {
       this.itemCanvases.set(id, canvas);
       return button;
     }));
+    this.fillSlots();
+  }
+
+  /** Pads the items with inert inventory slots: always whole rows, and in the one-screen desktop layout
+   *  (where the grid scrolls inside the wardrobe) a full 12-slot wardrobe, the most items any layer has today. */
+  private fillSlots() {
+    const grid = this.ui.items;
+    const first = grid.querySelector<HTMLElement>('.item-card');
+    if (!first || !grid.clientWidth) return;
+    const style = getComputedStyle(grid);
+    const items = this.itemCanvases.size;
+    const columns = style.gridTemplateColumns.split(' ').length;
+    const cells = Math.ceil(Math.max(items, style.overflowY === 'auto' ? WARDROBE_SLOTS : 0) / columns) * columns;
+    grid.style.setProperty('--item-height', `${first.offsetHeight}px`);
+    const slots = grid.querySelectorAll('.item-slot');
+    const wanted = cells - items;
+    if (slots.length === wanted) return;
+    slots.forEach(slot => slot.remove());
+    grid.append(...Array.from({ length: wanted }, () => {
+      const slot = document.createElement('span');
+      slot.className = 'item-slot';
+      slot.setAttribute('aria-hidden', 'true');
+      return slot;
+    }));
   }
 
   private renderSwatches() {
     const current = this.appearance[this.part].color.toLowerCase();
-    this.ui.swatches.replaceChildren(...presetsFor(this.part).map(hex => {
+    const presets = presetsFor(this.part);
+    const fillers = Array.from({ length: Math.max(0, CANDY_COLORS.length - presets.length) }, () => {
+      const slot = document.createElement('span');
+      slot.className = 'swatch-slot';
+      slot.setAttribute('aria-hidden', 'true');
+      return slot;
+    });
+    this.ui.swatches.replaceChildren(...presets.map(hex => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'swatch';
@@ -165,7 +197,7 @@ export class Wardrobe {
       button.setAttribute('aria-pressed', String(hex === current));
       button.addEventListener('click', () => { this.change({ color: hex }, `preset:${this.part}:${hex}`); this.picker.setValue(hex); });
       return button;
-    }));
+    }), ...fillers);
   }
 
   private drawPreview() {
