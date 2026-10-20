@@ -1,4 +1,5 @@
 import { FloatingPosition } from './floatingPosition';
+import { setRangeFill } from './range';
 import { PAD_SCALE_MAX, PAD_SCALE_MIN, type TouchPad } from './touchPad';
 
 type Elements = {
@@ -73,5 +74,8 @@ export class LayoutEditor {
     this.showScale();
   }
 
-  private showScale() { this.elements.scaleValue.value = `${this.elements.scale.value}%`; }
+  private showScale() {
+    this.elements.scaleValue.value = `${this.elements.scale.value}%`;
+    setRangeFill(this.elements.scale);
+  }
 }

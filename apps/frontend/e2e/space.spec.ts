@@ -393,8 +393,9 @@ test('camera zoom defaults to map tiles and settings apply integer zoom', async 
   const cameraZoom = 3;
   expect(initial.zoom).toBe(cameraZoom);
   await page.locator('#settings-toggle').click();
-  await expect(page.locator('#camera-zoom')).toHaveValue('auto');
-  await expect(page.locator('#camera-zoom option:first-child')).toHaveText('自动（3x）');
+  await expect(page.locator('#camera-zoom-auto')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#camera-zoom')).toHaveValue('3');
+  await expect(page.locator('#camera-zoom-value')).toHaveText('自动 · 3x');
   // Only the opaque selector target adds an image; action anchors remain invisible.
   expect(initial.objectImages).toBe(1);
   expect(initial.targetImages).toBe(1);
@@ -407,10 +408,11 @@ test('camera zoom defaults to map tiles and settings apply integer zoom', async 
   expect(initial.visibleFootOffset).toBeCloseTo(0);
   expect(initial.frames).toEqual(Array.from({ length: 16 }, (_, index) => [index % 4 * avatar.frameWidth,
     Math.floor(index / 4) * avatar.frameHeight, avatar.frameWidth, avatar.frameHeight]));
-  await page.locator('#camera-zoom').selectOption('5');
+  await page.locator('#camera-zoom').fill('5');
+  await expect(page.locator('#camera-zoom-auto')).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(async () => (await renderState())?.zoom).toBe(5);
   await expect.poll(async () => (await renderState())?.screenSize).toEqual([avatar.frameWidth * 5, avatar.frameHeight * 5]);
-  await page.locator('#camera-zoom').selectOption('auto');
+  await page.locator('#camera-zoom-auto').click();
   await expect.poll(async () => (await renderState())?.zoom).toBe(cameraZoom);
   await page.locator('#settings-toggle').click();
   await page.locator('#game canvas').focus();
@@ -430,7 +432,7 @@ test('camera zoom defaults to map tiles and settings apply integer zoom', async 
 test('map zoom choice persists across visits', async ({ page }) => {
   await enter(page, 'ZoomPreference');
   await page.locator('#settings-toggle').click();
-  await page.locator('#camera-zoom').selectOption('6');
+  await page.locator('#camera-zoom').fill('6');
   await page.reload();
   await expect(page.locator('#camera-zoom')).toHaveValue('6');
   await expect(page.locator('#account-status')).toContainText('@');

@@ -47,6 +47,8 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     required<HTMLElement>('key-hints').hidden = Boolean(resetToken);
     required<HTMLButtonElement>('open-admin').hidden = profile?.role !== 'admin';
     required<HTMLElement>('signed-out-note').hidden = Boolean(profile);
+    // The outfit preview belongs to an account; signed out it would only show the default look.
+    required<HTMLElement>('welcome-outfit').hidden = !profile;
   }
   const usernameOf = (form: HTMLFormElement) => String(new FormData(form).get('username') ?? '').trim();
   function updateRegistrationMode(value: 'open' | 'code' | 'admin') {

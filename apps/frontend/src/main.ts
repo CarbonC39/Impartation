@@ -24,7 +24,8 @@ import { ChatLayout } from './chatLayout';
 import { PanelLayout } from './panelLayout';
 import { mountPrejoin, type VoicePlan } from './prejoin';
 import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
-import { automaticCameraZoom, cameraZoomPreference, setCameraZoomPreference } from './cameraZoom';
+import { automaticCameraZoom, cameraZoomPreference, MAX_CAMERA_ZOOM, MIN_CAMERA_ZOOM, setCameraZoomPreference } from './cameraZoom';
+import { setRangeFill } from './range';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -138,12 +139,36 @@ chatToggle.addEventListener('click', () => {
 });
 
 // Per-browser map display preferences.
-const cameraZoomSelect = element<HTMLSelectElement>('camera-zoom');
-cameraZoomSelect.value = String(cameraZoomPreference() ?? 'auto');
-cameraZoomSelect.addEventListener('change', () => {
-  setCameraZoomPreference(cameraZoomSelect.value === 'auto' ? null : Number(cameraZoomSelect.value));
+// Zoom is a stepped slider; "自动" follows the map's tile size until the slider is moved.
+const cameraZoomInput = element<HTMLInputElement>('camera-zoom');
+const cameraZoomAuto = element<HTMLButtonElement>('camera-zoom-auto');
+const cameraZoomValue = element<HTMLOutputElement>('camera-zoom-value');
+let automaticZoom = automaticCameraZoom(16, 16);
+cameraZoomInput.min = String(MIN_CAMERA_ZOOM);
+cameraZoomInput.max = String(MAX_CAMERA_ZOOM);
+element('camera-zoom-ticks').replaceChildren(...Array.from({ length: MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM + 1 }, (_, index) => {
+  const tick = document.createElement('span');
+  tick.textContent = `${MIN_CAMERA_ZOOM + index}x`;
+  tick.style.setProperty('--t', String(index / (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM)));
+  return tick;
+}));
+function renderCameraZoom() {
+  const preference = cameraZoomPreference();
+  const value = preference ?? automaticZoom;
+  cameraZoomInput.value = String(value);
+  setRangeFill(cameraZoomInput);
+  cameraZoomAuto.setAttribute('aria-pressed', String(preference === null));
+  cameraZoomValue.value = preference === null ? `自动 · ${value}x` : `${value}x`;
+  cameraZoomInput.setAttribute('aria-valuetext', cameraZoomValue.value);
+}
+function setCameraZoom(value: number | null) {
+  setCameraZoomPreference(value);
+  renderCameraZoom();
   scene?.refreshCameraZoom();
-});
+}
+cameraZoomInput.addEventListener('input', () => setCameraZoom(Number(cameraZoomInput.value)));
+cameraZoomAuto.addEventListener('click', () => setCameraZoom(cameraZoomPreference() === null ? automaticZoom : null));
+renderCameraZoom();
 const chatModes = ['clear', 'half', 'solid'] as const;
 type ChatMode = typeof chatModes[number];
 let namesVisible = readPreference('virtual-workspace-show-names') !== 'false';
@@ -252,12 +277,21 @@ async function loadSpaces() {
       const cover = document.createElement('img');
       cover.className = 'world-art'; cover.src = space.cover; cover.alt = '';
       const name = document.createElement('span'); name.className = 'world-title'; name.textContent = space.name;
-      const action = document.createElement('span'); action.className = 'world-join'; action.textContent = '去换装';
-      if (space.description) tile.title = space.description;
-      tile.append(cover, name, action);
+      const action = document.createElement('span'); action.className = 'world-join';
+      tile.append(cover, name);
+      if (space.description) {
+        const description = document.createElement('span'); description.className = 'world-description'; description.textContent = space.description;
+        tile.append(description);
+      }
+      tile.append(action);
       return tile;
     }));
+    renderWorldTiles();
   } catch (error) { list.textContent = `空间目录加载失败：${String(error)}`; }
+}
+function renderWorldTiles() {
+  element('world-subtitle').textContent = currentProfile ? '选好世界后进入试衣间' : '先登录，再选一个世界';
+  for (const action of document.querySelectorAll('#world-list .world-join')) action.textContent = currentProfile ? '去换装' : '登录后进入';
 }
 void loadSpaces();
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
@@ -380,9 +414,10 @@ const accounts = mountAccounts(value => {
   currentProfile = value;
   if (value) showIdentity(value);
   else clearIdentity();
+  renderWorldTiles();
 });
 syncAccountProfile = accounts.syncProfile;
-const identityReady = accounts.ready.then(value => { currentProfile = value; if (value) showIdentity(value); })
+const identityReady = accounts.ready.then(value => { currentProfile = value; if (value) showIdentity(value); renderWorldTiles(); })
   .catch(error => { status.textContent = error instanceof Error ? error.message : String(error); });
 
 function setConnected(value: boolean) {
@@ -528,7 +563,10 @@ async function enterWorld(plan: VoicePlan) {
     await renderWorld(room.state?.players?.get(room.sessionId)?.mapId ?? worldRegistry.initialMap, room);
     setConnected(true);
     leave.disabled = false;
-    status.textContent = `已进入空间 · ${room.sessionId}`;
+    const sessionId = document.createElement('span');
+    sessionId.className = 'session-id';
+    sessionId.textContent = ` · ${room.sessionId}`;
+    status.replaceChildren('已进入空间', sessionId);
     join.blur();
     if (plan.enabled) {
       const stream = plan.stream;
@@ -558,7 +596,8 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
     const response = await fetch(entry.url, { signal: AbortSignal.timeout(12_000) });
     if (!response.ok) throw new Error('地图加载失败');
     const renderMap = renderMapSchema.parse(await response.json());
-    cameraZoomSelect.options[0]!.text = `自动（${automaticCameraZoom(renderMap.tilewidth, renderMap.tileheight)}x）`;
+    automaticZoom = automaticCameraZoom(renderMap.tilewidth, renderMap.tileheight);
+    renderCameraZoom();
     if (generation !== renderGeneration || room !== activeRoom) return;
     await destroyScene();
     if (generation !== renderGeneration || room !== activeRoom) return;
