@@ -671,6 +671,23 @@ describe('space room over real WebSocket connections', { timeout: 30000 }, () =>
     assert.equal(fresh.state.players.has(fresh.sessionId), true);
   });
 
+  test('queued local CLI kick reaches every active Space without an in-process event', async () => {
+    const cookie = await createIdentity();
+    const account = await me(cookie);
+    const main = await join('CLI target', 'mint', cookie, 'main');
+    const other = await join('CLI target', 'mint', cookie, 'other');
+    const mainLeft = new Promise<number>(resolve => main.onLeave.once(resolve));
+    const otherLeft = new Promise<number>(resolve => other.onLeave.once(resolve));
+    // A separate CLI process only writes this shared SQLite queue; it cannot emit server events.
+    db.prepare('INSERT INTO moderation_commands (user_id, created_at) VALUES (?, ?)').run(account.id, Date.now());
+    assert.equal(await mainLeft, 4011);
+    assert.equal(await otherLeft, 4011);
+    assert.equal((await me(cookie)).id, account.id);
+    const fresh = await join('CLI target', 'mint', cookie);
+    await delay(1100);
+    assert.equal(fresh.connection.isOpen, true);
+  });
+
   test('suspending an account disconnects live room sessions and blocks joins until unsuspended', async () => {
     const adminCookie = await createIdentity();
     const adminId = (await me(adminCookie)).id;

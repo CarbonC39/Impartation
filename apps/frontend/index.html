@@ -16,22 +16,53 @@
 
       <main>
         <section class="flow-screen active" id="login-screen" aria-labelledby="welcome-title">
-          <div class="welcome-grid">
+          <div class="welcome-grid" id="welcome-grid">
             <section class="panel welcome-card" aria-labelledby="welcome-title">
               <h1 id="welcome-title">欢迎来到<br />像素小镇</h1>
-              <p class="lead">无需注册。匿名身份和造型保存在这台设备，想在手机或另一台电脑继续，用下面的绑定码就好。</p>
+              <p class="lead">使用账号登录或注册后进入空间。用户名用于登录，显示名称可以与其他人相同。</p>
               <div class="last-outfit">
                 <span class="last-outfit-stage"><canvas id="welcome-canvas" width="16" height="24" aria-hidden="true"></canvas></span>
                 <span class="last-outfit-text"><small>当前造型</small><strong id="welcome-name">小访客</strong><small>选一个世界后可以换装</small></span>
               </div>
-              <details class="identity-options"><summary>在其他设备继续</summary><p id="identity-status">身份未载入</p><form id="identity-form"><label>绑定码<input id="identity-code" maxlength="32" autocomplete="off" required /></label><button id="identity-export" class="secondary" type="button" disabled>生成绑定码</button><button id="identity-import" class="secondary" type="submit">绑定</button></form><p id="identity-feedback" role="status"></p></details>
+              <section class="account-panel" id="account-panel" aria-label="账号">
+                <p id="account-status" role="status">正在读取账号…</p>
+                <div id="auth-forms">
+                  <p id="registration-note" class="hint"></p>
+                  <form id="sign-in-form" class="account-form">
+                    <label>用户名<input name="username" autocomplete="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.]{3,30}" title="3–30 位，只能使用英文字母、数字、下划线或点；不区分大小写" /></label>
+                    <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
+                    <div class="account-buttons"><button class="primary" type="submit">登录</button><button id="show-register" class="secondary" type="button">创建账号</button></div>
+                  </form>
+                  <form id="register-form" class="account-form" hidden>
+                    <label>用户名<input name="username" autocomplete="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.]{3,30}" title="3–30 位，只能使用英文字母、数字、下划线或点；不区分大小写" /></label>
+                    <label>显示名称<input name="displayName" autocomplete="nickname" required maxlength="24" /></label>
+                    <label>密码<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label>
+                    <label>再次输入密码<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label>
+                    <label id="registration-code-field" hidden>注册码<input name="registrationCode" autocomplete="off" /></label>
+                    <div class="account-buttons"><button class="primary" type="submit">注册并登录</button><button id="show-sign-in" class="secondary" type="button">返回登录</button></div>
+                  </form>
+                </div>
+                <p id="signed-out-note" class="hint">世界列表可浏览；进入空间需要先登录。</p>
+                <div id="account-actions" class="account-buttons" hidden><button id="open-password" class="secondary" type="button">修改密码</button><button id="open-admin" class="secondary" type="button" hidden>账号管理</button><button id="sign-out" class="secondary" type="button">退出登录</button></div>
+                <p id="account-feedback" class="account-feedback" role="status" aria-live="polite"></p>
+              </section>
             </section>
             <section class="panel worlds-card" aria-labelledby="world-title">
               <div class="section-heading"><h2 id="world-title">去哪儿玩？</h2><span>选好世界后进入试衣间</span></div>
               <div class="world-grid" id="world-list" aria-live="polite">正在加载空间…</div>
             </section>
           </div>
-          <p class="key-hints"><b>在地图里</b><span><kbd>WASD</kbd> 移动</span><span><kbd>E</kbd> 互动 / 坐下</span><span><kbd>Enter</kbd> 聊天</span><span>手机上用屏幕方向键</span></p>
+          <p class="key-hints" id="key-hints"><b>在地图里</b><span><kbd>WASD</kbd> 移动</span><span><kbd>E</kbd> 互动 / 坐下</span><span><kbd>Enter</kbd> 聊天</span><span>手机上用屏幕方向键</span></p>
+          <dialog id="password-dialog" class="panel account-dialog" aria-labelledby="password-title">
+            <h2 id="password-title">修改密码</h2>
+            <form id="password-form" class="account-form"><label>当前密码<input name="currentPassword" type="password" autocomplete="current-password" required /></label><label>新密码<input name="newPassword" type="password" autocomplete="new-password" required minlength="8" /></label><label>再次输入新密码<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label><p id="password-feedback" role="status"></p><div class="account-buttons"><button class="primary" type="submit">修改密码</button><button id="close-password" class="secondary" type="button">关闭</button></div></form>
+          </dialog>
+          <dialog id="admin-dialog" class="panel account-dialog admin-dialog" aria-labelledby="admin-title">
+            <div class="section-heading"><h2 id="admin-title">账号管理</h2><button id="close-admin" class="secondary" type="button">关闭</button></div>
+            <form id="admin-create-form" class="admin-create"><h3>创建账号</h3><label>用户名<input name="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.]{3,30}" title="3–30 位，只能使用英文字母、数字、下划线或点；不区分大小写" /></label><label>显示名称<input name="displayName" required maxlength="24" /></label><label>初始密码<input name="password" type="password" required minlength="8" autocomplete="new-password" /></label><button class="primary" type="submit">创建成员账号</button></form>
+            <p id="admin-feedback" role="status" aria-live="polite"></p><div id="admin-users" class="admin-users" aria-live="polite"></div>
+          </dialog>
+          <section id="reset-password-panel" class="panel account-reset" aria-labelledby="reset-password-title" hidden><h2 id="reset-password-title">设置新密码</h2><p class="lead">请设置新密码以恢复账号访问。</p><form id="reset-password-form" class="account-form"><label>新密码<input name="newPassword" type="password" required minlength="8" autocomplete="new-password" /></label><label>再次输入新密码<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password" /></label><button class="primary" type="submit">重置密码</button><p id="reset-password-feedback" role="status" aria-live="polite"></p></form></section>
         </section>
 
         <section class="flow-screen" id="avatar-screen" aria-labelledby="mirror-title" hidden>
@@ -81,7 +112,7 @@
           </form>
           <dialog id="outfit-dialog" class="panel outfit-dialog" aria-labelledby="outfit-title">
             <div class="section-heading"><h2 id="outfit-title">我的造型</h2><form method="dialog"><button class="secondary icon-button" aria-label="关闭"><svg viewBox="0 0 7 7" aria-hidden="true"><path fill="currentColor" d="M0 0h2v1h1v1h1V1h1V0h2v2H6v1H5v1h1v1h1v2H5V6H4V5H3v1H2v1H0V5h1V4h1V3H1V2H0z"/></svg></button></form></div>
-            <p class="lead">最多存 3 套，保存在这台设备。空槽位直接存；3 套都满了，就选一套覆盖。</p>
+            <p class="lead">最多存 3 套，保存在账号中并可在其他设备使用。空槽位直接存；3 套都满了，就选一套覆盖。</p>
             <ol id="outfit-slots" class="slot-grid"></ol>
             <p id="outfit-status" class="outfit-status" role="status" aria-live="polite"></p>
           </dialog>

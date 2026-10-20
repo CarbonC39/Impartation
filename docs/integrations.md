@@ -11,7 +11,7 @@
 | 留言板 | `board` | `message-wall` | SQLite 按 Space 与资源保存；同一 Space 内跨地图共享 |
 | 共享番茄钟 | `pomodoro` | `focus-corner` | 每个 Space 的唯一 live room 按资源维护，不持久化 |
 
-在 Tiled 的 `interactions` 对象层添加矩形，填写类型和需要的属性即可使用；地图制作见[地图说明](tiled.md)。两种工具都要求有效身份、当前连接且位于对应地图的对应区域，每连接操作间隔至少 500ms。身份来源见[匿名身份与权限](account-system.md)。
+在 Tiled 的 `interactions` 对象层添加矩形，填写类型和需要的属性即可使用；地图制作见[地图说明](tiled.md)。两种工具都要求有效身份、当前连接且位于对应地图的对应区域，每连接操作间隔至少 500ms。身份来源见[账号与权限](account-system.md)。
 
 ### 留言板
 
