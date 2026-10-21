@@ -84,7 +84,7 @@ sequenceDiagram
 
 界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入，并标出 shared `SOFT_COLOR_ZONE` 柔和区；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、柔和区锁定、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观，不强制柔和区。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
 
-Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建额外实例。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
+Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建额外实例。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 拒绝重复连接，并将重连期间的连接视为仍占用席位。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 
@@ -111,26 +111,26 @@ registry 校验要求 map ID 和 Space ID 各自唯一、每个 Space 的 initia
 | 对象层 | 提取规则 |
 | --- | --- |
 | `spawns` | 至少一个命名 point；名称唯一，按玩家碰撞体检查可站立性 |
-| `collisions` | 地图内的非旋转、正面积轴对齐矩形；可为空 |
-| `interactions` | 区域为地图内的非旋转、正面积轴对齐矩形；动作锚点为可站立的点；可为空；旧 action/区域保留 `name` ID；新增 variantSelector/privateArea/wardrobe 使用 Tiled 数字 object ID 的字符串形式 |
+| `collisions` | 地图内的非旋转、正面积轴对齐矩形或简单多边形；可为空 |
+| `interactions` | 区域为地图内的非旋转、正面积轴对齐矩形或简单多边形；动作锚点为可站立的点；可为空；旧 action/区域保留 `name` ID；新增 variantSelector/privateArea/wardrobe 使用 Tiled 数字 object ID 的字符串形式 |
 
 `interactions` 层也可包含动作锚点：`class` 为 `action` 的对象必须是命名 point，string property `action` 指定动作名称。可选 `facing` 声明对齐到锚点所需朝向；交互不会自动转身。`offsetX`/`offsetY` 指定世界像素偏移，`linkedObjectId` 保留地图对象关联。有效锚点必须可站立；每个动作名称在每个 16×16 格最多一个锚点，不同动作可共格。服务端以玩家 12×8 脚底矩形与锚点 tile 的正面积重叠查找候选；最近候选优先，等距按稳定对象 ID 的字符串顺序决定。最近候选朝向不符时动作原地执行，保持位置和朝向、清空 `actionTargetId` 并释放先前认领；不对齐或认领锚点，不打开变体选择器或自动应用变体。最近候选朝向相符但已被占用时直接拒绝，不尝试更远锚点。有效请求吸附到偏移位置，并沿吸附路径按短于脚底矩形尺寸的步长检查权威碰撞与私密区域限制；没有重叠候选时动作原地执行。ID 在地图间可重复，运行时状态通过 map ID 隔离。
 
 交互 kind 取对象 `class`，没有 class 时使用 `type`；properties 保存为 `Record<string, unknown>`。`resourceId` 是从 properties 提取的共享资源标识，与 zone ID 不同：多个区域或地图可以引用同一资源。Portal 使用 `targetMap` 和 `targetSpawn`。
 
-已注册的交互定义负责 kind 特有的语义校验。类型决定配置和校验：action 和 variantSelector 使用各自的点配置 schema；privateArea 与 wardrobe 使用矩形定义，暂无额外必填属性；board、pomodoro 和 `web` 检查非空 resourceId，Portal 检查目标属性。所有内置类型校验所需属性类型及几何，重复属性名被拒绝。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
+已注册的交互定义负责 kind 特有的语义校验。类型决定配置和校验：action 和 variantSelector 使用各自的点配置 schema；privateArea 与 wardrobe 使用区域定义，暂无额外必填属性；board、pomodoro 和 `web` 检查非空 resourceId，Portal 检查目标属性。所有内置类型校验所需属性类型及几何，重复属性名被拒绝。未知 kind 仍可解析，不因缺少内置 handler 而拒绝地图；若需要特定属性约束，应注册定义，或向 `parseWorldMap` 传入自定义 registry。定义注册不会自动创建客户端或服务端 handler。
 
 校验范围与渲染能力分开。其它对象层中的装饰对象保持不透明；只有被 variantSelector 引用的目标矩形或 tile object 需要校验目标几何、可选基础 GID 与 `variant.<名称>` local tile ID。单 tileset 地图默认选择该 tileset，多 tileset 地图要求目标提供 `variantTileset`；共享解析器根据展开后的 tileset 元数据解析成运行时 map GID。多个 tile layer 或额外 Tiled 元数据也不会仅因当前画面不需要而被语义解析器拒绝。语义层的可见性不控制碰撞或授权。
 
-普通区域按解析顺序选择第一个包含脚点的矩形；没有普通区域时才以 privateArea 作为 zoneId。privateAreaId 独立计算，因此私密房间内的镜子、web 入口和 Portal 不会覆盖成员上下文。privateArea 矩形互不重叠，普通区域可放在其中。包含判断左/上边界闭合、右/下边界开放。
+普通区域按解析顺序选择第一个包含脚点的区域；没有普通区域时才以 privateArea 作为 zoneId。privateAreaId 独立计算，因此私密房间内的镜子、web 入口和 Portal 不会覆盖成员上下文。privateArea 的实际面积互不重叠，普通区域可放在其中。矩形包含判断左/上边界闭合、右/下边界开放，多边形边界计入区域。凹多边形支持正反绕序；碰撞与私密准入使用真实多边形与脚底矩形的正面积交集，共边不算重叠。
 
 ### 3.3 渲染加载和支持边界
 
-后端支持内嵌 tileset 和外置 JSON `.tsj`，解析其图片引用，递归改写 group 内 image layer 的图片路径。资源路由仅接受已建立索引的 map/asset ID；没有任意文件路径下载接口。地图与 tileset 是部署者控制的可信文件，加载器允许其引用文件系统资源，制图文件本身不是面向不可信上传的沙盒。
+后端先按 registry 可选 `project` 文件展开 Custom Classes 默认属性、typed properties 和 JSON Object Templates，并检查 object-reference 属性。模板属性继承可被实例覆盖，模板 tile GID 映射到地图 tileset。规范化区域保留普通 properties 值和 typedProperties 元数据。后端支持内嵌 tileset 和外置 JSON `.tsj`，解析其图片引用，递归改写 group 内 image layer 的图片路径。资源路由仅接受已建立索引的 map/asset ID；没有任意文件路径下载接口。地图与 tileset 是部署者控制的可信文件，加载器允许其引用文件系统资源，制图文件本身不是面向不可信上传的沙盒。
 
 `SpaceScene.preload` 把规范化 JSON 交给 Phaser Tiled parser，并加载带顶层 `image` 的 atlas tileset。`create` 按 Phaser 解析得到的 tile layer 顺序创建图层，使用全部已加载 atlas；不要求图层叫 ground，也不要求只有一张内嵌 tileset。玩家和交互区提示在瓦片层之后绘制。
 
-当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和通用 tile object 没有相应的客户端绘制实现。variantSelector 引用的矩形或直立 tile object 有专用 atlas 绘制路径，按目标尺寸绘制底边锚定的图块，深度高于同底边的 ySort 图块；不支持翻转 GID、旋转或 image collection tileset。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
+当前实现覆盖 atlas tileset、多个瓦片层及 group 内的瓦片层。atlas tile animation 按 Tiled 每帧 duration 循环：WebGL 使用 Phaser 4 原生动画，Canvas 使用相同帧解析；abovePlayers、ySort 与变体目标也参与播放，碰撞几何保持静态。外置 XML `.tsx` 没有转换器；image collection tileset、image layer 和通用 tile object 没有相应的客户端绘制实现。variantSelector 引用的矩形或直立 tile object 有专用 atlas 绘制路径，按目标尺寸绘制底边锚定的图块，深度高于同底边的 ySort 图块；不支持翻转 GID、旋转或 image collection tileset。后端保留/改写这些数据不表示前端已经支持绘制。新增 Tiled 视觉支持应改动加载或渲染路径，不应顺便收紧无关语义校验。
 
 地图逻辑尺寸来自 registry 中的 world。浏览器相机默认倍率按 Tiled 图块宽高中较大的一边计算：取最接近 `48 / tileSize` 的整数，并限制在 1–6；16×16 图块默认用 3x。浏览器设置可选自动或固定 1x–6x，按浏览器保存并立即应用。Phaser camera zoom 同时作用于地图、角色和对象视觉，Tiled 像素坐标、出生点、碰撞和服务端移动规则保持原值。昵称与区域文字按屏幕尺寸保持可读；昵称绘制在角色脚点下方，不随动作改变文字。registry 不限制地图纵横比；全屏画布由 RESIZE 适配窗口。
 
@@ -180,7 +180,7 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 
 `SpaceRoom` 校验输入和身份后，保存该连接的最近方向及接收时间。每 50ms 更新一次权威移动，state patch 间隔也是 50ms；输入超过 250ms 未更新或玩家已断线时停止推进。
 
-[stepMovement](../packages/shared/src/world.ts) 将斜向输入归一化，以 150 像素/秒移动；单步 delta 限制在 0–50ms，依次尝试 X、Y 方向，允许沿墙滑动。玩家坐标表示地面脚点，碰撞使用固定 12×8 像素的轴对齐地面矩形：横向从脚点 x−6 到 x+6，纵向从 y−8 到脚点 y。该尺寸独立于地图 tile 和角色图片；边界及 collision 矩形都由当前 mapId 对应的 `WorldMap` 决定。移动后，服务端重新计算 zoneId。
+[stepMovement](../packages/shared/src/world.ts) 将斜向输入归一化，以 150 像素/秒移动；单步 delta 限制在 0–50ms，依次尝试 X、Y 方向，允许沿墙滑动。玩家坐标表示地面脚点，碰撞使用固定 12×8 像素的轴对齐地面矩形：横向从脚点 x−6 到 x+6，纵向从 y−8 到脚点 y。该尺寸独立于地图 tile 和角色图片；边界及 collision 几何都由当前 mapId 对应的 `WorldMap` 决定。移动后，服务端重新计算 zoneId。
 
 客户端对服务端位置做线性插值，无本地预测或重演。全屏画布使用 RESIZE，镜头在地图范围内跟随当前玩家；键盘和屏幕方向按钮提交相同的 input，松开、页面隐藏或失焦会停止输入。`facing` 由方向输入更新，`motion` 表示 idle/walk；激活动作时服务端同步动作、动画标记和目标对象 ID，并按锚点规则调整位置。配置了 `facing` 的锚点要求玩家预先匹配朝向才能对齐；不符时仍可原地坐下，按钮保持普通 sit 标签，反馈会说明原地动作和所需朝向。交互不会自动转向；旧地图如依赖自动转向，可移除限制以允许原地动作，或安排玩家在激活前转向。非零移动会清除动作状态。场景中的区域通知使用服务端 zoneId；界面提示和按钮状态不会替代服务端位置校验。
 
@@ -312,6 +312,7 @@ Better Auth 负责用户名/密码凭据、session cookie 和密码重置 token�
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
 | `GET /api/tools` | 公开工具 resourceId、URL 和可选展示配置；不能放凭据 |
 | `GET /api/voice-config` | 发布浏览器建立 WebRTC 连接所需的 ICE server 配置；不要放长期 TURN 凭据 |
+| `GET /api/voice-credentials` | 验证 Better Auth session 后，为当前用户签发 coturn TURN REST 短期凭据；响应不缓存 |
 | `GET /api/me` | 有效身份的 profile；可转发认证库刷新后的 Set-Cookie |
 | `PATCH /api/me` | JSON 更新昵称/avatar/appearance，校验提供的 Origin，不接受 role 更新 |
 | `GET /api/registration`、`POST /api/register` | 查询注册策略；按策略创建账号并登录 |
@@ -327,7 +328,7 @@ Better Auth 负责用户名/密码凭据、session cookie 和密码重置 token�
 
 当前部署模型为单后端实例和本地 SQLite。每 Space 单 live room、Space 内状态及 BoardStore 通知都在进程内；直接增加多个进程无法保留现有 Space 内共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
 
-语音 ICE 配置来自 `VOICE_ICE_SERVERS` JSON 环境变量；连接半径、断开半径、最大节点数和扫描间隔分别由 `VOICE_CONNECT_RADIUS`（默认 160）、`VOICE_DISCONNECT_RADIUS`（192）、`VOICE_MAX_PEERS`（6）和 `VOICE_SCAN_INTERVAL_MS`（1000）控制。配置经公开 HTTP 接口返回给浏览器，TURN 用户名和凭据对客户端可见；部署时应使用受限且定期轮换的 TURN 凭据，更新环境变量并重启后端；项目不签发 TURN 凭据。STUN/TURN 服务由部署者提供。
+语音公开 ICE 配置来自 `VOICE_ICE_SERVERS` JSON 环境变量。可选的 coturn TURN REST 认证使用 `VOICE_TURN_URLS`（逗号分隔）和仅后端保存的 `VOICE_TURN_SHARED_SECRET`；两者需同时配置。coturn 需启用 `--use-auth-secret`，并设置同一个 `--static-auth-secret`，详见 [coturn turnserver 文档](https://github.com/coturn/coturn/blob/master/man/man1/turnserver.1)。已登录用户通过 no-store 的 `GET /api/voice-credentials` 获取基于 `${expiry}:${verifiedUserId}` 用户名和 HMAC-SHA1 密码的短期凭据，默认有效一小时，可由 `VOICE_TURN_CREDENTIAL_TTL_SECONDS` 设置为 60–86400 秒。浏览器在每次新建 peer 连接前检查并刷新凭据，已有连接继续使用建立时的 ICE 配置。两项 TURN 环境变量均未设置时只使用公开 ICE 列表，默认公共 STUN 行为保持不变。连接半径、断开半径、最大节点数和扫描间隔分别由 `VOICE_CONNECT_RADIUS`（默认 160）、`VOICE_DISCONNECT_RADIUS`（192）、`VOICE_MAX_PEERS`（6）和 `VOICE_SCAN_INTERVAL_MS`（1000）控制。STUN/TURN 服务由部署者提供。
 
 ## 8. 验证与定位问题
 
