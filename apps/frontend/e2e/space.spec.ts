@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
 import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type WebTool, type SpaceProtocol } from '@virtual-workspace/shared';
 import type Phaser from 'phaser';
@@ -208,6 +208,16 @@ test('voice reports missing WebRTC separately from microphone support', async ({
 test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave', async ({ page, browser }) => {
   test.setTimeout(90000);
   const bob = await browser.newPage();
+  let aliceCredentialRequests = 0;
+  let bobCredentialRequests = 0;
+  const mockCredentials = (count: () => number) => async (route: Route) => {
+    const requestCount = count();
+    await route.fulfill({ json: { iceServers: [], expiresAt: Date.now() + (requestCount === 1 ? 250 : 60_000) } });
+  };
+  const countAlice = () => ++aliceCredentialRequests;
+  const countBob = () => ++bobCredentialRequests;
+  await page.route('**/api/voice-credentials', mockCredentials(countAlice));
+  await bob.route('**/api/voice-credentials', mockCredentials(countBob));
   const microphone = () => {
     const typedWindow = window as Window & { voiceAudioContexts?: AudioContext[] };
     typedWindow.voiceAudioContexts = [];
@@ -237,6 +247,19 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
     // Both test tones count as speech: this browser shows a mic over itself and over the remote peer.
     const visibleMics = () => visibleMicCount(page);
     await expect.poll(visibleMics, { timeout: 10000 }).toBe(2);
+    await expect.poll(() => aliceCredentialRequests).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => bobCredentialRequests).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(300);
+    await page.locator('#settings-toggle').click();
+    await page.locator('#voice-disconnect').click();
+    await bob.locator('#settings-toggle').click();
+    await bob.locator('#voice-disconnect').click();
+    await page.locator('#voice-mic').click();
+    await bob.locator('#voice-mic').click();
+    await expect(page.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
+    await expect(bob.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
+    expect(aliceCredentialRequests).toBeGreaterThanOrEqual(2);
+    expect(bobCredentialRequests).toBeGreaterThanOrEqual(2);
     // The speaker button silences incoming voices without closing the connection.
     const peerAudioMuted = () => page.locator('audio[data-voice-peer]').evaluateAll(elements =>
       elements.every(element => (element as HTMLAudioElement).muted));
@@ -437,11 +460,64 @@ test('map zoom choice persists across visits', async ({ page }) => {
   await expect(page.locator('#camera-zoom')).toHaveValue('6');
   await expect(page.locator('#account-status')).toContainText('@');
   await captureRenderedScene(page);
-  await openAvatarScreen(page);
-  await page.locator('#join').click();
-  await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await joinSavedProfile(page);
+  await expect(page.locator('#status')).toContainText('已进入空间', { timeout: 7_000 });
   await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.cameras.main.zoom)).toBe(6);
+});
+
+test('pagehide releases the current room and bfcache restore allows rejoining', async ({ page }) => {
+  await enter(page, 'PagehideRejoin');
+  const sessionId = await sessionOf(page);
+  const observer = await observe();
+  try {
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+    await expect(page.locator('#game canvas')).toHaveCount(0);
+    await expect.poll(() => observer.state.players.has(sessionId)).toBe(false);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await joinSavedProfile(page);
+    const rejoinedSessionId = await sessionOf(page);
+    expect(rejoinedSessionId).not.toBe(sessionId);
+    await expect.poll(() => observer.state.players.has(rejoinedSessionId)).toBe(true);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+test('a room that resolves after pagehide is released instead of replacing the restored page', async ({ page }) => {
+  await signInFresh(page, 'PendingJoinPagehide');
+  await openAvatarScreen(page);
+  let releaseMatchmake!: () => void;
+  let signalMatchmake!: () => void;
+  let signalSocketClose!: () => void;
+  const held = new Promise<void>(resolve => { releaseMatchmake = resolve; });
+  const requested = new Promise<void>(resolve => { signalMatchmake = resolve; });
+  const socketClosed = new Promise<void>(resolve => { signalSocketClose = resolve; });
+  const matchmakeRoute = '**/matchmake/joinOrCreate/space';
+  page.on('websocket', socket => { socket.on('close', signalSocketClose); });
+  await page.route(matchmakeRoute, async route => {
+    signalMatchmake();
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.locator('#join').click();
+    await page.locator('#prejoin-enter').click();
+    await requested;
+    await page.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    releaseMatchmake();
+    await socketClosed;
+    await expect(page.locator('#game canvas')).toHaveCount(0);
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await joinSavedProfile(page);
+    await page.unroute(matchmakeRoute);
+  } finally {
+    releaseMatchmake();
+    if (!page.isClosed()) await page.unroute(matchmakeRoute);
+  }
 });
 
 test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
@@ -521,7 +597,7 @@ async function joinSavedProfile(page: Page) {
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
-async function observe(): Promise<Room<SpaceProtocol>> {
+async function observe(spaceId = 'main'): Promise<Room<SpaceProtocol>> {
   const endpoint = test.info().project.use.baseURL!;
   const username = nextUsername();
   const response = await fetch(endpoint + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: endpoint },
@@ -529,7 +605,7 @@ async function observe(): Promise<Room<SpaceProtocol>> {
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
-    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'main' });
+    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;
@@ -1494,14 +1570,17 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
   await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#map-world-name')).toHaveText('Other');
-  const main = await observe();
+  const main = await observe('main');
   const identity = await page.request.get('/api/me');
   const profile = await identity.json() as { id: string };
   const sessionId = await sessionOf(page);
   const endpoint = test.info().project.use.baseURL!;
   const cookie = (await page.context().cookies()).map(value => `${value.name}=${value.value}`).join('; ');
-  const observer = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
-    { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' });
+  const sameAccountClient = new Client(endpoint, { headers: { Cookie: cookie } });
+  await expect(sameAccountClient.joinOrCreate<SpaceProtocol>('space',
+    { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' }))
+    .rejects.toThrow(/Account already connected to this Space/);
+  const observer = await observe('other');
   observer.onMessage('chat', () => {});
   try {
     if (!observer.state?.players) await new Promise<void>(resolve => observer.onStateChange.once(() => resolve()));

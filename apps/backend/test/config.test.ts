@@ -35,6 +35,18 @@ function loadRegistration(mode: string | undefined, requiredCode: string | undef
   ], { cwd, env, encoding: 'utf8' });
 }
 
+function loadTurnConfig(values: Partial<Record<'VOICE_TURN_URLS' | 'VOICE_TURN_SHARED_SECRET' | 'VOICE_TURN_CREDENTIAL_TTL_SECONDS', string>>) {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  env.DATABASE_PATH = ':memory:';
+  delete env.NODE_TEST_CONTEXT;
+  delete env.VOICE_TURN_URLS;
+  delete env.VOICE_TURN_SHARED_SECRET;
+  delete env.VOICE_TURN_CREDENTIAL_TTL_SECONDS;
+  Object.assign(env, values);
+  return spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e',
+    "await import('./apps/backend/src/config.ts');"], { cwd, env, encoding: 'utf8' });
+}
+
 test('SPACE_MAX_CLIENTS defaults to 32 and accepts an integer environment override', () => {
   const fallback = loadMaxClients(undefined, 32);
   assert.equal(fallback.status, 0, fallback.stderr);
@@ -63,4 +75,27 @@ test('code registration requires a configured code and compares submitted codes'
   assert.equal(correct.status, 0, correct.stderr);
   const incorrect = loadRegistration('code', 'secret-code', 'wrong-code');
   assert.equal(incorrect.status, 2, incorrect.stderr);
+});
+
+test('TURN defaults keep public STUN-only deployments valid and require paired configuration', () => {
+  assert.equal(loadTurnConfig({}).status, 0);
+  const configured = loadTurnConfig({ VOICE_TURN_URLS: 'turn:relay.example.test:3478',
+    VOICE_TURN_SHARED_SECRET: 'test-turn-shared-secret-with-at-least-32-chars' });
+  assert.equal(configured.status, 0, configured.stderr);
+  assert.notEqual(loadTurnConfig({ VOICE_TURN_URLS: 'turn:relay.example.test:3478' }).status, 0);
+  assert.notEqual(loadTurnConfig({ VOICE_TURN_SHARED_SECRET: 'test-turn-shared-secret-with-at-least-32-chars' }).status, 0);
+});
+
+test('TURN config validates relay URLs, shared secret length and credential lifetime bounds', () => {
+  const secret = 'test-turn-shared-secret-with-at-least-32-chars';
+  const urls = 'turn:relay.example.test:3478';
+  assert.notEqual(loadTurnConfig({ VOICE_TURN_URLS: 'https://relay.example.test', VOICE_TURN_SHARED_SECRET: secret }).status, 0);
+  assert.notEqual(loadTurnConfig({ VOICE_TURN_URLS: urls, VOICE_TURN_SHARED_SECRET: 'short' }).status, 0);
+  for (const ttl of ['60', '86400']) {
+    const result = loadTurnConfig({ VOICE_TURN_URLS: urls, VOICE_TURN_SHARED_SECRET: secret, VOICE_TURN_CREDENTIAL_TTL_SECONDS: ttl });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  for (const ttl of ['59', '86401', '60.5']) {
+    assert.notEqual(loadTurnConfig({ VOICE_TURN_URLS: urls, VOICE_TURN_SHARED_SECRET: secret, VOICE_TURN_CREDENTIAL_TTL_SECONDS: ttl }).status, 0);
+  }
 });

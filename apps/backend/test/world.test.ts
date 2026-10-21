@@ -234,6 +234,17 @@ test('different actions may share a tile but duplicate same-action tile anchors 
   assert.throws(() => parseWorldMap(sharedTile('sit')));
 });
 
+test('action linkedObjectId accepts numeric Tiled references and an unset reference', () => {
+  for (const [value, expected] of [[9, '9'], [0, undefined]] as const) {
+    const parsed = parseWorldMap(mutate((_map, layers) => {
+      const list = objects(layers[3]);
+      setProperty(list.find(object => object.name === 'lobby-seat-1')!, 'linkedObjectId', value);
+      layers[3].objects = list;
+    }));
+    assert.equal(parsed.actions[0].linkedObjectId, expected);
+  }
+});
+
 test('point interactions require the explicit action class', () => {
   assert.throws(() => parseWorldMap(mutate((_map, layers) => {
     const list = objects(layers[3]);

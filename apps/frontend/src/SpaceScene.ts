@@ -36,6 +36,8 @@ export class SpaceScene extends Phaser.Scene {
   private tileWidth = 16;
   private tileHeight = 16;
   private zoneTexts: Phaser.GameObjects.Text[] = [];
+  private animationElapsed = 0;
+  private canvasTiles: { tile: Phaser.Tilemaps.Tile; gid: number; tileset: Phaser.Tilemaps.Tileset }[] = [];
 
   constructor(private room: Room<SpaceProtocol>, private mapEntry: RegisteredMap,
     private renderMap: { tilesets: { name: string; image?: string }[] }, private hooks: SceneHooks) {
@@ -70,6 +72,15 @@ export class SpaceScene extends Phaser.Scene {
       const result = map.addTilesetImage(tileset.name, `tiles-${index}`);
       return result ? [result] : [];
     });
+    // Phaser 4 animates WebGL tile layers natively; its Canvas renderer needs frame indices.
+    const trackCanvasAnimations = (rendered: Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer) => {
+      if (this.game.renderer.type !== Phaser.CANVAS) return;
+      rendered.forEachTile(tile => {
+        const tileset = tiles.find(set => set.containsTileIndex(tile.index));
+        const data: unknown = tileset?.getTileData(tile.index);
+        if (tileset && data && typeof data === 'object' && 'animation' in data) this.canvasTiles.push({ tile, gid: tile.index, tileset });
+      });
+    };
     // Blank row layers are appended to map.layers, so only visit the authored layers.
     for (const [index, layer] of [...map.layers].entries()) {
       const enabled = (name: string) => layer.properties.some(property =>
@@ -85,18 +96,24 @@ export class SpaceScene extends Phaser.Scene {
           }
           sorted.setAlpha(layer.alpha).setVisible(layer.visible)
             .setDepth(layer.y + (row + 1) * map.tileHeight + index * 0.001);
+          trackCanvasAnimations(sorted);
         }
         continue;
       }
       const rendered = map.createLayer(layer.name, tiles);
       if (!rendered) throw new Error(`Unable to render Tiled layer: ${layer.name}`);
+      trackCanvasAnimations(rendered);
       // Tiled custom properties survive Phaser's tile layer parser, including grouped layers.
       if (enabled('abovePlayers')) {
         rendered.setDepth(this.mapEntry.world.height + 3 + index);
       }
     }
     for (const zone of this.mapEntry.world.zones) {
-      this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
+      if (zone.polygon) {
+        const points = zone.polygon.map(p => new Phaser.Math.Vector2(p.x, p.y));
+        this.add.graphics().fillStyle(0xd5d080, 0.15).lineStyle(1, 0xd5d080, 0.6)
+          .fillPoints(points, true).strokePoints(points, true);
+      } else this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
         .setOrigin(0).setStrokeStyle(1, 0xd5d080, 0.6);
       this.zoneTexts.push(this.add.text(zone.x + 8, zone.y + 8, zoneLabels[zone.kind] ?? zone.kind,
         { fontSize: '14px', color: '#eeefd9' }).setScale(1 / zoom));
@@ -117,6 +134,7 @@ export class SpaceScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', visibility);
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
+      this.canvasTiles = [];
       this.hooks.zoneAnchor(undefined);
       canvas.removeEventListener('pointerdown', focusCanvas);
       window.removeEventListener('blur', stop);
@@ -131,9 +149,11 @@ export class SpaceScene extends Phaser.Scene {
     this.lastAnchor = '';
   }
   update(time: number, delta: number) {
+    this.animationElapsed += delta;
+    for (const { tile, gid, tileset } of this.canvasTiles) tile.index = tileset.getAnimatedTileId(gid, this.animationElapsed) ?? gid;
     const players = this.room.state?.players;
     if (!players) return;
-    this.objectVisuals?.update(this.room.state.worldObjects.get(this.mapEntry.id));
+    this.objectVisuals?.update(this.room.state.worldObjects.get(this.mapEntry.id), this.animationElapsed);
     const namesVisible = this.hooks.namesVisible();
     for (const [id, player] of players) {
       if (player.mapId !== this.mapEntry.id) continue;

@@ -2,17 +2,20 @@ import { z } from 'zod';
 import { InteractionRegistry } from './interactions.js';
 import type { MovementInput } from './index.js';
 import { actionNameSchema, characterActionSchema, facingSchema, isCharacterAction, type Facing } from './character.js';
+import { contains, polygonArea, overlapArea, areasOverlap, type Point, type Rect, type Area } from './geometry.js';
+export { contains, polygonArea, overlapArea, areasOverlap } from './geometry.js';
+export type { Point, Rect, Area } from './geometry.js';
 
 export const TILE_SIZE = 16;
 // Ground footprint ends at the foot anchor; sprite dimensions never affect physics.
 export const PLAYER_FOOTPRINT = { width: 12, height: 8 } as const;
 export const PLAYER_SPEED = 150;
 export const TICK_MS = 50;
-export type Point = { x: number; y: number };
-export type Rect = Point & { width: number; height: number };
-export type Zone = Rect & {
+export type TypedProperty = { type: string; propertytype?: string; value: unknown };
+export type Zone = Area & {
   id: string; kind: string; resourceId: string;
   properties: Record<string, unknown>;
+  typedProperties?: Record<string, TypedProperty>;
 };
 export type ActionObject = Point & {
   id: string; kind: 'action'; action: string; facing?: Facing;
@@ -36,7 +39,7 @@ export type ActionAnchor = ActionObject | VariantSelector;
 export type WorldMap = {
   width: number; height: number;
   spawns: Record<string, Point>;
-  collisions: Rect[]; zones: Zone[];
+  collisions: Area[]; zones: Zone[];
   actions: ActionObject[]; selectors: VariantSelector[]; variantTargets: VariantTarget[];
 };
 
@@ -46,10 +49,12 @@ const objectSchema = z.object({
   width: z.number().finite().nonnegative().default(0), height: z.number().finite().nonnegative().default(0),
   type: z.string().default(''), class: z.string().optional(), rotation: z.literal(0).default(0),
   point: z.boolean().optional(),
+  polygon: z.array(z.object({ x: z.number().finite(), y: z.number().finite() })).min(3).max(1024).optional(),
   properties: z.array(z.object({ name: z.string(), value: z.unknown() })).default([]),
+  typedProperties: z.record(z.string(), z.object({ type: z.string(), propertytype: z.string().optional(), value: z.unknown() })).optional(),
 }).passthrough().superRefine((obj, ctx) => {
-  for (const key of ['ellipse', 'polygon', 'polyline', 'gid', 'template']) {
-    if (obj[key] !== undefined && obj[key] !== false) ctx.addIssue({ code: 'custom', message: `Project semantic object requires a point or axis-aligned rectangle: ${key}` });
+  for (const key of ['ellipse', 'polyline', 'gid', 'template', 'capsule']) {
+    if (obj[key] !== undefined && obj[key] !== false) ctx.addIssue({ code: 'custom', message: `Project semantic object requires a point, axis-aligned rectangle or simple polygon: ${key}` });
   }
 });
 const layerSchema = z.object({
@@ -68,7 +73,7 @@ const identifier = z.string().trim().min(1).max(128);
 const actionPropertiesSchema = z.object({
   action: actionNameSchema, facing: facingSchema.optional(),
   offsetX: z.number().finite().default(0), offsetY: z.number().finite().default(0),
-  linkedObjectId: identifier.optional(),
+  linkedObjectId: z.union([identifier, z.number().int().nonnegative().transform(value => value === 0 ? undefined : String(value))]).optional(),
 });
 export type InteractionDefinition = { validate(zone: Zone): void };
 export const interactionDefinitions = new InteractionRegistry<InteractionDefinition>();
@@ -119,13 +124,16 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
   const spawns: Record<string, Point> = Object.create(null) as Record<string, Point>;
   for (const obj of objects('spawns')) {
     const name = identifier.parse(obj.name);
-    if (!obj.point || obj.width || obj.height || Object.hasOwn(spawns, name)) throw new Error('Spawns must be uniquely named points');
+    if (!obj.point || obj.polygon || obj.width || obj.height || Object.hasOwn(spawns, name)) throw new Error('Spawns must be uniquely named points');
     spawns[name] = { x: obj.x, y: obj.y };
   }
   if (!Object.keys(spawns).length) throw new Error('At least one named spawn is required');
+  const geometry = (obj: ReturnType<typeof objectSchema.parse>): Area => obj.polygon
+    ? polygonArea(obj.polygon.map(p => ({ x: obj.x + p.x, y: obj.y + p.y })))
+    : { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
   const collisions = objects('collisions').map(obj => {
-    if (obj.point) throw new Error('Collision must be a rectangle');
-    return { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+    if (obj.point) throw new Error('Collision must be a rectangle or polygon');
+    return geometry(obj);
   });
   const ids = new Set<string>();
   const zones: Zone[] = [];
@@ -144,20 +152,20 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
     const properties = Object.fromEntries(obj.properties.map(prop => [prop.name, prop.value]));
     if (new Set(obj.properties.map(prop => prop.name)).size !== obj.properties.length) throw new Error('Duplicate semantic property');
     if (kind === 'variantSelector') {
-      if (!obj.point || obj.width || obj.height) throw new Error('Variant selectors must be points');
+      if (!obj.point || obj.polygon || obj.width || obj.height) throw new Error('Variant selectors must be points');
       const config = variantSelectorPropertiesSchema.parse(properties);
       selectors.push({ id, kind, name: obj.name, x: obj.x, y: obj.y, ...config, targetObjectId: String(config.targetObjectId) });
       continue;
     }
     if (kind === 'action') {
-      if (!obj.point || obj.width || obj.height) throw new Error('Action anchors must be named points');
+      if (!obj.point || obj.polygon || obj.width || obj.height) throw new Error('Action anchors must be named points');
       const actionProperties = actionPropertiesSchema.parse(properties);
       actions.push({ id, kind: 'action', x: obj.x, y: obj.y, ...actionProperties });
       continue;
     }
-    if (obj.point) throw new Error('Zone interactions must be rectangles');
+    if (obj.point) throw new Error('Zone interactions must be rectangles or polygons');
     const zone: Zone = { id, kind, resourceId: typeof properties.resourceId === 'string' ? properties.resourceId.trim() : '',
-      properties, x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+      properties, ...geometry(obj), ...(obj.typedProperties ? { typedProperties: obj.typedProperties } : {}) };
     definitions.get(kind)?.validate(zone);
     zones.push(zone);
   }
@@ -193,13 +201,13 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
   }
   const privateAreas = zones.filter(zone => zone.kind === 'privateArea');
   for (const [index, area] of privateAreas.entries()) for (const other of privateAreas.slice(index + 1)) {
-    if (area.x < other.x + other.width && area.x + area.width > other.x && area.y < other.y + other.height && area.y + area.height > other.y)
+    if (areasOverlap(area, other))
       throw new Error('Private areas must not overlap');
   }
   const world: WorldMap = { width: map.width * TILE_SIZE, height: map.height * TILE_SIZE, spawns, collisions, zones, actions, selectors, variantTargets };
   for (const obj of [...collisions, ...zones, ...variantTargets]) {
     if (obj.width <= 0 || obj.height <= 0 || obj.x < 0 || obj.y < 0 ||
-      obj.x + obj.width > world.width || obj.y + obj.height > world.height) throw new Error('Semantic rectangle must have positive size and stay inside map bounds');
+      obj.x + obj.width > world.width || obj.y + obj.height > world.height) throw new Error('Semantic area must have positive size and stay inside map bounds');
   }
   for (const spawn of Object.values(spawns)) if (!canStand(world, spawn.x, spawn.y)) throw new Error('Spawn is outside walkable area');
   const actionTiles = new Set<string>();
@@ -222,6 +230,7 @@ export const spaceDefinitionSchema = z.object({
 export type SpaceDefinition = z.infer<typeof spaceDefinitionSchema>;
 
 export const mapRegistrySchema = z.object({
+  project: z.string().min(1).optional(),
   spaces: z.array(spaceDefinitionSchema).min(1),
   maps: z.array(z.object({ id: identifier, file: z.string().min(1), defaultSpawn: identifier })).min(1),
 });
@@ -263,9 +272,6 @@ export function validateWorldRegistry(registry: WorldRegistry): WorldRegistry {
   return registry;
 }
 
-export function contains(rect: Rect, x: number, y: number): boolean {
-  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
-}
 /** Activation requires positive-area overlap of the ground footprint and the anchor's tile. */
 export function standsOnAction(object: ActionAnchor, position: Point): boolean {
   const x = Math.floor(object.x / TILE_SIZE) * TILE_SIZE;
@@ -306,8 +312,7 @@ export function canStand(map: WorldMap, x: number, y: number): boolean {
   const halfWidth = PLAYER_FOOTPRINT.width / 2;
   const top = y - PLAYER_FOOTPRINT.height;
   return x >= halfWidth && top >= 0 && x <= map.width - halfWidth && y <= map.height &&
-    !map.collisions.some(rect => x + halfWidth > rect.x && x - halfWidth < rect.x + rect.width &&
-      y > rect.y && top < rect.y + rect.height);
+    !map.collisions.some(area => overlapArea(area, { x: x - halfWidth, y: top, width: PLAYER_FOOTPRINT.width, height: PLAYER_FOOTPRINT.height }) > 1e-8);
 }
 export function stepMovement(map: WorldMap, position: Point, input: MovementInput, deltaMs: number, permitted: (position: Point) => boolean = () => true): Point {
   const length = Math.hypot(input.x, input.y) || 1;
@@ -322,14 +327,16 @@ export function stepMovement(map: WorldMap, position: Point, input: MovementInpu
 
 const pointSchema = z.object({ x: z.number().finite(), y: z.number().finite() });
 const rectSchema = pointSchema.extend({ width: z.number().positive(), height: z.number().positive() });
+const areaSchema = rectSchema.extend({ polygon: z.array(pointSchema).min(3).max(1024).optional() });
 export const worldRegistryResponseSchema = z.object({
   spaces: z.array(spaceDefinitionSchema).min(1),
   maps: z.array(z.object({
     id: identifier, url: z.string().min(1), defaultSpawn: identifier,
     world: z.object({
       width: z.number().positive(), height: z.number().positive(), spawns: z.record(identifier, pointSchema),
-      collisions: z.array(rectSchema),
-      zones: z.array(rectSchema.extend({ id: identifier, kind: identifier, resourceId: z.string(), properties: z.record(z.string(), z.unknown()) })),
+      collisions: z.array(areaSchema),
+      zones: z.array(areaSchema.extend({ id: identifier, kind: identifier, resourceId: z.string(), properties: z.record(z.string(), z.unknown()),
+        typedProperties: z.record(z.string(), z.object({ type: z.string(), propertytype: z.string().optional(), value: z.unknown() })).optional() })),
       selectors: z.array(pointSchema.extend({ id: identifier, kind: z.literal('variantSelector'), name: identifier,
         action: characterActionSchema, facing: facingSchema.optional(), offsetX: z.number().finite(), offsetY: z.number().finite(),
         targetObjectId: identifier, variants: z.array(variantNameSchema).min(1), })),

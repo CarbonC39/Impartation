@@ -6,15 +6,16 @@ export class WorldObjectVisuals {
   private sprites = new Map<string, Phaser.GameObjects.Image>();
   constructor(private scene: Phaser.Scene, private world: WorldMap, private tilesets: Phaser.Tilemaps.Tileset[]) {}
 
-  update(state: MapObjectState | undefined) {
+  update(state: MapObjectState | undefined, elapsed = 0) {
     for (const target of this.world.variantTargets) {
       const object = state?.objects.get(target.id);
       const variant = object?.variant;
-      const gid = object?.variantCleared ? 0 : variant ? target.variants[variant] ?? target.gid : target.gid;
+      const baseGid = object?.variantCleared ? 0 : variant ? target.variants[variant] ?? target.gid : target.gid;
       const existing = this.sprites.get(target.id);
       existing?.setVisible(false);
-      if (gid === 0) continue;
-      const tileset = this.tilesets.find(set => gid >= set.firstgid && gid < set.firstgid + set.total);
+      if (baseGid === 0) continue;
+      const tileset = this.tilesets.find(set => baseGid >= set.firstgid && baseGid < set.firstgid + set.total);
+      const gid = tileset?.getAnimatedTileId(baseGid, elapsed) ?? baseGid;
       const coordinates = tileset?.getTileTextureCoordinates(gid);
       if (!tileset?.image || !coordinates || !('x' in coordinates) || !('y' in coordinates) ||
         typeof coordinates.x !== 'number' || typeof coordinates.y !== 'number') continue;

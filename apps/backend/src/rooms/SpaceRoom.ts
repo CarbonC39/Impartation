@@ -23,6 +23,9 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
   private initialMap = '';
   reconnectionSeconds = 20;
   private identities = new Map<string, Identity>();
+  // A connection slot is claimed in onAuth and held through reconnect attempts.
+  // Each Space has one live room, so this map enforces userId + this Space ID.
+  private connectedUsers = new Map<string, string>();
   private joinedAt = new Map<string, number>();
   private pendingReconnections = new Map<string, ReturnType<SpaceRoom['allowReconnection']>>();
   private commandCursor = 0;
@@ -191,7 +194,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       }
     }, TICK_MS);
   }
-  async onAuth(_client: SpaceClient, options: SpaceJoinOptions, context: AuthContext) {
+  async onAuth(client: SpaceClient, options: SpaceJoinOptions, context: AuthContext) {
     const origin = context.headers.get('origin');
     if (origin && !config.IDENTITY_TRUSTED_ORIGINS.split(',').map(value => value.trim()).includes(origin)) {
       throw new Error('Untrusted connection origin');
@@ -200,10 +203,24 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     if (parsed.spaceId !== this.state.spaceId) throw new ServerError(403, 'Space does not match this room');
     const identity = await identityFromHeaders(context.headers);
     if (!identity) throw new Error('A valid account session is required');
-    ensureProfile(identity.userId, parsed);
+    if (this.connectedUsers.has(identity.userId)) {
+      throw new ServerError(409, 'Account already connected to this Space');
+    }
+    // Claim synchronously after the async session check so concurrent onAuth calls
+    // cannot both pass before either reaches onJoin.
+    this.connectedUsers.set(identity.userId, client.sessionId);
+    try {
+      ensureProfile(identity.userId, parsed);
+    } catch (error) {
+      if (this.connectedUsers.get(identity.userId) === client.sessionId) this.connectedUsers.delete(identity.userId);
+      throw error;
+    }
     return identity;
   }
   async onJoin(client: SpaceClient, _options: SpaceJoinOptions, auth: Identity) {
+    if (this.connectedUsers.get(auth.userId) !== client.sessionId) {
+      throw new ServerError(409, 'Account connection reservation expired');
+    }
     if (!await activeProfile(auth)) throw new ServerError(401, 'Account session expired');
     for (const handler of this.interactions.registry.values()) handler.tick?.();
     this.identities.set(client.sessionId, auth);
@@ -263,6 +280,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     const player = this.state.players.get(client.sessionId);
     if (player) cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
     this.identities.delete(client.sessionId);
+    const reservation = [...this.connectedUsers].find(([, sessionId]) => sessionId === client.sessionId);
+    if (reservation) this.connectedUsers.delete(reservation[0]);
     this.joinedAt.delete(client.sessionId);
     this.pendingReconnections.delete(client.sessionId);
     this.state.players.delete(client.sessionId);

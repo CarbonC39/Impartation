@@ -18,11 +18,12 @@
 
 ## 配置 Space 与地图
 
-`MAP_REGISTRY_PATH` 指向服务器读取的 registry JSON。建议使用绝对路径；Docker 中必须填写容器内路径。配置顶层分为 `maps` 和 `spaces`：
+`MAP_REGISTRY_PATH` 指向服务器读取的 registry JSON。建议使用绝对路径；Docker 中必须填写容器内路径。配置顶层包含 `maps`、`spaces` 和可选 `project`：
 
 | 配置 | 托管时的含义 |
 | --- | --- |
 | `maps[].id` | 地图标识；Space 的地图列表和 Portal 用它引用地图，无需与文件名相同 |
+| `project`（可选） | 相对 registry 的 `.tiled-project` JSON 路径，用于展开 Custom Classes 默认属性 |
 | `maps[].file` | 相对 registry 所在目录的 Tiled JSON 路径 |
 | `maps[].defaultSpawn` | 进入该地图作为初始地图时使用的命名出生点 |
 | `spaces[].id` | 稳定机器标识，1–128 字符，匹配 `/^[a-z0-9][a-z0-9_-]*$/` |
@@ -38,7 +39,7 @@
 ### 新增地图或 Space
 
 1. 用 Tiled 制作有限、正交、16×16 tile 地图，保存为 JSON `.tmj`。添加命名出生点、碰撞和交互对象；具体约束见[地图设置](tiled.md#地图设置)。项目支持的渲染特性有限，不能仅以 Tiled 编辑器内显示正常作为验收依据。
-2. 把 `.tmj`、外置 JSON `.tsj` tileset 和图片按原相对结构一起部署。在 `maps` 登记文件和 `defaultSpawn`，再把地图 ID 加到对应 Space 的 `maps`，按需设为 `initialMap`。
+2. 把 `.tmj`、外置 JSON `.tsj` tileset、JSON Object Templates（`.tj`/`.json`）、可选 `.tiled-project` 和图片按原相对结构一起部署。在 `maps` 登记文件和 `defaultSpawn`，再把地图 ID 加到对应 Space 的 `maps`，按需设为 `initialMap`。
 3. 检查所有 Portal 的 `targetMap` 和 `targetSpawn`。Portal 只能指向当前 Space 内的地图；共享地图中的 Portal 必须对每个引用它的 Space 都有效。例如 A 中有 Portal 指向 B，使用 A 的 Space 也必须包含 B，即使用户暂时不走该入口。
 4. 新 Space 填写稳定 ID、展示名、封面、初始地图与地图列表，并放到希望的显示位置。封面文件要另外发布到浏览器可访问的静态路径。
 5. 如地图新增或删除 `web` 资源，同步核对 `EXTERNAL_TOOLS`，再重启后端并按下文验收。现有配置项必须仍对应 registry 地图中的 `web` 区域；未配置的入口可以保留。配置方式见[外置入口](integration-plan.md)。
@@ -47,7 +48,7 @@ Space 隔离不会自动创建第三方白板、文档或观看房间。`EXTERNA
 
 ### 文件路径与浏览器路径
 
-地图源文件按服务器文件系统解析：registry 的 `file` 相对 registry；`.tmj` 中外置 tileset 的 `source` 相对 `.tmj`；图片相对声明它的 `.tmj` 或 `.tsj`。保留目录结构，并使用部署平台上实际存在的大小写。XML `.tsx` 不受当前加载器支持。
+地图源文件按服务器文件系统解析：registry 的 `file` 相对 registry；`.tmj` 中外置 tileset 的 `source` 相对 `.tmj`；模板相对引用它的地图或模板文件；`project` 相对 registry；图片相对声明它的 `.tmj` 或 `.tsj`。保留目录结构，并使用部署平台上实际存在的大小写。XML `.tsx` 不受当前加载器支持。
 
 后端把这些地图图片引用改写为 `/api/maps/:id/assets/:asset`，渲染 JSON 则由 `/api/maps/:id/map.json` 提供。不要手写资源序号，也不要把服务器文件路径填到 `cover`。
 

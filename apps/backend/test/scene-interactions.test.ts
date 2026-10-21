@@ -267,6 +267,27 @@ test('private membership is peer controlled, survives exit, blocks physical admi
   assert.equal(area.members.size, 0); assert.equal(area.locked, false); assert.equal(area.resetAt, 0);
 });
 
+test('polygon private admission uses the diagonal boundary and allows retreat after a lock', async () => {
+  const definition = worlds.get('home')!.world.zones.find(zone => zone.id === '30')!;
+  definition.polygon = [{ x: 144, y: 128 }, { x: 240, y: 128 }, { x: 144, y: 224 }];
+  try {
+    const alice = await connect('PolygonMember'); const bob = await connect('PolygonOutsider');
+    const room = roomFor(alice), access = room['interactions'].access;
+    const a = room.state.players.get(alice.sessionId)!, b = room.state.players.get(bob.sessionId)!;
+    a.x = 176; a.y = 160; b.x = 224; b.y = 208; access.tick();
+    assert.equal(a.privateAreaId, '30'); assert.equal(b.privateAreaId, '');
+    assert.equal((await alice.request('privateArea', { areaId: '30', operation: 'lock', locked: true })).ok, true);
+    assert.equal(access.canEnter('home', bob.sessionId, { x: 224, y: 208 }), true, 'empty corner in bounding box stays accessible');
+    assert.equal(access.canEnter('home', bob.sessionId, { x: 188, y: 188 }), false, 'outside foot point still has footprint overlap');
+    assert.equal(access.canMove('home', bob.sessionId, { x: 188, y: 188 }, { x: 189, y: 189 }), true);
+    assert.equal(access.canMove('home', bob.sessionId, { x: 188, y: 188 }, { x: 187, y: 187 }), false);
+    assert.equal(access.canEnter('home', alice.sessionId, { x: 188, y: 188 }), true);
+    // The current map Portal points at the private spawn; polygon admission also protects transfers.
+    b.x = 280; b.y = 88;
+    assert.equal((await bob.request('portal', { zoneId: 'local-door' })).ok, false);
+  } finally { delete definition.polygon; }
+});
+
 test('private areas isolate chat and voice from the public room', async () => {
   const alice = await connect('Alice'); const bob = await connect('Bob'); const carol = await connect('Carol');
   const clients = [alice, bob, carol];
