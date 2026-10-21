@@ -13,7 +13,7 @@ type Payload<T> = T extends { format: infer F extends z.ZodType } ? z.input<F> :
 type Result<T> = T extends { handler: (...args: never[]) => infer R } ? Awaited<R> : T extends (...args: never[]) => infer R ? Awaited<R> : never;
 type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 const protocolMatches: { [K in keyof SpaceProtocol['messages']]: Same<Payload<SpaceProtocol['messages'][K]>, Payload<SpaceRoom['messages'][K]>> } = {
-  selectVariant: true, privateArea: true, cancelAction: true, input: true, chat: true, typing: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
+  selectVariant: true, privateArea: true, cancelAction: true, input: true, chat: true, typing: true, webTool: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
   voiceEnabled: true, voiceOffer: true, voiceAnswer: true, voiceIceCandidate: true, voiceEnd: true,
 };
 const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activateAction' | 'selectVariant' | 'privateArea' | 'cancelAction']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {

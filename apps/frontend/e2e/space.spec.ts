@@ -987,143 +987,167 @@ test('a 390px screen fits the map and forms without horizontal overflow', async 
   expect(canvas?.width).toBeGreaterThan(100);
 });
 
-test('mobile direction controls move the authoritative player and release on pointerup', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await enter(page, 'E2ETouchControls');
-  const observer = await observe();
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
-  const player = () => observer.state.players.get(sessionId)!;
-  let pointerDown = false;
-  try {
-    await expect.poll(() => player()?.name).toBe('E2ETouchControls');
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+test.describe('touch device', () => {
+  test.use({ hasTouch: true });
+  test('mobile direction controls move the authoritative player and release on pointerup', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await enter(page, 'E2ETouchControls');
+    const observer = await observe();
+    const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const player = () => observer.state.players.get(sessionId)!;
+    let pointerDown = false;
+    try {
+      await expect.poll(() => player()?.name).toBe('E2ETouchControls');
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-    const right = await page.locator('[data-move="right"]').boundingBox();
-    expect(right).not.toBeNull();
-    const startX = player().x;
-    await page.mouse.move(right!.x + right!.width / 2, right!.y + right!.height / 2);
-    await page.mouse.down();
-    pointerDown = true;
-    await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
-    await expect.poll(() => player().x, { intervals: [10] }).toBeGreaterThan(startX);
-    expect(player().facing).toBe('right');
-    await page.mouse.up();
-    pointerDown = false;
-    await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+      const right = await page.locator('[data-move="right"]').boundingBox();
+      expect(right).not.toBeNull();
+      const startX = player().x;
+      await page.mouse.move(right!.x + right!.width / 2, right!.y + right!.height / 2);
+      await page.mouse.down();
+      pointerDown = true;
+      await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
+      await expect.poll(() => player().x, { intervals: [10] }).toBeGreaterThan(startX);
+      expect(player().facing).toBe('right');
+      await page.mouse.up();
+      pointerDown = false;
+      await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
 
-    const up = await page.locator('[data-move="up"]').boundingBox();
-    expect(up).not.toBeNull();
-    const startY = player().y;
-    await page.mouse.move(up!.x + up!.width / 2, up!.y + up!.height / 2);
-    await page.mouse.down();
-    pointerDown = true;
-    await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
-    await expect.poll(() => player().y, { intervals: [10] }).toBeLessThan(startY);
-    expect(player().facing).toBe('up');
-    await page.mouse.up();
-    pointerDown = false;
-    await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
+      const up = await page.locator('[data-move="up"]').boundingBox();
+      expect(up).not.toBeNull();
+      const startY = player().y;
+      await page.mouse.move(up!.x + up!.width / 2, up!.y + up!.height / 2);
+      await page.mouse.down();
+      pointerDown = true;
+      await expect.poll(() => player().motion, { intervals: [10] }).toBe('walk');
+      await expect.poll(() => player().y, { intervals: [10] }).toBeLessThan(startY);
+      expect(player().facing).toBe('up');
+      await page.mouse.up();
+      pointerDown = false;
+      await expect.poll(() => player().motion, { intervals: [10] }).toBe('idle');
 
-    await page.locator('#leave').click();
-    await expect(page.locator('#status')).toContainText('已离开');
-    await expect(page.locator('#game canvas')).toHaveCount(0);
-  } finally {
-    if (pointerDown) await page.mouse.up();
-    if (observer.connection.isOpen) await observer.leave();
-  }
+      await page.locator('#leave').click();
+      await expect(page.locator('#status')).toContainText('已离开');
+      await expect(page.locator('#game canvas')).toHaveCount(0);
+    } finally {
+      if (pointerDown) await page.mouse.up();
+      if (observer.connection.isOpen) await observer.leave();
+    }
+  });
 });
 
-test('mobile direction pad steers diagonally by sliding and its grip moves the pad persistently', async ({ page }) => {
+// The pad depends on a touch pointer, not on the window width.
+test.describe('touch device', () => {
+  test.use({ hasTouch: true });
+  test('mobile direction pad steers diagonally by sliding and its grip moves the pad persistently', async ({ page }) => {
+    test.setTimeout(30000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await enter(page, 'E2ETouchPad');
+    const pad = page.locator('#touch-controls');
+    const pressed = () => pad.locator('.pressed').evaluateAll(keys => keys.map(key => (key as HTMLElement).dataset.move).sort().join('+'));
+    const box = (await pad.boundingBox())!;
+    const centerX = box.x + box.width / 2, centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX + 50, centerY);
+    await page.mouse.down();
+    await expect.poll(pressed).toBe('right');
+    await page.mouse.move(centerX + 50, centerY + 50);
+    await expect.poll(pressed).toBe('down+right');
+    await page.mouse.up();
+    await expect.poll(pressed).toBe('');
+    expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
+
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(200, 300, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(pressed).toBe('');
+    const moved = (await pad.boundingBox())!;
+    expect(Math.round(moved.x + moved.width / 2)).toBe(200);
+    expect(Math.round(moved.y + moved.height / 2)).toBe(300);
+    await page.locator('#leave').click();
+    await joinSavedProfile(page);
+    const restored = (await pad.boundingBox())!;
+    expect(Math.abs(restored.x - moved.x)).toBeLessThanOrEqual(1);
+    await page.locator('#settings-toggle').click();
+    await page.locator('#layout-edit').click();
+    await expect(page.locator('#layout-panel')).toBeVisible();
+    await page.locator('#layout-reset').click();
+    await page.locator('#layout-done').click();
+    expect((await pad.boundingBox())!.x).toBeCloseTo(box.x, 0);
+  });
+
+  test('double-tapping the pad grip opens the layout editor for pad size and control positions', async ({ page }) => {
+    test.setTimeout(45000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await enter(page, 'E2ELayout');
+    const pad = page.locator('#touch-controls');
+    const grip = page.locator('#touch-grip');
+    const bar = page.locator('#positional-controls');
+    const gripBox = (await grip.boundingBox())!;
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+    // One tap explains the grip in the free space beside the pad.
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(page.locator('#touch-hint')).toBeVisible();
+    await expect(page.locator('#touch-hint')).toContainText('双击');
+    await page.waitForTimeout(500);
+    // Two quick taps open the layout editor.
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(page.locator('#layout-panel')).toBeVisible();
+    await expect(page.locator('#touch-hint')).toBeHidden();
+
+    const before = (await pad.boundingBox())!;
+    await page.locator('#pad-scale').fill('150');
+    await expect(page.locator('#pad-scale-value')).toHaveText('150%');
+    const larger = (await pad.boundingBox())!;
+    expect(larger.width).toBeGreaterThan(before.width * 1.4);
+
+    // While editing, the action bar drags instead of acting, and the pad drags from any key.
+    const sit = page.locator('#action-list [data-action="sit"]');
+    const barBox = (await bar.boundingBox())!;
+    await page.mouse.move(barBox.x + 10, barBox.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(120, 250, { steps: 5 });
+    await page.mouse.up();
+    const movedBar = (await bar.boundingBox())!;
+    expect(Math.round(movedBar.x)).toBe(110);
+    expect(Math.round(movedBar.y)).toBe(240);
+    await expect(sit).toHaveAttribute('aria-pressed', 'false');
+    const up = (await page.locator('[data-move="up"]').boundingBox())!;
+    await page.mouse.move(up.x + up.width / 2, up.y + up.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(up.x + up.width / 2 + 40, up.y + up.height / 2 - 120, { steps: 5 });
+    await page.mouse.up();
+    expect(Math.round((await pad.boundingBox())!.y)).toBe(Math.round(larger.y - 120));
+    await expect(page.locator('#touch-controls .pressed')).toHaveCount(0);
+
+    await page.locator('#layout-done').click();
+    await expect(page.locator('#layout-panel')).toBeHidden();
+    await page.locator('#leave').click();
+    await joinSavedProfile(page);
+    expect(Math.round((await pad.boundingBox())!.width)).toBe(Math.round(larger.width));
+    expect(Math.round((await bar.boundingBox())!.x)).toBe(110);
+  });
+});
+
+test('a narrow desktop window hides the direction pad and keeps keyboard movement', async ({ page }) => {
   test.setTimeout(30000);
   await page.setViewportSize({ width: 390, height: 844 });
-  await enter(page, 'E2ETouchPad');
-  const pad = page.locator('#touch-controls');
-  const pressed = () => pad.locator('.pressed').evaluateAll(keys => keys.map(key => (key as HTMLElement).dataset.move).sort().join('+'));
-  const box = (await pad.boundingBox())!;
-  const centerX = box.x + box.width / 2, centerY = box.y + box.height / 2;
-  await page.mouse.move(centerX + 50, centerY);
-  await page.mouse.down();
-  await expect.poll(pressed).toBe('right');
-  await page.mouse.move(centerX + 50, centerY + 50);
-  await expect.poll(pressed).toBe('down+right');
-  await page.mouse.up();
-  await expect.poll(pressed).toBe('');
-  expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
-
-  await page.mouse.move(centerX, centerY);
-  await page.mouse.down();
-  await page.mouse.move(200, 300, { steps: 5 });
-  await page.mouse.up();
-  await expect.poll(pressed).toBe('');
-  const moved = (await pad.boundingBox())!;
-  expect(Math.round(moved.x + moved.width / 2)).toBe(200);
-  expect(Math.round(moved.y + moved.height / 2)).toBe(300);
-  await page.locator('#leave').click();
-  await joinSavedProfile(page);
-  const restored = (await pad.boundingBox())!;
-  expect(Math.abs(restored.x - moved.x)).toBeLessThanOrEqual(1);
-  await page.locator('#settings-toggle').click();
-  await page.locator('#layout-edit').click();
-  await expect(page.locator('#layout-panel')).toBeVisible();
-  await page.locator('#layout-reset').click();
-  await page.locator('#layout-done').click();
-  expect((await pad.boundingBox())!.x).toBeCloseTo(box.x, 0);
-});
-
-test('double-tapping the pad grip opens the layout editor for pad size and control positions', async ({ page }) => {
-  test.setTimeout(45000);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await enter(page, 'E2ELayout');
-  const pad = page.locator('#touch-controls');
-  const grip = page.locator('#touch-grip');
-  const bar = page.locator('#positional-controls');
-  const gripBox = (await grip.boundingBox())!;
-  await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
-  // One tap explains the grip in the free space beside the pad.
-  await page.mouse.down();
-  await page.mouse.up();
-  await expect(page.locator('#touch-hint')).toBeVisible();
-  await expect(page.locator('#touch-hint')).toContainText('双击');
-  await page.waitForTimeout(500);
-  // Two quick taps open the layout editor.
-  await page.mouse.down();
-  await page.mouse.up();
-  await page.mouse.down();
-  await page.mouse.up();
-  await expect(page.locator('#layout-panel')).toBeVisible();
-  await expect(page.locator('#touch-hint')).toBeHidden();
-
-  const before = (await pad.boundingBox())!;
-  await page.locator('#pad-scale').fill('150');
-  await expect(page.locator('#pad-scale-value')).toHaveText('150%');
-  const larger = (await pad.boundingBox())!;
-  expect(larger.width).toBeGreaterThan(before.width * 1.4);
-
-  // While editing, the action bar drags instead of acting, and the pad drags from any key.
-  const sit = page.locator('#action-list [data-action="sit"]');
-  const barBox = (await bar.boundingBox())!;
-  await page.mouse.move(barBox.x + 10, barBox.y + 10);
-  await page.mouse.down();
-  await page.mouse.move(120, 250, { steps: 5 });
-  await page.mouse.up();
-  const movedBar = (await bar.boundingBox())!;
-  expect(Math.round(movedBar.x)).toBe(110);
-  expect(Math.round(movedBar.y)).toBe(240);
-  await expect(sit).toHaveAttribute('aria-pressed', 'false');
-  const up = (await page.locator('[data-move="up"]').boundingBox())!;
-  await page.mouse.move(up.x + up.width / 2, up.y + up.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(up.x + up.width / 2 + 40, up.y + up.height / 2 - 120, { steps: 5 });
-  await page.mouse.up();
-  expect(Math.round((await pad.boundingBox())!.y)).toBe(Math.round(larger.y - 120));
-  await expect(page.locator('#touch-controls .pressed')).toHaveCount(0);
-
-  await page.locator('#layout-done').click();
-  await expect(page.locator('#layout-panel')).toBeHidden();
-  await page.locator('#leave').click();
-  await joinSavedProfile(page);
-  expect(Math.round((await pad.boundingBox())!.width)).toBe(Math.round(larger.width));
-  expect(Math.round((await bar.boundingBox())!.x)).toBe(110);
+  await enter(page, 'E2ENarrowDesk');
+  await expect(page.locator('#touch-controls')).toBeHidden();
+  const observer = await observe();
+  try {
+    const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    await expect.poll(() => observer.state.players.has(sessionId)).toBe(true);
+    const start = observer.state.players.get(sessionId)!.x;
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(() => observer.state.players.get(sessionId)!.x - start).toBeGreaterThan(10);
+    } finally { await page.keyboard.up('d'); }
+  } finally { await observer.leave(); }
 });
 
 // The browser tests deliberately use the same-origin endpoint, including its WS query string.
@@ -1202,6 +1226,33 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
     await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
     await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
     await expect(page.frameLocator('#tool-window iframe').getByText('Embedded tool fixture')).toBeVisible();
+    // The own character sits over the tool window and the map behind it is washed out.
+    await expect(page.locator('#tool-stage')).toBeVisible();
+    await expect(page.locator('#tool-backdrop')).toBeVisible();
+    // The chat stays usable above the tool window.
+    expect(Number(await page.locator('#chat-card').evaluate(node => getComputedStyle(node).zIndex))).toBeGreaterThan(20);
+    // The stage overlaps the window's bottom-right corner, moves by its body and scales from its grip.
+    const stage = page.locator('#tool-stage');
+    const stageBox = async () => (await stage.boundingBox())!;
+    const seated = await stageBox();
+    const tv = (await page.locator('#tool-window').boundingBox())!;
+    expect(seated.x).toBeLessThan(tv.x + tv.width);
+    expect(seated.y).toBeLessThan(tv.y + tv.height);
+    await page.mouse.move(seated.x + seated.width / 2, seated.y + seated.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(seated.x + seated.width / 2 - 100, seated.y + seated.height / 2 - 50, { steps: 4 });
+    await page.mouse.up();
+    const dragged = await stageBox();
+    expect(dragged.x - seated.x).toBeCloseTo(-100, 0);
+    expect(dragged.y - seated.y).toBeCloseTo(-50, 0);
+    // The grip sits over the embedded page, which must not swallow the drag.
+    await page.mouse.move(dragged.x + 2, dragged.y + 2);
+    await page.mouse.down();
+    await page.mouse.move(dragged.x - 48, dragged.y + 2, { steps: 4 });
+    await page.mouse.up();
+    const scaled = await stageBox();
+    expect(scaled.width - dragged.width).toBeCloseTo(50, 0);
+    expect(scaled.x + scaled.width).toBeCloseTo(dragged.x + dragged.width, 0);
     // The TV frame opens centered and can be dragged by its title bar.
     const windowBox = async () => (await page.locator('#tool-window').boundingBox())!;
     const viewport = page.viewportSize()!;
@@ -1215,15 +1266,111 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
     const moved = await windowBox();
     expect(moved.x - opened.x).toBeCloseTo(60, 0);
     expect(moved.y - opened.y).toBeCloseTo(40, 0);
+    // The top-left grip resizes the frame and keeps its bottom-right corner in place.
+    const grip = (await page.locator('#tool-resize').boundingBox())!;
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 + 80, grip.y + grip.height / 2 + 60, { steps: 4 });
+    await page.mouse.up();
+    const resized = await windowBox();
+    expect(moved.width - resized.width).toBeCloseTo(80, 0);
+    expect(moved.height - resized.height).toBeCloseTo(60, 0);
+    expect(resized.x + resized.width).toBeCloseTo(moved.x + moved.width, 0);
+    expect(resized.y + resized.height).toBeCloseTo(moved.y + moved.height, 0);
     await page.locator('#tool-close').click();
     await expect(frame).toHaveCount(0);
     await expect(page.locator('#tool-window')).toBeHidden();
+    await expect(page.locator('#tool-backdrop')).toBeHidden();
     await expect(page.locator('#tool-open')).toBeVisible();
     await page.locator('#tool-open').click();
     await expect(frame).toBeVisible();
+    // Typing goes to the embedded page until the tool frame itself is clicked again.
+    await page.frameLocator('#tool-window iframe').getByText('Embedded tool fixture').click();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+    await page.locator('#tool-heading').click();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('BODY');
+    const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const startY = observer.state.players.get(sessionId)!.y;
+    await page.keyboard.down('w');
+    try {
+      await expect.poll(() => startY - observer.state.players.get(sessionId)!.y).toBeGreaterThan(4);
+    } finally { await page.keyboard.up('w'); }
     await page.locator('#leave').click();
     await expect(frame).toHaveCount(0);
   } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+
+/** Steers a protocol-only client into a web zone the way `walkToTool` steers the page. */
+async function steerToTool(room: Room<SpaceProtocol>, target: typeof toolCases[number]) {
+  await expect.poll(() => {
+    const player = room.state.players.get(room.sessionId)!;
+    const dx = Math.abs(player.x - target.x) < 12 ? 0 : Math.sign(target.x - player.x);
+    room.send('input', { x: dx, y: dx ? 0 : -1 });
+    return player.zoneId;
+  }, { intervals: [50], timeout: 20000 }).toBe(target.resourceId);
+  room.send('input', { x: 0, y: 0 });
+}
+
+test('embed stage seats people with the same tool open center-outward', async ({ page, context }) => {
+  test.setTimeout(90000);
+  const target = toolCases[1];
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed' }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Embedded tool fixture</p>' }));
+  await enter(page, 'E2EStage');
+  const first = await observe();
+  const second = await observe();
+  try {
+    await walkToTool(page, first, target);
+    const own = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    await page.locator('#tool-open').click();
+    const seats = page.locator('#tool-stage-seats .tool-stage-seat');
+    const order = () => seats.evaluateAll(nodes => (nodes as HTMLElement[])
+      .sort((a, b) => Number(a.style.order) - Number(b.style.order)).map(node => node.dataset.session));
+    // The desk keeps its length while characters shrink to make room.
+    const deskWidth = async () => (await page.locator('#tool-stage').boundingBox())!.width;
+    const charWidth = async () => (await page.locator(`#tool-stage-seats [data-session="${own}"] canvas`).boundingBox())!.width;
+    await expect.poll(order).toEqual([own]);
+    // Whoever is already seated when the tool opens appears without sliding in.
+    await expect(page.locator(`#tool-stage-seats [data-session="${own}"]`)).not.toHaveClass(/entering/);
+    const alone = { desk: await deskWidth(), char: await charWidth() };
+    // Standing in the zone is not enough: only people who open the tool take a seat.
+    await steerToTool(first, target);
+    await page.waitForTimeout(300);
+    expect(await order()).toEqual([own]);
+    first.send('webTool', { open: true });
+    await expect.poll(order).toEqual([own, first.sessionId]);
+    await expect.poll(charWidth).toBeLessThan(alone.char - 10);
+    expect(await deskWidth()).toBeCloseTo(alone.desk, 0);
+    await steerToTool(second, target);
+    second.send('webTool', { open: true });
+    await expect.poll(order).toEqual([second.sessionId, own, first.sessionId]);
+    // The third opener takes the left seat and slides in from the left.
+    expect(await page.locator(`#tool-stage-seats [data-session="${second.sessionId}"]`).evaluate(seat => (seat as HTMLElement).style.getPropertyValue('--enter-from'))).toBe('-1');
+    // Seats follow opening time, so the second opener sits right of the first in everyone's view.
+    const openers = [...first.state.players.entries()].filter(([, player]) => player.webToolZone === target.resourceId)
+      .sort(([a, x], [b, y]) => x.webToolAt - y.webToolAt || a.localeCompare(b)).map(([id]) => id);
+    expect(openers).toEqual([own, first.sessionId, second.sessionId]);
+    // Typing in chat shows on the seated character; the title bar button hides and restores the desk.
+    first.send('typing', { typing: true });
+    await expect(page.locator(`#tool-stage-seats [data-session="${first.sessionId}"]`)).toHaveClass(/typing/);
+    first.send('typing', { typing: false });
+    await expect(page.locator(`#tool-stage-seats [data-session="${first.sessionId}"]`)).not.toHaveClass(/typing/);
+    await page.locator('#tool-stage-toggle').click();
+    await expect(page.locator('#tool-stage')).toBeHidden();
+    await expect(page.locator('#tool-stage-toggle')).toHaveText('显示小人');
+    await page.locator('#tool-stage-toggle').click();
+    await expect(page.locator('#tool-stage')).toBeVisible();
+    second.send('webTool', { open: false });
+    await expect.poll(order).toEqual([own, first.sessionId]);
+    second.send('webTool', { open: true });
+    await expect.poll(order).toEqual([second.sessionId, own, first.sessionId]);
+    // Leaving re-centers the row: the remaining arrival takes the first seat beside the own character.
+    await first.leave();
+    await expect.poll(order).toEqual([own, second.sessionId]);
+  } finally {
+    for (const room of [first, second]) if (room.connection.isOpen) await room.leave();
+  }
 });
 
 
@@ -1339,7 +1486,12 @@ test('wardrobe previews items, keeps three named outfit slots and remembers disp
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'half');
   await page.locator('#settings-toggle').click();
-  await page.locator('[data-chat-mode="solid"]').click();
+  // The opacity slider takes any value and snaps to its 0/50/100 marks when released near them.
+  await page.locator('#chat-opacity').fill('30');
+  await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'half');
+  await expect(page.locator('#chat-opacity-value')).toHaveText('30%');
+  await page.locator('#chat-opacity').fill('97');
+  await expect(page.locator('#chat-opacity-value')).toHaveText('100%');
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'solid');
   await page.locator('#names-switch').click();
   await expect(page.locator('#names-switch')).toHaveAttribute('aria-checked', 'false');

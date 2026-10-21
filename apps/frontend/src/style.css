@@ -261,10 +261,6 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
 .settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .settings-panel h2 { font-size: 16px; }
-.chat-modes { display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700; }
-.chat-modes > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.chat-modes button { min-height: 36px; padding: 4px; font-size: 13px; }
-.chat-modes button[aria-checked="true"] { background: var(--sel); color: var(--sel-ink); }
 .zoom-field { display: flex; flex-direction: column; gap: 6px; }
 .zoom-head { display: flex; justify-content: space-between; align-items: baseline; }
 .zoom-head output { font-family: var(--pixel); font-size: 13px; color: var(--ink2); }
@@ -285,7 +281,8 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 
 /* Chat overlay: transparent, half (default) or solid. */
 .chat-card { position: absolute; z-index: 5; left: 16px; bottom: 16px; width: var(--chat-width, min(340px, calc(100vw - 32px))); display: flex; flex-direction: column; padding: 6px 10px; color: #4a3d60; }
-.chat-card[data-mode="half"] { background: color-mix(in srgb, var(--panel) 62%, transparent); backdrop-filter: blur(3px); }
+/* --chat-opacity (0-100) comes from the settings slider; fully clear and fully solid keep their own looks. */
+.chat-card[data-mode="half"] { background: color-mix(in srgb, var(--panel) calc(var(--chat-opacity, 50) * 1%), transparent); backdrop-filter: blur(3px); }
 .chat-card[data-mode="solid"] { background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); }
 .chat-card:not([data-mode="solid"]) { --outline: 1px 0 0 #fff, -1px 0 0 #fff, 0 1px 0 #fff, 0 -1px 0 #fff, 1px 1px 0 #fff, -1px -1px 0 #fff; text-shadow: var(--outline); }
 .chat-card.collapsed { width: auto; }
@@ -398,19 +395,58 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 #feature-status { color: #fff; font-size: 13px; text-shadow: 0 1px 3px #14202dcc; }
 
 /* Embedded tools in a draggable TV frame. */
-.tv-window { --drag-x: 0px; --drag-y: 0px; position: fixed; z-index: 20; left: 50%; top: 50%; width: min(880px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: center; transform: translate(calc(-50% + var(--drag-x)), calc(-50% + var(--drag-y))); }
+.tv-window { --drag-x: 0px; --drag-y: 0px; position: fixed; z-index: 20; left: 50%; top: 50%; width: var(--tv-width, min(880px, calc(100vw - 32px))); display: flex; flex-direction: column; align-items: center; transform: translate(calc(-50% + var(--drag-x)), calc(-50% + var(--drag-y))); }
 .tv-bar { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--line); color: #fff; cursor: grab; touch-action: none; user-select: none; }
 .tv-window.dragging .tv-bar { cursor: grabbing; }
 .tv-bar h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .tv-links a, .tv-link { color: #fff; font-size: 12px; }
+.tv-toggle { min-height: 32px; padding: 0 10px; background: var(--panel); color: var(--ink); box-shadow: none; font-size: 13px; }
 .tv-close { min-height: 32px; padding: 0 10px; background: var(--accent); color: var(--accent-ink); box-shadow: none; font-size: 13px; }
 .tv-bezel { width: 100%; display: flex; gap: 12px; padding: 16px; background: var(--panel); box-shadow: var(--px); }
-.tv-screen { flex: 1; min-width: 0; height: min(540px, calc(100vh - 170px)); display: flex; background: #0b0d10; box-shadow: var(--px-flat); overflow: hidden; }
+.tv-screen { flex: 1; min-width: 0; height: var(--tv-screen-height, min(540px, calc(100vh - 170px))); display: flex; background: #0b0d10; box-shadow: var(--px-flat); overflow: hidden; }
 .tv-screen iframe { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
 .tv-knobs { flex: none; width: 28px; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 10px; }
 .tv-knobs span { width: 18px; height: 18px; background: var(--soft); box-shadow: var(--px-flat); }
 .tv-knobs span:last-child { width: 10px; height: 10px; margin-top: auto; background: var(--accent); }
 .tv-stand { width: 30%; height: 14px; background: var(--line); clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
+/* Washes out only the map: it sits under the map controls, which stay usable beside the open tool. */
+.tv-backdrop { position: fixed; z-index: 3; inset: 0; background: rgb(255 255 255 / 0.55); pointer-events: none; }
+/* A fixed-length desk above the tool window; --stage-width is the desk and --seat-scale (set per head count)
+   sizes the characters. Each seated character (16×24 frame) has its waist, about five rows above the frame bottom, at the desk top, so the desk hides everything
+   below it whatever the size. A newcomer's seat grows from nothing while its character slides in from the
+   right, so the others make room smoothly. Dragged by its body and scaled from the top-left grip. */
+.tool-stage { --stage-width: 324px; --seat-scale: 0.62; --char: calc(var(--stage-width) * var(--seat-scale)); --desk: calc(var(--stage-width) * 0.29);
+  position: fixed; z-index: 21; right: 24px; bottom: 24px; width: var(--stage-width); height: calc(var(--stage-width) * 1.05); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.tool-stage.adjusting { cursor: grabbing; }
+/* Clipped only at the bottom, so bouncing heads and typing dots may rise above the desk area. */
+.tool-stage-seats { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-end; clip-path: inset(-100vh -100vw 0 -100vw); }
+.tool-stage-seat { position: relative; flex: none; width: calc(var(--char) * 0.82); height: 100%; transition: width .4s ease; }
+.tool-stage-seat canvas { position: absolute; left: 50%; bottom: calc(var(--desk) - var(--char) * 0.31); width: var(--char); height: calc(var(--char) * 1.5); margin-left: calc(var(--char) * -0.5); image-rendering: pixelated; transition: width .4s ease, height .4s ease, margin .4s ease, bottom .4s ease; }
+.tool-stage-seat.entering { animation: seat-open .45s ease-out; }
+.tool-stage-seat.entering canvas { animation: seat-slide .45s ease-out; }
+@keyframes seat-open { from { width: 0; } }
+@keyframes seat-slide { from { transform: translateX(calc(var(--stage-width) * 0.5 * var(--enter-from, 1))); opacity: 0; } }
+/* Speaking: a small bounce. Typing in chat: dots above the head, the character itself stays still. */
+.tool-stage-seat.speaking canvas { animation: seat-bounce .45s ease-in-out infinite; }
+.tool-stage-seat.typing::after { content: ''; position: absolute; z-index: 6; left: 50%; bottom: calc(var(--desk) + var(--char) * 1.12); width: calc(var(--char) * 0.42); height: calc(var(--char) * 0.17); margin-left: calc(var(--char) * -0.21);
+  border-radius: 999px; background: radial-gradient(circle, var(--line) 22%, transparent 26%) 0 50% / 33.34% 100% repeat-x, #fffaf3; box-shadow: 0 0 0 2px var(--line); animation: seat-dots 1s ease-in-out infinite; }
+@keyframes seat-bounce { 50% { transform: translateY(calc(var(--char) * -0.06)); } }
+@keyframes seat-dots { 50% { opacity: 0.55; } }
+.tool-stage-desk { position: absolute; z-index: 5; left: calc(var(--stage-width) * -0.06); right: calc(var(--stage-width) * -0.06); bottom: 0; height: var(--desk); background: #ddc6bc; clip-path: polygon(calc(var(--stage-width) * 0.06) 0, calc(100% - var(--stage-width) * 0.06) 0, 100% 100%, 0 100%); }
+/* Outline resize icon on a transparent ground; the white halo keeps it readable over any page or map. */
+.resize-grip { position: absolute; z-index: 6; width: 24px; height: 24px; display: grid; place-items: center; color: var(--line); filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); touch-action: none; }
+.resize-grip svg { width: 18px; height: 18px; fill: currentColor; }
+.tool-stage-grip { left: -8px; top: -8px; cursor: nwse-resize; opacity: 0; transition: opacity .15s; }
+.tool-stage-grip svg { transform: scaleX(-1); }
+.tv-resize { left: -10px; top: -10px; cursor: nwse-resize; }
+.tv-resize svg { transform: scaleX(-1); }
+.tool-stage:hover .tool-stage-grip, .tool-stage.adjusting .tool-stage-grip { opacity: 1; }
+@media (pointer: coarse) { .tool-stage-grip { opacity: 1; } }
+/* An embedded page would otherwise swallow the pointer while the stage is dragged over it. */
+body.tool-adjusting .tv-screen iframe { pointer-events: none; }
+/* While a tool is open the chat stays above the window and the voice dock moves to the left edge above it. */
+body.tool-open .chat-card { z-index: 22; }
+body.tool-open .map-dock { z-index: 22; left: 16px; top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column; }
 
 /* Desktop start page fits one screen whether signed in or out: the account card and the world list share the height and
    scroll inside themselves if a long form (registration) needs more. The open theme panel lets the page scroll again. */
@@ -595,14 +631,17 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
   .positional-controls { right: 10px; top: 188px; transform: none; align-items: flex-end; }
   .action-list { gap: 8px; }
   #object-feedback { position: static; transform: none; white-space: normal; max-width: 40vw; text-align: right; }
+  .compose input { font-size: 16px; } /* iOS zooms into inputs below 16px on focus. */
+  .tv-window { width: calc(100vw - 16px); } .tv-resize { display: none; } body.tool-open .map-dock { left: auto; top: 118px; transform: none; } .tool-stage { --stage-width: 200px; right: 12px; bottom: 12px; } .tv-bezel { padding: 8px; } .tv-knobs { display: none; } .tv-screen { height: min(60vh, calc(100vh - 140px)); }
+}
+/* The direction pad follows the input device, not the window width: a narrow desktop window keeps WASD only. */
+@media (pointer: coarse) and (max-width: 700px) {
   .touch-controls { --key: calc(48px * var(--pad-scale, 1)); left: 12px; bottom: 12px; display: grid; }
   .touch-only { display: block; }
-  .compose input { font-size: 16px; } /* iOS zooms into inputs below 16px on focus. */
-  .tv-window { width: calc(100vw - 16px); } .tv-bezel { padding: 8px; } .tv-knobs { display: none; } .tv-screen { height: min(60vh, calc(100vh - 140px)); }
 }
 @media (pointer: coarse) and (min-width: 701px) {
   .touch-controls { --key: calc(52px * var(--pad-scale, 1)); right: 16px; bottom: 16px; display: grid; }
   .touch-only { display: block; }
   .compose input { font-size: 16px; }
 }
-@media (prefers-reduced-motion: reduce) { button, .switch-track::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { button, .switch-track::after, .tool-stage-seat, .tool-stage-seat canvas { transition: none; } .tool-stage-seat.entering, .tool-stage-seat canvas, .tool-stage-seat.typing::after { animation: none !important; } }

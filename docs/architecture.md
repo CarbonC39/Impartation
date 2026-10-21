@@ -149,7 +149,7 @@ registry 校验要求 map ID 和 Space ID 各自唯一、每个 Space 的 initia
 | `privateAreas` | map ID → area object ID → `{ locked, members, resetAt }` | 房间内临时空间会话，无所有者或永久 ACL |
 | `worldObjects` | map ID → `MapObjectState`（authored object ID → `{ variant, variantCleared, occupiedBy }`） | 房间内各地图对象的共享视觉变体、显式清除标记和占用状态；动作锚点、选择器、变体目标、区域及关联对象 ID 均预留状态 |
 
-Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`voiceEnabled`、`typing`、`zoneId`、`facing`、`motion`、动作名 `action`、`actionAnimated`、`actionTargetId` 和当前物理私密上下文 `privateAreaId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
+Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`voiceEnabled`、`typing`、`zoneId`、`webToolZone`、`webToolAt`、`facing`、`motion`、动作名 `action`、`actionAnimated`、`actionTargetId` 和当前物理私密上下文 `privateAreaId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
 
 消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal、activateAction、cancelAction、selectVariant 和 privateArea，这些交互请求返回 `{ ok, message }`。activateAction 只接收 shared `CHARACTER_ACTIONS` 目录中的动作名和可选动画标记，目录外的名称被校验拒绝，动作不支持动画时服务端忽略动画标记；地图与玩家位置由服务端权威读取。服务端 chat 实时投递给与发送者处于同一听众范围（shared `sameAudience`）的在线玩家，消息带发送者的 `privateAreaId`；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
 
@@ -158,6 +158,7 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 | `input` | `{ x, y }` 方向 | 更新该连接的最近输入，不接收客户端坐标 |
 | `chat` | `{ text }` | 生成 ID、发送连接的 sessionId、作者名和时间，向整个房间广播；客户端据 sessionId 在角色头顶显示气泡；接受消息时清除该玩家的 `typing` |
 | `typing` | `{ typing }` | 验证身份后设置 Player `typing`；客户端输入时每 3 秒刷新，服务端 8 秒未刷新、发送聊天、断线或离开时清除 |
+| `webTool` | `{ open }` | 验证身份后，仅当玩家权威位置在 `web` 区域内时把该区域 ID 写入 `webToolZone` 并在首次打开时记录 `webToolAt`，否则清空；离开该区域（行走、Portal、动作）或断线时服务端清除。客户端据此只让打开同一工具的人在网页工具旁入座，并按打开时间排座 |
 | `boardPost` | `{ resourceId, text }` | 以已验证作者身份写入留言 |
 | `boardDelete` | `{ resourceId, id }` | 检查作者或 admin 权限后删除 |
 | `pomodoro` | `{ resourceId, action, mode? }` | start/reset 要求 mode；pause/resume 不接收客户端剩余时间 |

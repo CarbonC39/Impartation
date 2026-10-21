@@ -1,7 +1,12 @@
-import { webToolsSchema, type WebTool, type Zone } from '@virtual-workspace/shared';
+import type { Room } from '@colyseus/sdk';
+import { webToolsSchema, type SpaceProtocol, type WebTool, type Zone } from '@virtual-workspace/shared';
 import { zoneLabels } from '../labels';
 import { element } from '../panel';
 import { createPresentations, type PresentationRegistry } from './presentations';
+import { releaseToolFocus, ToolStage } from './stage';
+
+const MIN_TV_WIDTH = 360;
+const MIN_TV_HEIGHT = 200;
 
 /** Entering a web zone shows a small hint above it; only a click opens the tool. */
 export class WebToolInteraction {
@@ -24,7 +29,10 @@ export class WebToolInteraction {
     if (!tool || ((tool.mode ?? 'external') === 'embed' && this.cleanupPresentation)) return;
     this.closePresentation();
     try {
-      if ((tool.mode ?? 'external') === 'embed') this.window.open(zoneLabels[zone.kind] ?? zone.kind, () => this.close());
+      if ((tool.mode ?? 'external') === 'embed') {
+        this.window.open(zoneLabels[zone.kind] ?? zone.kind, () => this.close());
+        this.stage?.show();
+      }
       this.cleanupPresentation = this.presentations.open(tool, this.window.screen, this.window.links);
       this.render();
     } catch (error) {
@@ -34,8 +42,10 @@ export class WebToolInteraction {
   };
 
   private presentations: PresentationRegistry;
-  constructor(presentations?: PresentationRegistry) {
+  private stage?: ToolStage;
+  constructor(presentations?: PresentationRegistry, room?: Room<SpaceProtocol>, speaking?: (sessionId: string) => boolean) {
     this.presentations = presentations ?? createPresentations();
+    if (room) this.stage = new ToolStage(room, speaking);
     this.link.addEventListener('click', this.openTool);
     void this.load();
   }
@@ -70,6 +80,7 @@ export class WebToolInteraction {
   private closePresentation() {
     this.cleanupPresentation?.();
     this.cleanupPresentation = undefined;
+    this.stage?.hide();
     this.window.close();
   }
 
@@ -105,16 +116,22 @@ export class WebToolInteraction {
   }
 }
 
-/** Centered, draggable TV-style frame that hosts embedded tools. */
+/**
+ * Centered TV-style frame that hosts embedded tools: dragged by its title bar, resized from its top-left grip
+ * (the bottom corners sit under the chat and the desk).
+ */
 class TvWindow {
   private root = element('tool-window');
   private heading = element('tool-heading');
+  private backdrop = element('tool-backdrop');
+  private grip = element('tool-resize');
   private bar = element('tool-drag');
   private closeButton = element<HTMLButtonElement>('tool-close');
   readonly screen = element('tool-screen');
   readonly links = element('tool-links');
   private offset = { x: 0, y: 0 };
   private drag?: { pointerId: number; x: number; y: number; originX: number; originY: number };
+  private resizing?: { pointerId: number; x: number; y: number; width: number; height: number; originX: number; originY: number };
   private onClose?: () => void;
   private controller = new AbortController();
 
@@ -125,6 +142,7 @@ class TvWindow {
     this.bar.addEventListener('pointerdown', event => {
       if (event.button !== 0 || (event.target as HTMLElement).closest('button, a')) return;
       event.preventDefault();
+      releaseToolFocus();
       this.drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, originX: this.offset.x, originY: this.offset.y };
       this.bar.setPointerCapture(event.pointerId);
       this.root.classList.add('dragging');
@@ -140,6 +158,34 @@ class TvWindow {
     };
     this.bar.addEventListener('pointerup', end, options);
     this.bar.addEventListener('pointercancel', end, options);
+    this.grip.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      releaseToolFocus();
+      const screen = this.screen.getBoundingClientRect();
+      this.resizing = { pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+        width: this.root.getBoundingClientRect().width, height: screen.height, originX: this.offset.x, originY: this.offset.y };
+      this.grip.setPointerCapture(event.pointerId);
+      document.body.classList.add('tool-adjusting');
+    }, options);
+    this.grip.addEventListener('pointermove', event => {
+      const start = this.resizing;
+      if (start?.pointerId !== event.pointerId) return;
+      const width = Math.round(Math.min(window.innerWidth - 16, Math.max(MIN_TV_WIDTH, start.width - (event.clientX - start.x))));
+      const height = Math.round(Math.min(window.innerHeight - 140, Math.max(MIN_TV_HEIGHT, start.height - (event.clientY - start.y))));
+      this.root.style.setProperty('--tv-width', `${width}px`);
+      this.root.style.setProperty('--tv-screen-height', `${height}px`);
+      // The frame is centered, so shift it by half the growth to keep the bottom-right corner in place.
+      this.move(start.originX - (width - start.width) / 2, start.originY - (height - start.height) / 2);
+    }, options);
+    const endResize = (event: PointerEvent) => {
+      if (this.resizing?.pointerId !== event.pointerId) return;
+      this.resizing = undefined;
+      document.body.classList.remove('tool-adjusting');
+    };
+    this.grip.addEventListener('pointerup', endResize, options);
+    this.grip.addEventListener('pointercancel', endResize, options);
+    this.grip.addEventListener('lostpointercapture', endResize, options);
     window.addEventListener('resize', () => { if (!this.root.hidden) this.move(this.offset.x, this.offset.y); }, options);
   }
 
@@ -147,6 +193,8 @@ class TvWindow {
     this.heading.textContent = title;
     this.onClose = onClose;
     this.root.hidden = false;
+    this.backdrop.hidden = false;
+    document.body.classList.add('tool-open');
     this.move(0, 0);
   }
 
@@ -154,7 +202,10 @@ class TvWindow {
     this.onClose = undefined;
     this.drag = undefined;
     this.root.classList.remove('dragging');
+    this.resizing = undefined;
+    document.body.classList.remove('tool-open', 'tool-adjusting');
     this.root.hidden = true;
+    this.backdrop.hidden = true;
     this.screen.replaceChildren();
     this.links.replaceChildren();
   }
