@@ -9,7 +9,7 @@ import { WebSocketClient } from '@colyseus/ws-transport';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
-import { CHARACTER_ACTION_NAMES, DEFAULT_APPEARANCE } from '@virtual-workspace/shared';
+import { CHARACTER_ACTION_NAMES, DEFAULT_APPEARANCE, type Zone } from '@virtual-workspace/shared';
 
 process.env.DATABASE_PATH = ':memory:';
 const fixture = createRoomWorldFixture();
@@ -396,6 +396,34 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     // Expire the hint without waiting the full timeout; the room's 1s clock clears it.
     (authoritative as unknown as { typingUntil: Map<string, number> }).typingUntil.set(alice.sessionId, Date.now() - 1);
     await until(() => seen() === false, 2500);
+  });
+  test('web tool presence is held only inside the sender\'s current web zone', async () => {
+    const alice = await join('Alice');
+    const bob = await join('Bob');
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const player = authoritative.state.players.get(alice.sessionId)!;
+    const seen = () => bob.state.players.get(alice.sessionId)?.webToolZone;
+    alice.send('webTool', { open: true });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(seen(), '', 'outside a web zone the request is ignored');
+    const zone = (authoritative as unknown as { maps: Map<string, { world: { zones: Zone[] } }> })
+      .maps.get(player.mapId)!.world.zones.find(item => item.kind === 'web')!;
+    player.x = zone.x + zone.width / 2; player.y = zone.y + zone.height / 2; player.zoneId = zone.id;
+    alice.send('webTool', { open: true });
+    await until(() => seen() === zone.id);
+    const openedAt = bob.state.players.get(alice.sessionId)!.webToolAt;
+    assert.ok(openedAt > 0);
+    alice.send('webTool', { open: true });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(bob.state.players.get(alice.sessionId)!.webToolAt, openedAt, 'repeating open keeps the opening time');
+    alice.send('webTool', { open: false });
+    await until(() => seen() === '');
+    alice.send('webTool', { open: true });
+    await until(() => seen() === zone.id);
+    // Leaving the zone by any path clears it on the room's 1s clock.
+    player.x = -1000; player.zoneId = '';
+    await until(() => seen() === '', 2500);
+    assert.equal(bob.state.players.get(alice.sessionId)!.webToolAt, 0);
   });
   test('unexpected disconnect reconnects with the same identity and position', async () => {
     const alice = await join('Alice');

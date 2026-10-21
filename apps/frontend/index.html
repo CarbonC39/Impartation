@@ -149,7 +149,7 @@
             </div>
             <button id="names-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>显示昵称</button>
             <button id="typing-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>让别人看到我正在输入</button>
-            <div role="radiogroup" aria-labelledby="chat-mode-title" class="chat-modes"><span id="chat-mode-title">聊天栏背景</span><div><button type="button" role="radio" data-chat-mode="clear">透明</button><button type="button" role="radio" data-chat-mode="half">半透明</button><button type="button" role="radio" data-chat-mode="solid">实心</button></div></div>
+            <div class="zoom-field"><div class="zoom-head"><label for="chat-opacity">聊天栏不透明度</label><output id="chat-opacity-value" for="chat-opacity">50%</output></div><div class="zoom-track"><input id="chat-opacity" class="range" type="range" min="0" max="100" step="1" /><div class="zoom-ticks" aria-hidden="true"><span style="--t: 0">0%</span><span style="--t: 0.5">50%</span><span style="--t: 1">100%</span></div></div></div>
             <h2>附近语音</h2>
             <label class="mic-field">麦克风<select id="voice-device"></select></label>
             <p class="hint">底部麦克风键开麦或闭麦，喇叭键开关所有声音。首次开麦请求麦克风权限，仅与同地图附近的人通话。</p>
@@ -182,11 +182,15 @@
             <section id="pomodoro-panel" class="feature-panel" aria-labelledby="pomodoro-heading" hidden><div class="panel-heading" title="拖动移动，双击复原"><h2 id="pomodoro-heading">共享计时</h2><button type="button" class="panel-toggle" aria-expanded="true" aria-controls="pomodoro-body">收起</button></div><div id="pomodoro-body" class="panel-body"><p id="pomodoro-status" role="status">准备开始</p><output id="pomodoro-time" aria-label="剩余时间">25:00</output><div class="timer-controls"><label>模式<select id="pomodoro-mode"><option value="focus">专注 · 25 分钟</option><option value="break">休息 · 5 分钟</option></select></label><button id="pomodoro-start" class="primary" type="button">开始</button><button id="pomodoro-pause" class="secondary" type="button" disabled>暂停</button><button id="pomodoro-resume" class="secondary" type="button" disabled>继续</button><button id="pomodoro-reset" class="secondary" type="button">重置</button></div></div><span class="panel-resize" title="拖动调整大小" aria-hidden="true"></span></section>
             <p id="feature-status" role="status" aria-live="polite"></p>
           </div>
+          <div id="tool-backdrop" class="tv-backdrop" aria-hidden="true" hidden></div>
           <section id="tool-window" class="tv-window" role="dialog" aria-labelledby="tool-heading" hidden>
-            <div class="tv-bar" id="tool-drag"><h2 id="tool-heading">网页工具</h2><span id="tool-links" class="tv-links"></span><button id="tool-close" class="tv-close" type="button" aria-label="关闭">✕</button></div>
+            <div class="tv-bar" id="tool-drag"><h2 id="tool-heading">网页工具</h2><span id="tool-links" class="tv-links"></span><button id="tool-stage-toggle" class="tv-toggle" type="button" aria-pressed="true">隐藏小人</button><button id="tool-close" class="tv-close" type="button" aria-label="关闭">✕</button></div>
             <div class="tv-bezel"><div id="tool-screen" class="tv-screen"></div><div class="tv-knobs" aria-hidden="true"><span></span><span></span><span></span></div></div>
             <div class="tv-stand" aria-hidden="true"></div>
+            <!-- Resize icon: Material Symbols "open_in_full", Apache License 2.0, https://fonts.google.com/icons -->
+            <span id="tool-resize" class="resize-grip tv-resize" title="拖动调整大小"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M120-120v-320h80v184l504-504H520v-80h320v320h-80v-184L256-200h184v80H120Z"/></svg></span>
           </section>
+          <div id="tool-stage" class="tool-stage" aria-hidden="true" hidden><span id="tool-stage-seats" class="tool-stage-seats"></span><span class="tool-stage-desk"></span><span class="resize-grip tool-stage-grip" title="拖动缩放"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M120-120v-320h80v184l504-504H520v-80h320v320h-80v-184L256-200h184v80H120Z"/></svg></span></div>
         </section>
       </main>
     </div>

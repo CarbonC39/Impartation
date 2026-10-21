@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, ServerError, type AuthContext } from '@colyseus/core';
 import { WebSocketClient } from '@colyseus/ws-transport';
-import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
+import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
   TICK_MS, SPACE_REPLACED_CLOSE_CODE, sameAudience, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
   type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
@@ -159,6 +159,13 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       if (!await this.authorize(client)) return;
       this.setTyping(client.sessionId, typing);
     }),
+    webTool: validate(webToolOpenSchema, async (client: SpaceClient, { open }: { open: boolean }) => {
+      if (!await this.authorize(client)) return;
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      const zone = currentZone(this.maps.get(player.mapId)!.world, player);
+      this.setWebTool(player, open && player.connected && zone?.kind === 'web' ? zone.id : '');
+    }),
     voiceEnabled: validate(voiceEnabledSchema, async (client: SpaceClient, input: { enabled: boolean }) => {
       if (!await this.authorize(client)) return false;
       this.voice.setEnabled(client.sessionId, input.enabled);
@@ -189,6 +196,12 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     return value;
   }
 
+  /** Opening time orders the desk beside the tool the same way for everyone; reopening keeps it. */
+  private setWebTool(player: Player, zoneId: string) {
+    if (player.webToolZone === zoneId) return;
+    player.webToolZone = zoneId;
+    player.webToolAt = zoneId ? Date.now() : 0;
+  }
   /** Typing is only an expiring hint: chat, disconnect, leave or silence clears it. */
   private setTyping(sessionId: string, typing: boolean) {
     const player = this.state.players.get(sessionId);
@@ -234,6 +247,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       this.voice.tick();
       const now = Date.now();
       for (const [id, until] of this.typingUntil) if (until <= now) this.setTyping(id, false);
+      // Portals and actions move players without the movement step; leaving the zone closes the tool.
+      for (const player of this.state.players.values()) if (player.webToolZone !== player.zoneId) this.setWebTool(player, '');
       for (const handler of this.interactions.registry.values()) handler.tick?.();
       for (const client of this.clients) void this.authorize(client).then(value => {
         if (!value) { this.movementInputs.delete(client.sessionId); client.leave(4003, 'Identity expired'); }
@@ -250,6 +265,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
         player.x = next.x;
         player.y = next.y;
         player.zoneId = currentZone(world, player)?.id ?? '';
+        if (player.webToolZone !== player.zoneId) this.setWebTool(player, '');
         const privateAreaId = player.privateAreaId;
         this.interactions.access.syncPlayer(id, player);
         // Crossing a private-area border ends voice pairs now instead of on the next 1 s tick.
@@ -300,7 +316,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     this.setTyping(client.sessionId, false);
     const player = this.state.players.get(client.sessionId);
     if (player) {
-      player.connected = false; player.motion = 'idle';
+      player.connected = false; player.motion = 'idle'; this.setWebTool(player, '');
       // Legacy action seats retain their reconnect behavior; selectors release immediately.
       if (this.maps.get(player.mapId)?.world.selectors.some(selector => selector.id === player.actionTargetId))
         cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);

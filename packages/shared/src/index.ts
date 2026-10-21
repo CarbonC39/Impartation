@@ -38,6 +38,8 @@ export const inputSchema = z.object({
 export const chatSchema = z.object({ text: z.string().trim().min(1).max(500) });
 /** Typing indicator: the client refreshes `true` while composing; the server clears it after this long without a refresh. */
 export const typingSchema = z.object({ typing: z.boolean() }).strict();
+/** Embedded web tool presence: the server records the sender's current web zone and when it was opened, and clears both when they leave. */
+export const webToolOpenSchema = z.object({ open: z.boolean() }).strict();
 export const TYPING_TIMEOUT_MS = 8000;
 export type MovementInput = z.infer<typeof inputSchema>;
 export type JoinOptions = z.infer<typeof joinSchema>;
@@ -74,7 +76,7 @@ export type Pomodoro = SchemaType<typeof Pomodoro>;
 export const Player = schema({
   name: t.string(), avatar: t.string(), appearance: t.string().default('{}'), x: t.number(), y: t.number(),
   userId: t.string(), role: t.string().default('member'),
-  mapId: t.string(), connected: t.boolean().default(true), voiceEnabled: t.boolean().default(false), typing: t.boolean().default(false), zoneId: t.string().default(''), privateAreaId: t.string().default(''),
+  mapId: t.string(), connected: t.boolean().default(true), voiceEnabled: t.boolean().default(false), typing: t.boolean().default(false), zoneId: t.string().default(''), webToolZone: t.string().default(''), webToolAt: t.number().default(0), privateAreaId: t.string().default(''),
   facing: t.string().default('down'), motion: t.string().default('idle'),
   action: t.string().default('none'), actionAnimated: t.boolean().default(false), actionTargetId: t.string().default(''),
 }, 'Player');

@@ -171,30 +171,43 @@ function setCameraZoom(value: number | null) {
 cameraZoomInput.addEventListener('input', () => setCameraZoom(Number(cameraZoomInput.value)));
 cameraZoomAuto.addEventListener('click', () => setCameraZoom(cameraZoomPreference() === null ? automaticZoom : null));
 renderCameraZoom();
-const chatModes = ['clear', 'half', 'solid'] as const;
-type ChatMode = typeof chatModes[number];
+// Chat background opacity, 0-100. The slider snaps to its 0/50/100 marks when released near them.
+const CHAT_OPACITY_KEY = 'virtual-workspace-chat-opacity';
+const chatOpacityInput = element<HTMLInputElement>('chat-opacity');
 let namesVisible = readPreference('virtual-workspace-show-names') !== 'false';
 function setNamesVisible(visible: boolean) {
   namesVisible = visible;
   writePreference('virtual-workspace-show-names', String(visible));
   element('names-switch').setAttribute('aria-checked', String(visible));
 }
-function setChatMode(mode: ChatMode) {
-  chatCard.dataset.mode = mode;
-  writePreference('virtual-workspace-chat-mode', mode);
-  document.querySelectorAll<HTMLButtonElement>('[data-chat-mode]').forEach(button =>
-    button.setAttribute('aria-checked', String(button.dataset.chatMode === mode)));
+function setChatOpacity(value: number) {
+  const opacity = Math.round(Math.min(100, Math.max(0, value)));
+  chatCard.dataset.mode = opacity === 0 ? 'clear' : opacity === 100 ? 'solid' : 'half';
+  chatCard.style.setProperty('--chat-opacity', String(opacity));
+  chatOpacityInput.value = String(opacity);
+  setRangeFill(chatOpacityInput);
+  element('chat-opacity-value').textContent = `${opacity}%`;
+  writePreference(CHAT_OPACITY_KEY, String(opacity));
+}
+function savedChatOpacity() {
+  const saved = Number(readPreference(CHAT_OPACITY_KEY) ?? Number.NaN);
+  if (Number.isFinite(saved)) return saved;
+  // Earlier versions stored one of three background modes.
+  return { clear: 0, half: 50, solid: 100 }[readPreference('virtual-workspace-chat-mode') ?? ''] ?? 50;
 }
 setNamesVisible(namesVisible);
-setChatMode(chatModes.find(mode => mode === readPreference('virtual-workspace-chat-mode')) ?? 'half');
+setChatOpacity(savedChatOpacity());
 element<HTMLButtonElement>('names-switch').addEventListener('click', event => {
   setNamesVisible(!namesVisible);
   (event.currentTarget as HTMLButtonElement).blur();
 });
-document.querySelectorAll<HTMLButtonElement>('[data-chat-mode]').forEach(button => button.addEventListener('click', () => {
-  const mode = chatModes.find(value => value === button.dataset.chatMode);
-  if (mode) setChatMode(mode);
-}));
+chatOpacityInput.addEventListener('input', () => setChatOpacity(Number(chatOpacityInput.value)));
+chatOpacityInput.addEventListener('change', () => {
+  const value = Number(chatOpacityInput.value);
+  const mark = [0, 50, 100].find(point => Math.abs(point - value) <= 4);
+  if (mark !== undefined) setChatOpacity(mark);
+  chatOpacityInput.blur(); // Return keyboard movement to the map.
+});
 const settingsToggle = element<HTMLButtonElement>('settings-toggle');
 settingsToggle.addEventListener('click', () => {
   const panel = element('settings-panel');
@@ -521,6 +534,7 @@ async function enterWorld(plan: VoicePlan) {
         back.dataset.back = 'map-screen'; back.textContent = '返回地图';
         showScreen('avatar-screen');
       },
+      speaking: id => voice?.isSpeaking(id) ?? false,
     });
     voice = new ProximityVoice(room, voiceMic, voiceDisconnect, element('voice-status'));
     voice.setDeafened(!soundOn);
