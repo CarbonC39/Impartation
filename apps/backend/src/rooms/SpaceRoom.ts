@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, ServerError, type AuthContext } from '@colyseus/core';
+import { WebSocketClient } from '@colyseus/ws-transport';
 import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
-  TICK_MS, sameAudience, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
+  TICK_MS, SPACE_REPLACED_CLOSE_CODE, sameAudience, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
   type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
 import { worldRegistry, worlds as allMaps } from '../world.js';
@@ -23,6 +24,12 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
   private initialMap = '';
   reconnectionSeconds = 20;
   private identities = new Map<string, Identity>();
+  // A connection slot is claimed on admission and held through reconnect attempts.
+  // Each Space has one live room, so this map enforces userId + this Space ID.
+  private connectedUsers = new Map<string, string>();
+  private pendingAdmissions = new Map<string, string>();
+  private takeoverHolds = 0;
+  private takeoverAutoDispose = true;
   private joinedAt = new Map<string, number>();
   private pendingReconnections = new Map<string, ReturnType<SpaceRoom['allowReconnection']>>();
   private commandCursor = 0;
@@ -37,6 +44,64 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     resetMovement: client => this.movementInputs.delete(client.sessionId),
     throttle: client => this.throttleInteraction(client),
   });
+
+  // Matchmaking normally skips full rooms before instance onAuth can run. Free the
+  // verified account's existing seat first; returning true keeps instance auth enabled.
+  static async onAuth(_token: string | undefined, options: SpaceJoinOptions, context: AuthContext) {
+    const request: unknown = context.req;
+    if (!(request instanceof Request) || new URL(request.url).pathname !== '/matchmake/joinOrCreate/space') return true;
+    const parsed = spaceJoinSchema.parse(options);
+    const room = SpaceRoom.instances.get(parsed.spaceId);
+    if (!room?.hasReachedMaxClients()) return true;
+    SpaceRoom.checkOrigin(context);
+    const identity = await identityFromHeaders(context.headers);
+    if (!identity) throw new ServerError(401, 'A valid account session is required');
+    const previous = room.connectedUsers.get(identity.userId);
+    if (!previous) return true;
+    ensureProfile(identity.userId, parsed);
+    const releaseDisposal = room.holdDisposal();
+    try {
+      room.replaceConnection(previous);
+      const deadline = Date.now() + 3000;
+      while (room.hasReachedMaxClients() || room.locked) {
+        if (Date.now() >= deadline) throw new ServerError(409, 'Previous connection is still closing; retry joining');
+        await new Promise<void>(resolve => { room.clock.setTimeout(resolve, 10); });
+      }
+    } finally {
+      releaseDisposal();
+    }
+    return true;
+  }
+
+  private static checkOrigin(context: AuthContext) {
+    const origin = context.headers.get('origin');
+    if (origin && !config.IDENTITY_TRUSTED_ORIGINS.split(',').map(value => value.trim()).includes(origin)) {
+      throw new Error('Untrusted connection origin');
+    }
+  }
+
+  private holdDisposal() {
+    if (this.takeoverHolds++ === 0) {
+      this.takeoverAutoDispose = this.autoDispose;
+      this.autoDispose = false;
+    }
+    return () => {
+      if (--this.takeoverHolds === 0) this.autoDispose = this.takeoverAutoDispose;
+    };
+  }
+
+  private replaceConnection(sessionId: string) {
+    this.pendingReconnections.get(sessionId)?.reject(new Error('Account connected from another device'));
+    const client = this.clients.find(client => client.sessionId === sessionId);
+    client?.leave(SPACE_REPLACED_CLOSE_CODE, 'Account connected from another device');
+    if (client instanceof WebSocketClient) {
+      // Give healthy peers time to receive the terminal code, then release even
+      // a blackholed socket without waiting for the transport's 30s close timeout.
+      const socket = client.ref;
+      this.clock.setTimeout(() => socket.terminate(), 500);
+    }
+    this.removeConnection(sessionId);
+  }
 
   static disconnectUser(userId: string, cutoff = Date.now()) {
     for (const room of SpaceRoom.instances.values()) room.disconnectUser(userId, cutoff);
@@ -125,7 +190,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     const identity = this.identities.get(client.sessionId);
     const value = identity && await activeProfile(identity);
     const player = this.state.players.get(client.sessionId);
-    if (!value || !player?.connected || this.identities.get(client.sessionId) !== identity) return;
+    if (!value || !identity || !player?.connected || this.identities.get(client.sessionId) !== identity
+      || this.connectedUsers.get(identity.userId) !== client.sessionId) return;
     player.name = value.name; player.avatar = value.avatar; player.appearance = JSON.stringify(value.appearance); player.role = value.role;
     return value;
   }
@@ -207,11 +273,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       }
     }, TICK_MS);
   }
-  async onAuth(_client: SpaceClient, options: SpaceJoinOptions, context: AuthContext) {
-    const origin = context.headers.get('origin');
-    if (origin && !config.IDENTITY_TRUSTED_ORIGINS.split(',').map(value => value.trim()).includes(origin)) {
-      throw new Error('Untrusted connection origin');
-    }
+  async onAuth(client: SpaceClient, options: SpaceJoinOptions, context: AuthContext) {
+    SpaceRoom.checkOrigin(context);
     const parsed = spaceJoinSchema.parse(options);
     if (parsed.spaceId !== this.state.spaceId) throw new ServerError(403, 'Space does not match this room');
     const identity = await identityFromHeaders(context.headers);
@@ -220,10 +283,16 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     return identity;
   }
   async onJoin(client: SpaceClient, _options: SpaceJoinOptions, auth: Identity) {
-    if (!await activeProfile(auth)) throw new ServerError(401, 'Account session expired');
+    this.pendingAdmissions.set(auth.userId, client.sessionId);
+    try {
+      if (!await activeProfile(auth)) throw new ServerError(401, 'Account session expired');
+      if (this.pendingAdmissions.get(auth.userId) !== client.sessionId) {
+        throw new ServerError(409, 'Account connection was superseded');
+      }
+    } finally {
+      if (this.pendingAdmissions.get(auth.userId) === client.sessionId) this.pendingAdmissions.delete(auth.userId);
+    }
     for (const handler of this.interactions.registry.values()) handler.tick?.();
-    this.identities.set(client.sessionId, auth);
-    this.joinedAt.set(client.sessionId, Date.now());
     const { name, avatar, appearance, role } = ensureProfile(auth.userId);
     const map = this.maps.get(this.initialMap)!;
     const world = map.world;
@@ -232,6 +301,13 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     if (!spawn) throw new Error('All map spawns are inside locked private areas');
     const player = new Player({ name, avatar, appearance: JSON.stringify(appearance), role, userId: auth.userId, mapId: map.id, x: spawn.x, y: spawn.y });
     player.zoneId = currentZone(world, player)?.id ?? '';
+    // No await between transferring ownership and publishing the player. Late
+    // callbacks from the old socket cannot reclaim or delete the new seat.
+    const previous = this.connectedUsers.get(auth.userId);
+    this.connectedUsers.set(auth.userId, client.sessionId);
+    if (previous && previous !== client.sessionId) this.replaceConnection(previous);
+    this.identities.set(client.sessionId, auth);
+    this.joinedAt.set(client.sessionId, Date.now());
     this.state.players.set(client.sessionId, player);
     this.interactions.access.syncPlayer(client.sessionId, player);
   }
@@ -248,16 +324,23 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     this.interactions.access.release(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     // Match SDK retryable close codes. Validation failures must release their seats.
-    if ([CloseCode.NO_STATUS_RECEIVED, CloseCode.ABNORMAL_CLOSURE,
+    const identity = this.identities.get(client.sessionId);
+    if (identity && this.connectedUsers.get(identity.userId) === client.sessionId
+      && [CloseCode.NO_STATUS_RECEIVED, CloseCode.ABNORMAL_CLOSURE,
       CloseCode.GOING_AWAY, CloseCode.MAY_TRY_RECONNECT].some(retryCode => retryCode === code)) {
       const pending = this.allowReconnection(client, this.reconnectionSeconds);
       this.pendingReconnections.set(client.sessionId, pending);
-      pending.catch(() => {}).finally(() => this.pendingReconnections.delete(client.sessionId));
+      pending.catch(() => {}).finally(() => {
+        if (this.pendingReconnections.get(client.sessionId) === pending) this.pendingReconnections.delete(client.sessionId);
+      });
     }
   }
   async onReconnect(client: SpaceClient) {
     const identity = this.identities.get(client.sessionId);
     if (!identity || !await activeProfile(identity)) { client.leave(4003, 'Identity expired'); return; }
+    if (this.identities.get(client.sessionId) !== identity || this.connectedUsers.get(identity.userId) !== client.sessionId) {
+      client.leave(SPACE_REPLACED_CLOSE_CODE, 'Account connected from another device'); return;
+    }
     const player = this.state.players.get(client.sessionId);
     if (player) {
       if (!this.interactions.access.canEnter(player.mapId, client.sessionId, player)) {
@@ -274,18 +357,23 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     }
   }
   onLeave(client: SpaceClient) {
-    this.interactions.access.release(client.sessionId);
-    this.voice.clear(client.sessionId);
-    const player = this.state.players.get(client.sessionId);
-    if (player) cancelAction({ state: this.state, maps: this.maps }, player, client.sessionId);
-    this.identities.delete(client.sessionId);
-    this.joinedAt.delete(client.sessionId);
-    this.pendingReconnections.delete(client.sessionId);
-    this.state.players.delete(client.sessionId);
-    this.movementInputs.delete(client.sessionId);
-    this.lastChat.delete(client.sessionId);
-    this.typingUntil.delete(client.sessionId);
-    this.lastInteraction.delete(client.sessionId);
+    this.removeConnection(client.sessionId);
+  }
+  private removeConnection(sessionId: string) {
+    this.interactions.access.release(sessionId);
+    this.voice.clear(sessionId);
+    const player = this.state.players.get(sessionId);
+    if (player) cancelAction({ state: this.state, maps: this.maps }, player, sessionId);
+    this.identities.delete(sessionId);
+    const reservation = [...this.connectedUsers].find(([, current]) => current === sessionId);
+    if (reservation) this.connectedUsers.delete(reservation[0]);
+    this.joinedAt.delete(sessionId);
+    this.pendingReconnections.delete(sessionId);
+    this.state.players.delete(sessionId);
+    this.movementInputs.delete(sessionId);
+    this.lastChat.delete(sessionId);
+    this.typingUntil.delete(sessionId);
+    this.lastInteraction.delete(sessionId);
   }
   onDispose() {
     if (SpaceRoom.instances.get(this.state.spaceId) === this) SpaceRoom.instances.delete(this.state.spaceId);

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
+import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -94,6 +94,8 @@ let selectedSpaceId = '';
 let renderedMap = '';
 let renderingMap = '';
 let renderGeneration = 0;
+let joinGeneration = 0;
+let pageLeaving = false;
 let selectedWorld = '阳光大厅';
 let leavingIntentionally = false;
 let currentProfile: Profile | undefined;
@@ -497,21 +499,30 @@ async function enterWorld(plan: VoicePlan) {
   join.disabled = true;
   joinFeedback.textContent = '';
   status.textContent = '连接中…';
+  const generation = ++joinGeneration;
+  const isCurrentJoin = () => generation === joinGeneration && !pageLeaving;
+  const stopPlannedStream = () => { plan.stream?.getTracks().forEach(track => track.stop()); plan.stream = undefined; };
   try {
     await identityReady;
+    if (!isCurrentJoin()) { stopPlannedStream(); return; }
     if (!currentProfile) throw new Error('登录已失效，请重新登录');
     await persistProfile();
+    if (!isCurrentJoin()) { stopPlannedStream(); return; }
     const options = joinSchema.parse({ name: nameInput.value, avatar: currentAvatar, appearance: wardrobe.value });
     const space = spaceDirectory?.spaces.find(entry => entry.id === selectedSpaceId);
     if (!space || !spaceDirectory) throw new Error('请先选择空间');
     worldRegistry = { initialMap: space.initialMap, maps: spaceDirectory.maps.filter(map => space.maps.includes(map.id)) };
     const roomOptions = spaceJoinSchema.parse({ ...options, spaceId: space.id });
     const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, roomOptions);
-    try { room = await withTimeout(pendingRoom, 15_000, '连接空间超时，请检查服务是否启动后重试'); }
+    let joinedRoom: Room<SpaceProtocol>;
+    try { joinedRoom = await withTimeout(pendingRoom, 15_000, '连接空间超时，请检查服务是否启动后重试'); }
     catch (error) { void pendingRoom.then(lateRoom => lateRoom.leave()).catch(() => {}); throw error; }
-    room.reconnection.minUptime = 0;
-    if (!room.state?.players) await withTimeout(new Promise<void>(resolve => room!.onStateChange.once(() => resolve())),
+    if (!isCurrentJoin()) { stopPlannedStream(); void joinedRoom.leave().catch(() => {}); return; }
+    room = joinedRoom;
+    joinedRoom.reconnection.minUptime = 0;
+    if (!joinedRoom.state?.players) await withTimeout(new Promise<void>(resolve => joinedRoom.onStateChange.once(() => resolve())),
       10_000, '空间已连接，但没有收到地图角色数据');
+    if (!isCurrentJoin() || room !== joinedRoom) { stopPlannedStream(); void joinedRoom.leave().catch(() => {}); return; }
     const nativeRoom = room;
     interactions = createInteractions(room, undefined, {
       world: () => worldRegistry?.maps.find(map => map.id === nativeRoom.state.players.get(nativeRoom.sessionId)?.mapId)?.world,
@@ -543,6 +554,7 @@ async function enterWorld(plan: VoicePlan) {
       messages.scrollTop = messages.scrollHeight;
     };
     room.onMessage('chat', message => {
+      if (room !== nativeRoom) return;
       appendChat(`${message.privateAreaId ? '［房间］' : ''}${message.name}：${message.text}`, message.privateAreaId ? 'chat-private' : undefined);
       if (chatCard.classList.contains('collapsed')) setUnread(unread + 1);
       scene?.showBubble(message.sessionId, message.text);
@@ -551,6 +563,7 @@ async function enterWorld(plan: VoicePlan) {
     let audience = '';
     const chatRoom = room;
     room.onStateChange(() => {
+      if (room !== nativeRoom) return;
       const own = chatRoom.state.players.get(chatRoom.sessionId);
       if (!own?.connected) return; // Disconnects clear privateAreaId; that is not a move to public.
       const next = own.privateAreaId ? `${own.mapId}/${own.privateAreaId}` : '';
@@ -558,14 +571,18 @@ async function enterWorld(plan: VoicePlan) {
       audience = next;
       appendChat(next ? '已进入私密房间：聊天和语音只在房间内互通。' : '已回到公共区域：聊天和语音恢复公共范围。', 'chat-system');
     });
-    room.onDrop(() => { setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
-    room.onReconnect(() => { setConnected(true); status.textContent = '连接已恢复'; });
-    room.onLeave(() => {
-      cleanup(); status.textContent = '已离开，可以重新进入';
+    room.onDrop(() => { if (room !== nativeRoom) return; setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
+    room.onReconnect(() => { if (room !== nativeRoom) return; setConnected(true); status.textContent = '连接已恢复'; });
+    room.onLeave(code => {
+      if (room !== nativeRoom) return;
+      nativeRoom.reconnection.enabled = false;
+      cleanup(); status.textContent = code === SPACE_REPLACED_CLOSE_CODE
+        ? '账号已在其他设备进入此空间，当前连接已下线'
+        : '已离开，可以重新进入';
       void accounts.refreshProfile().then(value => { if (!value) showScreen('login-screen'); })
         .catch(error => { status.textContent = `无法刷新登录状态：${error instanceof Error ? error.message : String(error)}`; });
     });
-    room.onError((_code, message) => { status.textContent = `房间错误：${message}`; });
+    room.onError((_code, message) => { if (room === nativeRoom) status.textContent = `房间错误：${message}`; });
     const activeRoom = room;
     room.onStateChange(() => {
       if (room !== activeRoom) return;
@@ -575,6 +592,7 @@ async function enterWorld(plan: VoicePlan) {
       }
     });
     await renderWorld(room.state?.players?.get(room.sessionId)?.mapId ?? worldRegistry.initialMap, room);
+    if (!isCurrentJoin() || room !== nativeRoom) { stopPlannedStream(); return; }
     setConnected(true);
     leave.disabled = false;
     const sessionId = document.createElement('span');
@@ -588,13 +606,31 @@ async function enterWorld(plan: VoicePlan) {
       void voice.enable({ ...(stream ? { stream } : {}), muted: plan.muted });
     }
   } catch (error) {
-    plan.stream?.getTracks().forEach(track => track.stop());
+    stopPlannedStream();
+    if (!isCurrentJoin()) return;
     void room?.leave().catch(() => {});
     cleanup();
     showScreen(currentProfile ? 'avatar-screen' : 'login-screen');
     joinFeedback.textContent = `进入失败：${error instanceof Error ? error.message : String(error)}`;
   }
 }
+
+window.addEventListener('pagehide', () => {
+  pageLeaving = true;
+  joinGeneration++;
+  const departingRoom = room;
+  room = undefined;
+  cleanup();
+  if (departingRoom) void departingRoom.leave().catch(() => {});
+});
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  pageLeaving = false;
+  joinGeneration++;
+  cleanup();
+  status.textContent = '已离开，可以重新进入';
+  showScreen(currentProfile ? 'avatar-screen' : 'login-screen');
+});
 const renderMapSchema = z.object({
   tilewidth: z.number().positive(), tileheight: z.number().positive(),
   tilesets: z.array(z.object({ name: z.string(), image: z.string().optional() }).passthrough()).default([]),

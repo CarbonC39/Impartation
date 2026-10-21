@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AVATARS, DEFAULT_APPEARANCE, joinSchema, spaceJoinSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, boardPostSchema,
   boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES,
-  selectVariantSchema, canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema } from '@virtual-workspace/shared';
+  selectVariantSchema, canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema, voiceCredentialsSchema } from '@virtual-workspace/shared';
 
 test('voice payloads bound signaling size and reject malformed targets and ICE configuration', () => {
   const connectionId = '550e8400-e29b-41d4-a716-446655440000';
@@ -20,6 +20,8 @@ test('voice payloads bound signaling size and reject malformed targets and ICE c
     connectRadius: 160, disconnectRadius: 192, maxPeers: 6, scanIntervalMs: 1000 }).success, false);
   assert.equal(voiceConfigSchema.safeParse({ iceServers: [], connectRadius: 192,
     disconnectRadius: 160, maxPeers: 6, scanIntervalMs: 1000 }).success, false);
+  assert.equal(voiceCredentialsSchema.safeParse({ iceServers: [{ urls: 'turn:relay.example.test', username: '1:user', credential: 'mac' }], expiresAt: 1000 }).success, true);
+  assert.equal(voiceCredentialsSchema.safeParse({ iceServers: [{ urls: 'https://relay.example.test', username: '1:user', credential: 'mac' }], expiresAt: 1000 }).success, false);
 });
 
 test('voice eligibility requires opt-in, connection, same map, same private area and authoritative distance', () => {

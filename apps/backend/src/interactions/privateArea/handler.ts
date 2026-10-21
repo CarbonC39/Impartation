@@ -1,4 +1,4 @@
-import { contains, PLAYER_FOOTPRINT, PRIVATE_AREA_IDLE_MS, MapPrivateAreaState, PrivateAreaState,
+import { contains, overlapArea, PLAYER_FOOTPRINT, PRIVATE_AREA_IDLE_MS, MapPrivateAreaState, PrivateAreaState,
   privateAreaOperationSchema, type PrivateAreaOperationInput, type InteractionResult,
   type Player, type Point, type RegisteredMap, type Zone } from '@virtual-workspace/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
@@ -9,25 +9,22 @@ type Context = InteractionContext & { maps: ReadonlyMap<string, RegisteredMap>; 
 export function createPrivateAreaInteraction(context: Context) {
   const areas = (mapId: string) => context.maps.get(mapId)?.world.zones.filter(zone => zone.kind === 'privateArea') ?? [];
   const stateFor = (mapId: string, areaId: string) => context.state.privateAreas.get(mapId)?.areas.get(areaId);
-  const overlaps = (area: Zone, point: Point) => point.x + PLAYER_FOOTPRINT.width / 2 > area.x &&
-    point.x - PLAYER_FOOTPRINT.width / 2 < area.x + area.width && point.y > area.y &&
-    point.y - PLAYER_FOOTPRINT.height < area.y + area.height;
+  const overlap = (area: Zone, point: Point) => overlapArea(area, { x: point.x - PLAYER_FOOTPRINT.width / 2,
+    y: point.y - PLAYER_FOOTPRINT.height, ...PLAYER_FOOTPRINT });
+  const overlaps = (area: Zone, point: Point) => overlap(area, point) > 1e-8;
   const canEnter = (mapId: string, sessionId: string, point: Point) => areas(mapId).every(area => {
     const state = stateFor(mapId, area.id);
     return !overlaps(area, point) || !state?.locked || state.members.has(sessionId);
   });
-  const overlapArea = (area: Zone, point: Point) => Math.max(0,
-    Math.min(point.x + PLAYER_FOOTPRINT.width / 2, area.x + area.width) - Math.max(point.x - PLAYER_FOOTPRINT.width / 2, area.x)) *
-    Math.max(0, Math.min(point.y, area.y + area.height) - Math.max(point.y - PLAYER_FOOTPRINT.height, area.y));
   const canMove = (mapId: string, sessionId: string, from: Point, to: Point) => areas(mapId).every(area => {
     const state = stateFor(mapId, area.id);
     if (!state?.locked || state.members.has(sessionId) || !overlaps(area, to)) return true;
     // A lock may close while an outsider's footprint straddles the border. Allow retreat/sideways movement.
-    const sameSide = (from.x <= area.x && to.x <= area.x) ||
+    const sameSide = area.polygon !== undefined || (from.x <= area.x && to.x <= area.x) ||
       (from.x >= area.x + area.width && to.x >= area.x + area.width) ||
       (from.y <= area.y && to.y <= area.y) || (from.y >= area.y + area.height && to.y >= area.y + area.height);
-    return sameSide && !contains(area, from.x, from.y) && !contains(area, to.x, to.y) && overlapArea(area, from) > 0 &&
-      overlapArea(area, to) <= overlapArea(area, from);
+    return sameSide && !contains(area, from.x, from.y) && !contains(area, to.x, to.y) && overlap(area, from) > 0 &&
+      overlap(area, to) <= overlap(area, from) + 1e-8;
   });
   const syncPlayer = (sessionId: string, player: Player) => {
     player.privateAreaId = '';

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { before, after, beforeEach, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import { matchMaker } from '@colyseus/core';
+import { WebSocketClient } from '@colyseus/ws-transport';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
@@ -17,6 +18,8 @@ process.env.EXTERNAL_TOOLS = JSON.stringify({
   'shared-canvas': { url: 'https://board.example/boards/workspace' },
 });
 process.env.VOICE_MAX_PEERS = '1';
+process.env.VOICE_TURN_URLS = 'turn:turn.example.test:3478,turns:turn.example.test:5349';
+process.env.VOICE_TURN_SHARED_SECRET = 'test-turn-shared-secret-with-at-least-32-chars';
 const { server } = await import('../src/app.config.js');
 const { db } = await import('../src/db.js');
 const { setRole } = await import('../src/identity.js');
@@ -26,6 +29,13 @@ async function createIdentity() {
     body: JSON.stringify({ username: `user_${randomUUID().replaceAll('-', '').slice(0, 16)}`, password: 'password1234', displayName: '访客' }) });
   assert.equal(response.status, 200, await response.clone().text());
   return response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; ');
+}
+async function signIn(cookie: string) {
+  const account = await me(cookie);
+  const response = await fetch(endpoint + '/api/auth/sign-in/username', { method: 'POST', headers: { Origin: endpoint, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: account.username, password: 'password1234' }) });
+  assert.equal(response.status, 200, await response.clone().text());
+  return response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
 }
 function sdk(cookie: string) { return new Client<typeof server>(endpoint, { headers: { Cookie: cookie } }); }
 async function me(cookie: string) {
@@ -88,6 +98,40 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(await response.json(), { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
       connectRadius: 160, disconnectRadius: 192, maxPeers: 1, scanIntervalMs: 1000 });
+  });
+  test('TURN credentials require an active login and are short-lived coturn REST credentials', async () => {
+    const unauthenticated = await fetch(endpoint + '/api/voice-credentials');
+    assert.equal(unauthenticated.status, 401);
+    assert.equal(unauthenticated.headers.get('cache-control'), 'no-store');
+
+    const cookie = await createIdentity();
+    const response = await fetch(endpoint + '/api/voice-credentials', { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const value = await response.json() as { iceServers: { urls: string[]; username: string; credential: string }[]; expiresAt: number };
+    assert.equal(value.iceServers.length, 1);
+    const server = value.iceServers[0]!;
+    const [expiry, userId] = server.username.split(':');
+    assert.ok(Number(expiry) >= Math.floor(Date.now() / 1000) + 3590);
+    assert.ok(userId);
+    assert.equal(value.expiresAt, Number(expiry) * 1000);
+    assert.deepEqual(server.urls, ['turn:turn.example.test:3478', 'turns:turn.example.test:5349']);
+    assert.equal(server.credential, createHmac('sha1', process.env.VOICE_TURN_SHARED_SECRET!).update(server.username).digest('base64'));
+    assert.equal(JSON.stringify(value).includes(process.env.VOICE_TURN_SHARED_SECRET!), false);
+  });
+  test('TURN credentials stop issuing after session revocation or account suspension', async () => {
+    const revokedCookie = await createIdentity();
+    const signedOut = await fetch(endpoint + '/api/auth/sign-out', { method: 'POST', headers: { Cookie: revokedCookie, Origin: endpoint,
+      'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(signedOut.status, 200);
+    assert.equal((await fetch(endpoint + '/api/voice-credentials', { headers: { Cookie: revokedCookie } })).status, 401);
+
+    const suspendedCookie = await createIdentity();
+    const suspendedProfile = await me(suspendedCookie);
+    db.prepare('UPDATE auth_user SET suspended = 1 WHERE id = ?').run(suspendedProfile.id);
+    const response = await fetch(endpoint + '/api/voice-credentials', { headers: { Cookie: suspendedCookie } });
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
   });
   test('voice signaling requires opt-in, server proximity, same map and pair capacity', async () => {
     const alice = await join('VoiceAlice');
@@ -405,6 +449,15 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     assert.equal(authoritative.state.players.get(sessionId), player);
     assert.deepEqual({ x: player.x, y: player.y }, position);
     assert.equal(authoritative.state.players.size, 1);
+
+    const reconnectedAgain = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    authoritative.clients.find(client => client.sessionId === sessionId)!.leave(1001, 'second test network drop');
+    await until(() => player.connected === false);
+    await reconnectedAgain;
+    await until(() => player.connected);
+    assert.equal(alice.sessionId, sessionId);
+    assert.equal(authoritative.state.players.get(sessionId), player);
+    assert.equal(authoritative.state.players.size, 1);
   });
   test('zoneId is computed on the server, synchronized on entry, and cleared on exit', async () => {
     const alice = await join('Alice');
@@ -576,14 +629,12 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     assert.equal(saved.name, 'Saved');
     assert.deepEqual(await me(other), original);
     const alice = await join('ForgedJoin', 'amber', cookie);
-    const second = await join('AnotherJoin', 'mint', cookie);
     assert.equal(alice.state.players.get(alice.sessionId)?.name, 'Saved');
-    assert.equal(second.state.players.get(second.sessionId)?.userId, saved.id);
     const updated = await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Changed', avatar: 'amber' }) });
     assert.equal(updated.status, 200);
-    await until(() => second.state.players.get(alice.sessionId)?.name === 'Changed');
-    await until(() => second.state.players.get(second.sessionId)?.avatar === 'amber');
+    await until(() => alice.state.players.get(alice.sessionId)?.name === 'Changed');
+    await until(() => alice.state.players.get(alice.sessionId)?.avatar === 'amber');
     const currentAppearance = { ...DEFAULT_APPEARANCE, hair: { ...DEFAULT_APPEARANCE.hair, color: '#a24dcc' } };
     const aliased = await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify({ displayName: 'AliasName', name: 'IgnoredName', currentAppearance, appearance: DEFAULT_APPEARANCE }) });
@@ -592,9 +643,8 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     assert.equal(aliasProfile.name, 'AliasName');
     assert.equal(aliasProfile.displayName, 'AliasName');
     assert.deepEqual(aliasProfile.currentAppearance, currentAppearance);
-    await until(() => second.state.players.get(alice.sessionId)?.name === 'AliasName');
-    await until(() => second.state.players.get(alice.sessionId)?.appearance === JSON.stringify(currentAppearance));
-    await until(() => second.state.players.get(second.sessionId)?.name === 'AliasName');
+    await until(() => alice.state.players.get(alice.sessionId)?.name === 'AliasName');
+    await until(() => alice.state.players.get(alice.sessionId)?.appearance === JSON.stringify(currentAppearance));
     assert.equal((await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: '{"name":"Evil"}' })).status, 403);
     assert.equal((await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { Cookie: cookie, 'Content-Type': 'text/plain' }, body: '{"name":"Evil"}' })).status, 403);
     assert.equal((await fetch(endpoint + '/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"name":"Evil"}' })).status, 401);
@@ -821,6 +871,82 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     const bob = await join('Bob'); assert.equal(bob.roomId, alice.roomId);
   });
 
+  test('the newest same-account connection replaces its Space seat across sessions and concurrent joins', async () => {
+    const cookie = await createIdentity();
+    const alternateLogin = await signIn(cookie);
+    const options = { name: 'Same account', avatar: 'mint' as const, spaceId: 'main' };
+    const results = await Promise.allSettled([
+      sdk(cookie).joinOrCreate('space', options),
+      sdk(cookie).joinOrCreate('space', options),
+    ]);
+    const joined = results.filter((result): result is PromiseFulfilledResult<Room<SpaceRoom>> => result.status === 'fulfilled');
+    assert.ok(joined.length >= 1);
+    for (const result of joined) {
+      const room = result.value;
+      connections.push(room);
+      room.onMessage('chat', () => {}); room.onError(() => {});
+    }
+    await Promise.allSettled(joined.map(result => result.value.waitForInitialState()));
+    const authoritative = harness.getRoomById<SpaceRoom>(joined[0]!.value.roomId);
+    await until(() => authoritative.state.players.size === 1);
+    const main = joined.find(result => authoritative.state.players.has(result.value.sessionId))?.value;
+    assert.ok(main);
+    assert.equal(authoritative.state.players.size, 1);
+
+    const otherSpace = await sdk(cookie).joinOrCreate('space', { ...options, spaceId: 'other' });
+    connections.push(otherSpace);
+    otherSpace.onMessage('chat', () => {}); otherSpace.onError(() => {});
+    await otherSpace.waitForInitialState();
+    assert.notEqual(otherSpace.roomId, main.roomId);
+    assert.equal(otherSpace.connection.isOpen, true);
+
+    const first = await sdk(cookie).joinOrCreate('space', options);
+    connections.push(first);
+    first.onMessage('chat', () => {}); first.onError(() => {});
+    await first.waitForInitialState();
+    const firstToken = first.reconnectionToken;
+    const firstLeft = new Promise<number>(resolve => first.onLeave.once(resolve));
+    const second = await sdk(alternateLogin).joinOrCreate('space', options);
+    connections.push(second);
+    second.onMessage('chat', () => {}); second.onError(() => {});
+    await second.waitForInitialState();
+    assert.notEqual(first.sessionId, second.sessionId);
+    assert.equal(await firstLeft, 4012);
+    await assert.rejects(sdk(cookie).reconnect(firstToken));
+    await until(() => authoritative.state.players.size === 1 && authoritative.state.players.has(second.sessionId));
+    assert.equal(otherSpace.connection.isOpen, true);
+
+    // A later leave from a superseded connection must not release the current account seat.
+    const secondLeft = new Promise<number>(resolve => second.onLeave.once(resolve));
+    const third = await sdk(cookie).joinOrCreate('space', options);
+    connections.push(third);
+    third.onMessage('chat', () => {}); third.onError(() => {});
+    await third.waitForInitialState();
+    assert.equal(await secondLeft, 4012);
+    await until(() => authoritative.state.players.size === 1 && authoritative.state.players.has(third.sessionId));
+    assert.equal(third.state.players.size, 1);
+    assert.equal(otherSpace.connection.isOpen, true);
+
+  });
+
+  test('a dropped same-account connection is replaced and its reconnect token is invalidated', async () => {
+    const cookie = await createIdentity();
+    const alternateLogin = await signIn(cookie);
+    const alice = await join('Alice', 'mint', cookie);
+    const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
+    const token = alice.reconnectionToken;
+    alice.reconnection.enabled = false;
+    authoritative.clients.find(client => client.sessionId === alice.sessionId)!.leave(1001);
+    await until(() => authoritative.state.players.get(alice.sessionId)?.connected === false);
+    const replacement = await sdk(alternateLogin).joinOrCreate('space', { name: 'Returned', avatar: 'mint', spaceId: 'main' });
+    connections.push(replacement);
+    replacement.onMessage('chat', () => {}); replacement.onError(() => {});
+    await replacement.waitForInitialState();
+    await assert.rejects(sdk(cookie).reconnect(token));
+    await until(() => !authoritative.state.players.has(alice.sessionId));
+    assert.equal(replacement.state.players.size, 1);
+  });
+
   test('Portal runtime rejects a globally registered map outside the current Space', async () => {
     const alice = await join('Alice'); const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
@@ -836,23 +962,36 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     } finally { world.zones.pop(); }
   });
 
-  test('a full Space rejects entry without creating a second instance', async () => {
-    const alice = await join('Alice');
+  test('a full Space lets the same account replace its seat and still rejects another account', async () => {
+    const cookie = await createIdentity();
+    const alternateLogin = await signIn(cookie);
+    const alice = await join('Alice', 'mint', cookie);
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     assert.equal(authoritative.maxClients, 32);
-    authoritative.maxClients = 2;
-    const bob = await join('Bob');
-    assert.equal(alice.roomId, bob.roomId);
-    await assert.rejects(harness.sdk.joinById(alice.roomId, { name: 'Charlie', avatar: 'mint', spaceId: 'main' }));
-    await assert.rejects(join('Charlie'), /Space is full/);
-    assert.equal((await matchMaker.query({ name: 'space' })).length, 1);
-    assert.equal(authoritative.state.players.size, 2);
-    await bob.leave();
-    const replacement = await join('Replacement');
-    assert.equal(replacement.roomId, alice.roomId);
+    authoritative.maxClients = 1;
+    await assert.rejects(harness.sdk.joinById(alice.roomId, { name: 'Other', avatar: 'mint', spaceId: 'main' }));
+    const oldClient = authoritative.clients.find(client => client.sessionId === alice.sessionId);
+    assert.ok(oldClient instanceof WebSocketClient);
+    const aliceLeft = new Promise<number>(resolve => alice.onLeave.once(resolve));
+    try {
+      // Pause incoming data so the server cannot receive the peer's close acknowledgement.
+      oldClient.ref.pause();
+      const ownerReplacement = await sdk(alternateLogin).joinOrCreate('space', { name: 'Replacement', avatar: 'mint', spaceId: 'main' });
+      connections.push(ownerReplacement);
+      ownerReplacement.onMessage('chat', () => {}); ownerReplacement.onError(() => {});
+      await ownerReplacement.waitForInitialState();
+      assert.equal(await aliceLeft, 4012);
+      await until(() => authoritative.state.players.size === 1 && authoritative.state.players.has(ownerReplacement.sessionId));
+      assert.equal(ownerReplacement.roomId, alice.roomId);
+      await assert.rejects(join('Charlie'), /Space is full/);
+      assert.equal((await matchMaker.query({ name: 'space' })).length, 1);
+    } finally {
+      oldClient.ref.terminate();
+    }
   });
   test('a reconnect timeout releases the player and rejects the expired token', async () => {
-    const alice = await join('Alice');
+    const cookie = await createIdentity();
+    const alice = await join('Alice', 'mint', cookie);
     const bob = await join('Bob');
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     const player = authoritative.state.players.get(alice.sessionId)!;
@@ -868,6 +1007,9 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     await assert.rejects(harness.sdk.reconnect(token));
     assert.equal(authoritative.clients.length, 1);
     assert.equal(object.occupiedBy, ''); assert.equal(object.variant, 'empty');
+    const replacement = await join('Replacement', 'mint', cookie);
+    assert.equal(replacement.roomId, bob.roomId);
+    assert.equal(authoritative.state.players.size, 2);
   });
   for (const [name, type, payload] of [
     ['invalid direction', 'input', { x: 2, y: 0 }],

@@ -24,6 +24,12 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 
 `file` 相对于 registry 文件。`maps` 保存地图定义，每个条目包含 `id`、`file`、`defaultSpawn`；`spaces` 数组顺序就是开始页显示顺序。默认产品 Space 的稳定 ID 为 `main`。Space 的 `id` 必须匹配 `/^[a-z0-9][a-z0-9_-]*$/`，创建后应保持稳定；`name` 是展示名，`description` 可选，`cover` 是普通静态图片路径。每个 Space 的 `initialMap` 和 `maps` 都必须引用已登记地图，初始地图必须属于该 Space。地图可以被多个 Space 复用。Portal 的目标地图必须属于当前 Space，目标出生点也必须存在。
 
+registry 顶层可选 `project`，路径相对于 registry 文件，指向 Tiled `.tiled-project` JSON 文件。配置后，服务端读取项目 `propertyTypes` 中的自定义 class 成员默认值，并在解析地图前补齐地图、layer、tileset、tile、对象和嵌套 class 的属性；不配置时只保留文件显式保存的值，不推断未知 class 成员或 object references。明确声明类型的属性会校验值结构；没有 `type` 的旧属性保留兼容。枚举和编辑器颜色不影响服务端语义。Tiled class 属性在地图 JSON 中保留其 `type`、`propertytype` 与 `value`；嵌套 class 的 `value` 保持 Tiled 原生对象结构。覆盖 class 属性时会按项目 class 成员递归合并其值。共享 world 的 `typedProperties` 按属性名提供顶层类型元数据，既有 `properties` 仍提供直接值，供交互 handler 校验和使用。
+
+JSON Object Template 可使用 `.tj` 或 `.json` 文件，模板路径相对于引用它的地图或上级模板文件。对象实例从模板继承形状、class、尺寸与 properties；实例中同名 property 覆盖模板值，实例的位置和 Tiled object ID 始终作为地图实例自身的值，实例写出的 `class` 或旧版 `type` 会覆盖模板的 class。模板 tile object 必须引用外置 tileset；模板的 tileset source 需要与地图中的一个 tileset source 指向同一文件，服务端据此把模板 GID 映射到地图 GID，地图实例显式设置的 GID 已处于地图 GID 空间，不会再次映射。模板循环引用、缺失文件或无法匹配 tileset 会在启动时明确报错；非循环的模板链正常展开。XML `.tx` 模板不支持。
+
+Tiled 的 `object` property 保存地图内对象的数值 ID。解析器允许 `0` 表示未设置，其余 ID 必须指向地图中存在的对象；引用检查也覆盖 class 与 list property 内的 object 值。模板展开后以地图实例的 ID 作为引用目标，不接受模板文件内部对象 ID 作为替代。
+
 上例的 `/covers/main.png` 需要另外发布到前端静态目录，例如构建前放入 `assets/covers/main.png`。地图 API 不会自动托管 `cover`；只改 `MAP_REGISTRY_PATH` 不会更新前端静态资源。共享地图里的 Portal 也必须对每个引用它的 Space 都有效，不能仅检查初始 Space。
 
 客户端从 `GET /api/world` 读取 `{ maps, spaces }`：`spaces` 提供列表元数据，`maps` 是规范化地图目录；再按地图 URL 请求对应渲染 JSON 和显式资源。服务端以源 `.tmj` 提取权威语义。单进程中每个 Space 最多有一个 live Colyseus room；`spaceJoinSchema` 要求客户端提交 `spaceId`，服务端按它匹配该 Space。满员时明确拒绝加入，不会再创建第二个 room。`SPACE_MAX_CLIENTS` 对所有 Space 共用，默认 32。
@@ -50,19 +56,27 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 
 使用有限、正交地图，图块宽高均为 **16 × 16 像素**。地图宽高可按需设置。Tiled 中把几何语义对象放入名为 `spawns`、`collisions`、`interactions` 的对象层；这些图层可位于 group 内，也可使用 layer 的偏移。解析器将 group/layer 偏移计入语义对象位置。其他图层、对象和 tileset 元数据不用于碰撞、出生点或交互校验。
 
-渲染加载器可解析多个内嵌 atlas 和外置 JSON `.tsj` tileset，Phaser 按 Tiled 顺序创建全部瓦片层，包括 group 中的瓦片层；不依赖 `ground` 名称。XML `.tsx` 尚无加载器，image layer、通用 tile object 和 image-collection tileset 尚无专门渲染路径；variantSelector 引用的目标矩形或 atlas tile object 有专用渲染路径。它们不被共享语义解析器禁止；使用时需补充渲染加载/展示实现。
+渲染加载器可解析多个内嵌 atlas 和外置 JSON `.tsj` tileset，Phaser 按 Tiled 顺序创建全部瓦片层，包括 group 中的瓦片层；不依赖 `ground` 名称。atlas tileset 的 tile animation 帧由渲染器播放；服务启动时要求动画至少有一帧，帧的 local tile ID 必须位于 tileset 范围内，duration 必须为正整数毫秒。Image-collection tileset 动画没有专门支持。XML `.tsx` 尚无加载器，image layer、通用 tile object 和 image-collection tileset 尚无专门渲染路径；variantSelector 引用的目标矩形或 atlas tile object 有专用渲染路径。它们不被共享语义解析器禁止；使用时需补充渲染加载/展示实现。
 
-需要让树冠、屋顶等瓦片遮住角色时，在对应的 **瓦片层** 添加 Tiled 自定义布尔属性 `abovePlayers = true`。该层会整体绘制在角色、地图对象和角色状态标记之上；多个前景瓦片层仍按 Tiled 中的顺序叠放。未设置或设为 `false` 的瓦片层保持原有背景深度。这个属性只控制显示，不产生碰撞；需要阻挡移动时仍须在 `collisions` 对象层绘制矩形。可将前景瓦片层放入 group，但属性应设置在瓦片层本身。
+需要让树冠、屋顶等瓦片遮住角色时，在对应的 **瓦片层** 添加 Tiled 自定义布尔属性 `abovePlayers = true`。该层会整体绘制在角色、地图对象和角色状态标记之上；多个前景瓦片层仍按 Tiled 中的顺序叠放。未设置或设为 `false` 的瓦片层保持原有背景深度。这个属性只控制显示，不产生碰撞；需要阻挡移动时仍须在 `collisions` 对象层绘制矩形或多边形。可将前景瓦片层放入 group，但属性应设置在瓦片层本身。
 
 需要角色走到瓦片上方时被遮挡、走到下方时显示在前面，可在对应瓦片层添加 Tiled 自定义布尔属性 `ySort = true`。客户端按每行瓦片的底边世界 Y 坐标与角色脚点排序，适合树木、柜台等局部遮挡；同一行的瓦片共用排序深度。跨多行绘制的完整物体会按行分别排序，制图时应检查实际效果。`ySort` 与 `abovePlayers` 同时为 `true` 时使用 `ySort`。角色名称等状态标记仍显示在 Y 排序瓦片上方。
 
-项目只约束语义层的数据，不承诺 Phaser 渲染器支持 Tiled 的全部图层、对象或 tileset 表达。地图保存后应在实际浏览器检查所用渲染特性。无限地图和非正交地图不受支持，因为当前权威移动和 AABB 边界按有限矩形世界计算。语义对象使用无旋转点或轴对齐矩形；碰撞和区域交互矩形必须为正尺寸且完全在地图范围内。16×16 只约束地图网格；角色、家具和对象叠加图的视觉尺寸独立。
+项目只约束语义层的数据，不承诺 Phaser 渲染器支持 Tiled 的全部图层、对象或 tileset 表达。地图保存后应在实际浏览器检查所用渲染特性。无限地图和非正交地图不受支持，因为当前权威移动和 AABB 边界按有限矩形世界计算。出生点和动作锚点使用无旋转点；碰撞和区域交互可使用无旋转轴对齐矩形或简单多边形，必须有正面积且完全在地图范围内。16×16 只约束地图网格；角色、家具和对象叠加图的视觉尺寸独立。属性默认值、object references 和 Object Templates 的解析遵循 [Tiled Custom Properties](https://doc.mapeditor.org/en/stable/manual/custom-properties/)、[JSON Map Format](https://doc.mapeditor.org/en/stable/reference/json-map-format/) 与 [Using Templates](https://doc.mapeditor.org/en/stable/manual/using-templates/)；模板 tile GID 映射遵循 [Tiled Global Tile IDs](https://doc.mapeditor.org/en/stable/reference/global-tile-ids/)。
 
 ### 出生点与碰撞
 
 - `spawns` 中放置一个或多个唯一命名的 Tiled point object。名称是出生点 ID；无需名为 `default` 的固定对象。registry 的 `defaultSpawn` 必须匹配该地图存在的名称。
 - 出生点应位于可通行区域。服务端使用脚点上方的 12×8 地面碰撞矩形校验边界和障碍，尺寸独立于角色图片。
-- `collisions` 中每个矩形对象都是服务器端障碍。地面瓦片图案不会自动产生碰撞。
+- `collisions` 中每个矩形或多边形对象都是服务器端障碍。地面瓦片图案不会自动产生碰撞。
+
+### 多边形区域与动画
+
+`collisions` 和所有区域交互（包括 Portal、web、privateArea、wardrobe）支持 Tiled polygon object。顶点相对于对象 x/y，group/layer 偏移同样生效；顺时针、逆时针和凹多边形均可使用。顶点数为 3–1024，不允许自交、重复点、重叠边、孔洞或零面积。点类型出生点、action、variantSelector 以及变体目标不使用多边形。规范化 API 保留绝对世界坐标顶点和包围矩形，触发、准入和碰撞按实际多边形计算。
+
+角色仍以 12×8 脚底矩形参与碰撞，只接触障碍边界不会阻挡；普通区域按脚点是否在内部判断，多边形边界计入区域。锁定的 privateArea 校验完整脚底矩形，不能从斜边跨入；锁定时脚底已跨边界的非成员可向外退。privateArea 的实际面积不能彼此重叠，但可以共边或有重叠包围框。
+
+atlas 的动画使用每个 tile 的 `animation: [{ tileid, duration }]`，`tileid` 为所属 tileset 的 local ID，`duration` 为正整数毫秒。普通层、abovePlayers、ySort 和 variantSelector 目标均支持动画，按本地时间循环，不进入服务端状态；动画帧不改变碰撞或交互几何。WebGL 使用 Phaser 4 原生播放，Canvas 使用相同帧时间选择。
 
 ### 交互类型
 
@@ -72,10 +86,10 @@ Tiled JSON (`.tmj`) 是地图几何、出生点、碰撞和交互的唯一源数
 | --- | --- | --- | --- |
 | `action` | 命名 point | 地图内唯一 `name`；string `action`，当前支持 `sit` | 角色动作锚点；既有地图继续以名称作为 ID |
 | `variantSelector` | 带数值 Tiled ID 和名称的 point | string `action: sit`、数值 `targetObjectId`、CSV string `variants` | 占用动作点后切换关联地图对象变体 |
-| `privateArea` | 带数值 Tiled ID 的矩形 | 无必需 properties | 可临时锁定并管理成员的空间区域 |
-| `wardrobe` | 带数值 Tiled ID 的矩形 | 无必需 properties | 打开现有角色外观编辑和保存界面 |
-| `Portal` | 命名矩形 | string `targetMap`、string `targetSpawn` | 由服务器验证并执行地图转换 |
-| `web` | 命名矩形 | 非空 string `resourceId` | 打开 `EXTERNAL_TOOLS` 外置页面；默认为 external，embed 可选 |
+| `privateArea` | 带数值 Tiled ID 的矩形或多边形 | 无必需 properties | 可临时锁定并管理成员的空间区域 |
+| `wardrobe` | 带数值 Tiled ID 的矩形或多边形 | 无必需 properties | 打开现有角色外观编辑和保存界面 |
+| `Portal` | 命名矩形或多边形 | string `targetMap`、string `targetSpawn` | 由服务器验证并执行地图转换 |
+| `web` | 命名矩形或多边形 | 非空 string `resourceId` | 打开 `EXTERNAL_TOOLS` 外置页面；默认为 external，embed 可选 |
 
 ### 角色动作锚点
 
@@ -159,7 +173,7 @@ room.request('selectVariant', { selectorId: '204', variant: null });
 
 ### 私密区域与衣柜
 
-`privateArea` 与 `wardrobe` 是矩形交互区，均使用数值 Tiled `id` 作为稳定 ID。私密区域无需 properties；衣柜复用项目现有衣柜界面及保存流程。
+`privateArea` 与 `wardrobe` 是矩形或多边形交互区，均使用数值 Tiled `id` 作为稳定 ID。私密区域无需 properties；衣柜复用项目现有衣柜界面及保存流程。
 
 ```json
 [
@@ -172,13 +186,13 @@ room.request('selectVariant', { selectorId: '204', variant: null });
 
 私密区域初始开放。进入开放区域的在线玩家成为该会话成员；任一成员可锁定/解锁，也可将任一在线玩家加入成员名单。锁定后，非成员的完整脚点碰撞矩形不能进入区域；服务器也校验角色动作偏移位置和 Portal 目标出生点。离开区域不会清除成员资格，因此仍在线的成员可重新进入。断开连接或切换地图会移除该成员；无实体成员但仍有成员记录时，60 秒后解锁并清空；成员名单立刻为空时立即重置。
 
-私密区域矩形不能彼此重叠；普通交互区可以与其嵌套。普通交互区域的选择与私密成员上下文分别维护，嵌套的 board、web 或 Portal 仍按自身区域处理。私密区域不改变聊天、语音信令或内容过滤，不提供保密聊天或语音隔离；玩家状态中的私密区域 ID 可供后续语音听取边界使用。
+私密区域的实际面积不能彼此重叠；普通交互区可以与其嵌套。普通交互区域的选择与私密成员上下文分别维护，嵌套的 board、web 或 Portal 仍按自身区域处理。私密区域不改变聊天、语音信令或内容过滤，不提供保密聊天或语音隔离；玩家状态中的私密区域 ID 可供后续语音听取边界使用。
 
 ### 交互区与 Portal
 
 旧的 action/web/Portal/board/pomodoro 使用名称作为交互 ID；新类型使用 Tiled 数字 ID 的字符串形式作为运行时 ID。新增对象需同时填写非空名称和数值 ID；不要在编辑时重建需保留身份的对象。把座位升级为 selector 时保留其位置/朝向/偏移，明确引用目标对象并添加选项。`linkedObjectId` 不会自动变为变体目标。
 
-`interactions` 中每个矩形对象需要唯一非空 Name。交互类型从 Tiled `class`（旧版 `type`）读取。共享的泛型 `InteractionRegistry<T>` 保存按 kind 关联的定义；当前解析定义只负责校验 properties，前后端 handlers 在各自模块组装。交互区域的坐标、类型和 properties 是地图定义的一部分，`resourceId` 用于需要共享资源归属的交互。
+`interactions` 中每个矩形或多边形对象需要唯一非空 Name。交互类型从 Tiled `class`（旧版 `type`）读取。共享的泛型 `InteractionRegistry<T>` 保存按 kind 关联的定义；当前解析定义只负责校验 properties，前后端 handlers 在各自模块组装。交互区域的坐标、类型和 properties 是地图定义的一部分，`resourceId` 用于需要共享资源归属的交互。
 
 Portal 使用类型 `Portal`，并在对象 properties 中设置两个 string：
 

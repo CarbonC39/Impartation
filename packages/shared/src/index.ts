@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { spaceIdSchema } from './world.js';
 
 export const ROOM_NAME = 'space';
+/** Terminal close: another connection has taken this account's seat in the Space. */
+export const SPACE_REPLACED_CLOSE_CODE = 4012;
 export const AVATARS = ['mint', 'amber', 'violet'] as const;
 export const avatarSchema = z.enum(AVATARS);
 import { APPEARANCE_ASSETS } from './appearanceAssets.generated.js';
