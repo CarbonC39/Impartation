@@ -84,7 +84,7 @@ sequenceDiagram
 
 界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
 
-Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建额外实例。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 拒绝重复连接，并将重连期间的连接视为仍占用席位。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
+Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝其他账号加入，不创建额外实例；同账号可替换自己的席位。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 将席位转移给新连接，关闭旧连接并取消旧重连资格。普通断线重连保留原 session ID 和玩家状态，不重复占用席位；重连期间仍占用的席位可被新连接替换。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 

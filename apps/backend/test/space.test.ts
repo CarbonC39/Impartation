@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import { matchMaker } from '@colyseus/core';
+import { WebSocketClient } from '@colyseus/ws-transport';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
@@ -420,6 +421,15 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     assert.equal(authoritative.state.players.get(sessionId), player);
     assert.deepEqual({ x: player.x, y: player.y }, position);
     assert.equal(authoritative.state.players.size, 1);
+
+    const reconnectedAgain = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    authoritative.clients.find(client => client.sessionId === sessionId)!.leave(1001, 'second test network drop');
+    await until(() => player.connected === false);
+    await reconnectedAgain;
+    await until(() => player.connected);
+    assert.equal(alice.sessionId, sessionId);
+    assert.equal(authoritative.state.players.get(sessionId), player);
+    assert.equal(authoritative.state.players.size, 1);
   });
   test('zoneId is computed on the server, synchronized on entry, and cleared on exit', async () => {
     const alice = await join('Alice');
@@ -833,7 +843,7 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     const bob = await join('Bob'); assert.equal(bob.roomId, alice.roomId);
   });
 
-  test('one account can hold only one connection per Space, including concurrent authenticated joins', async () => {
+  test('the newest same-account connection replaces its Space seat across sessions and concurrent joins', async () => {
     const cookie = await createIdentity();
     const alternateLogin = await signIn(cookie);
     const options = { name: 'Same account', avatar: 'mint' as const, spaceId: 'main' };
@@ -842,48 +852,70 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
       sdk(cookie).joinOrCreate('space', options),
     ]);
     const joined = results.filter((result): result is PromiseFulfilledResult<Room<SpaceRoom>> => result.status === 'fulfilled');
-    const rejected = results.filter(result => result.status === 'rejected');
-    assert.equal(joined.length, 1);
-    assert.equal(rejected.length, 1);
-    const main = joined[0]!.value;
-    connections.push(main);
-    main.onMessage('chat', () => {}); main.onError(() => {});
-    await main.waitForInitialState();
-    const authoritative = harness.getRoomById<SpaceRoom>(main.roomId);
+    assert.ok(joined.length >= 1);
+    for (const result of joined) {
+      const room = result.value;
+      connections.push(room);
+      room.onMessage('chat', () => {}); room.onError(() => {});
+    }
+    await Promise.allSettled(joined.map(result => result.value.waitForInitialState()));
+    const authoritative = harness.getRoomById<SpaceRoom>(joined[0]!.value.roomId);
+    await until(() => authoritative.state.players.size === 1);
+    const main = joined.find(result => authoritative.state.players.has(result.value.sessionId))?.value;
+    assert.ok(main);
     assert.equal(authoritative.state.players.size, 1);
-    await assert.rejects(sdk(cookie).joinOrCreate('space', options), /already connected to this Space/i);
-    await assert.rejects(sdk(alternateLogin).joinOrCreate('space', options), /already connected to this Space/i);
 
     const otherSpace = await sdk(cookie).joinOrCreate('space', { ...options, spaceId: 'other' });
     connections.push(otherSpace);
     otherSpace.onMessage('chat', () => {}); otherSpace.onError(() => {});
     await otherSpace.waitForInitialState();
     assert.notEqual(otherSpace.roomId, main.roomId);
+    assert.equal(otherSpace.connection.isOpen, true);
 
-    await main.leave();
-    const replacement = await sdk(alternateLogin).joinOrCreate('space', options);
-    connections.push(replacement);
-    replacement.onMessage('chat', () => {}); replacement.onError(() => {});
-    await replacement.waitForInitialState();
-    assert.equal(replacement.state.players.size, 1);
+    const first = await sdk(cookie).joinOrCreate('space', options);
+    connections.push(first);
+    first.onMessage('chat', () => {}); first.onError(() => {});
+    await first.waitForInitialState();
+    const firstToken = first.reconnectionToken;
+    const firstLeft = new Promise<number>(resolve => first.onLeave.once(resolve));
+    const second = await sdk(alternateLogin).joinOrCreate('space', options);
+    connections.push(second);
+    second.onMessage('chat', () => {}); second.onError(() => {});
+    await second.waitForInitialState();
+    assert.notEqual(first.sessionId, second.sessionId);
+    assert.equal(await firstLeft, 4012);
+    await assert.rejects(sdk(cookie).reconnect(firstToken));
+    await until(() => authoritative.state.players.size === 1 && authoritative.state.players.has(second.sessionId));
+    assert.equal(otherSpace.connection.isOpen, true);
+
+    // A later leave from a superseded connection must not release the current account seat.
+    const secondLeft = new Promise<number>(resolve => second.onLeave.once(resolve));
+    const third = await sdk(cookie).joinOrCreate('space', options);
+    connections.push(third);
+    third.onMessage('chat', () => {}); third.onError(() => {});
+    await third.waitForInitialState();
+    assert.equal(await secondLeft, 4012);
+    await until(() => authoritative.state.players.size === 1 && authoritative.state.players.has(third.sessionId));
+    assert.equal(third.state.players.size, 1);
+    assert.equal(otherSpace.connection.isOpen, true);
+
   });
 
-  test('a dropped connection holds its Space slot through reconnect and releases it after leave', async () => {
+  test('a dropped same-account connection is replaced and its reconnect token is invalidated', async () => {
     const cookie = await createIdentity();
     const alternateLogin = await signIn(cookie);
     const alice = await join('Alice', 'mint', cookie);
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
-    const reconnected = new Promise<void>(resolve => alice.onReconnect.once(resolve));
+    const token = alice.reconnectionToken;
+    alice.reconnection.enabled = false;
     authoritative.clients.find(client => client.sessionId === alice.sessionId)!.leave(1001);
     await until(() => authoritative.state.players.get(alice.sessionId)?.connected === false);
-    await assert.rejects(sdk(alternateLogin).joinOrCreate('space', { name: 'Duplicate', avatar: 'mint', spaceId: 'main' }), /already connected to this Space/i);
-    await reconnected;
-    assert.equal(authoritative.state.players.get(alice.sessionId)?.connected, true);
-    await alice.leave();
     const replacement = await sdk(alternateLogin).joinOrCreate('space', { name: 'Returned', avatar: 'mint', spaceId: 'main' });
     connections.push(replacement);
     replacement.onMessage('chat', () => {}); replacement.onError(() => {});
     await replacement.waitForInitialState();
+    await assert.rejects(sdk(cookie).reconnect(token));
+    await until(() => !authoritative.state.players.has(alice.sessionId));
     assert.equal(replacement.state.players.size, 1);
   });
 
@@ -902,20 +934,32 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     } finally { world.zones.pop(); }
   });
 
-  test('a full Space rejects entry without creating a second instance', async () => {
-    const alice = await join('Alice');
+  test('a full Space lets the same account replace its seat and still rejects another account', async () => {
+    const cookie = await createIdentity();
+    const alternateLogin = await signIn(cookie);
+    const alice = await join('Alice', 'mint', cookie);
     const authoritative = harness.getRoomById<SpaceRoom>(alice.roomId);
     assert.equal(authoritative.maxClients, 32);
-    authoritative.maxClients = 2;
-    const bob = await join('Bob');
-    assert.equal(alice.roomId, bob.roomId);
-    await assert.rejects(harness.sdk.joinById(alice.roomId, { name: 'Charlie', avatar: 'mint', spaceId: 'main' }));
-    await assert.rejects(join('Charlie'), /Space is full/);
-    assert.equal((await matchMaker.query({ name: 'space' })).length, 1);
-    assert.equal(authoritative.state.players.size, 2);
-    await bob.leave();
-    const replacement = await join('Replacement');
-    assert.equal(replacement.roomId, alice.roomId);
+    authoritative.maxClients = 1;
+    await assert.rejects(harness.sdk.joinById(alice.roomId, { name: 'Other', avatar: 'mint', spaceId: 'main' }));
+    const oldClient = authoritative.clients.find(client => client.sessionId === alice.sessionId);
+    assert.ok(oldClient instanceof WebSocketClient);
+    const aliceLeft = new Promise<number>(resolve => alice.onLeave.once(resolve));
+    try {
+      // Pause incoming data so the server cannot receive the peer's close acknowledgement.
+      oldClient.ref.pause();
+      const ownerReplacement = await sdk(alternateLogin).joinOrCreate('space', { name: 'Replacement', avatar: 'mint', spaceId: 'main' });
+      connections.push(ownerReplacement);
+      ownerReplacement.onMessage('chat', () => {}); ownerReplacement.onError(() => {});
+      await ownerReplacement.waitForInitialState();
+      assert.equal(await aliceLeft, 4012);
+      await until(() => authoritative.state.players.size === 1 && authoritative.state.players.has(ownerReplacement.sessionId));
+      assert.equal(ownerReplacement.roomId, alice.roomId);
+      await assert.rejects(join('Charlie'), /Space is full/);
+      assert.equal((await matchMaker.query({ name: 'space' })).length, 1);
+    } finally {
+      oldClient.ref.terminate();
+    }
   });
   test('a reconnect timeout releases the player and rejects the expired token', async () => {
     const cookie = await createIdentity();
