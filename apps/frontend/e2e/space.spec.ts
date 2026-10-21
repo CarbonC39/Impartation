@@ -1559,9 +1559,11 @@ test('selector choices survive state patches, take priority over web areas, and 
 
 
 test('Space tiles follow the registry and selecting a Space uses its own initial map', async ({ page }) => {
+  test.setTimeout(40_000);
   const response = await page.request.get('/api/world');
   const registry = worldRegistryResponseSchema.parse(await response.json());
   await signInFresh(page, 'OtherSpace');
+  await captureRenderedScene(page);
   await expect(page.locator('#world-list [data-world]')).toHaveCount(registry.spaces.length);
   expect(await page.locator('#world-list [data-world]').evaluateAll(tiles => tiles.map(tile => tile.getAttribute('data-world'))))
     .toEqual(registry.spaces.map(space => space.id));
@@ -1577,18 +1579,42 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
   const endpoint = test.info().project.use.baseURL!;
   const cookie = (await page.context().cookies()).map(value => `${value.name}=${value.value}`).join('; ');
   const sameAccountClient = new Client(endpoint, { headers: { Cookie: cookie } });
-  await expect(sameAccountClient.joinOrCreate<SpaceProtocol>('space',
-    { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' }))
-    .rejects.toThrow(/Account already connected to this Space/);
   const observer = await observe('other');
   observer.onMessage('chat', () => {});
+  let replacement: Room<SpaceProtocol> | undefined;
   try {
     if (!observer.state?.players) await new Promise<void>(resolve => observer.onStateChange.once(() => resolve()));
     expect(observer.state.spaceId).toBe('other');
-    expect(observer.state.players.get(sessionId)?.mapId).toBe('studio');
-    expect(observer.state.players.get(sessionId)?.userId).toBe(profile.id);
-    expect(main.state.players.has(sessionId)).toBe(false);
-    await expect(page.locator('#game canvas')).toBeVisible();
-    await page.locator('#leave').click();
-  } finally { await observer.leave(); await main.leave(); }
+
+    // Going offline drops the real browser WebSocket. The SDK should reconnect the same Room.
+    await expect.poll(() => page.evaluate(() => Boolean((window as RenderingWindow).sceneUnderTest))).toBe(true);
+    await page.context().setOffline(true);
+    await expect(page.locator('#status')).toContainText('连接中断');
+    await expect.poll(() => observer.state.players.get(sessionId)?.connected, { timeout: 12_000 }).toBe(false);
+    await page.context().setOffline(false);
+    await expect(page.locator('#status')).toContainText('连接已恢复');
+    await expect.poll(() => observer.state.players.get(sessionId)?.connected).toBe(true);
+    expect(await page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.['room'].sessionId)).toBe(sessionId);
+
+    const admitted = await sameAccountClient.joinOrCreate<SpaceProtocol>('space',
+      { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' });
+    replacement = admitted;
+    replacement.onMessage('chat', () => {});
+    if (!admitted.state?.players) await new Promise<void>(resolve => admitted.onStateChange.once(() => resolve()));
+    expect(replacement.sessionId).not.toBe(sessionId);
+    const replacementSessionId = replacement.sessionId;
+    await expect.poll(() => observer.state.players.get(replacementSessionId)?.userId).toBe(profile.id);
+    await expect(page.locator('#status')).toContainText('账号已在其他设备进入此空间，当前连接已下线');
+    await expect.poll(() => [...observer.state.players.values()].filter(player => player.userId === profile.id).length).toBe(1);
+    expect(observer.state.players.has(sessionId)).toBe(false);
+    expect(observer.state.players.get(replacement.sessionId)?.mapId).toBe('studio');
+    expect(main.state.players.has(replacement.sessionId)).toBe(false);
+    await page.waitForTimeout(1000);
+    expect([...observer.state.players.values()].filter(player => player.userId === profile.id)).toHaveLength(1);
+    await expect(page.locator('#status')).toContainText('账号已在其他设备进入此空间，当前连接已下线');
+  } finally {
+    await page.context().setOffline(false);
+    await observer.leave(); await main.leave();
+    if (replacement?.connection.isOpen) await replacement.leave();
+  }
 });

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
+import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -559,9 +559,12 @@ async function enterWorld(plan: VoicePlan) {
     });
     room.onDrop(() => { if (room !== nativeRoom) return; setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
     room.onReconnect(() => { if (room !== nativeRoom) return; setConnected(true); status.textContent = '连接已恢复'; });
-    room.onLeave(() => {
+    room.onLeave(code => {
       if (room !== nativeRoom) return;
-      cleanup(); status.textContent = '已离开，可以重新进入';
+      nativeRoom.reconnection.enabled = false;
+      cleanup(); status.textContent = code === SPACE_REPLACED_CLOSE_CODE
+        ? '账号已在其他设备进入此空间，当前连接已下线'
+        : '已离开，可以重新进入';
       void accounts.refreshProfile().then(value => { if (!value) showScreen('login-screen'); })
         .catch(error => { status.textContent = `无法刷新登录状态：${error instanceof Error ? error.message : String(error)}`; });
     });
