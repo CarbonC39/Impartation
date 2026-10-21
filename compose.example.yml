@@ -1,0 +1,169 @@
+name: virtualworkspace
+
+services:
+  virtualworkspace:
+    image: ghcr.io/carbonc39/virtualworkspace:latest
+    restart: unless-stopped
+    environment:
+      PORT: "2567"
+      DATABASE_PATH: /app/data/world.sqlite
+
+      IDENTITY_BASE_URL: ${VW_ORIGIN:?Set VW_ORIGIN in compose.env}
+      IDENTITY_TRUSTED_ORIGINS: ${VW_ORIGIN:?Set VW_ORIGIN in compose.env}
+      IDENTITY_SECRET: ${IDENTITY_SECRET:?Set IDENTITY_SECRET in compose.env}
+
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-code}
+      REGISTRATION_CODE: ${REGISTRATION_CODE:-}
+
+      SPACE_MAX_CLIENTS: ${SPACE_MAX_CLIENTS:-32}
+
+      # Want TURN for voice across restricted networks? Uncomment these and coturn.
+      # VOICE_TURN_URLS: turn:${VW_HOST}:3478?transport=udp,turn:${VW_HOST}:3478?transport=tcp
+      # VOICE_TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in compose.env}
+      # VOICE_TURN_CREDENTIAL_TTL_SECONDS: ${TURN_CREDENTIAL_TTL:-3600}
+
+      # Want in-map links to Etherpad or WBO? Uncomment and keep only enabled tools.
+      # EXTERNAL_TOOLS: >-
+      #   {"shared-document":{"url":"https://${VW_HOST}/pad/p/workspace","mode":"embed","allowSameOrigin":true,"manualExternalOpen":true},"shared-canvas":{"url":"https://${VW_HOST}/board/boards/workspace","mode":"embed","allowSameOrigin":true,"manualExternalOpen":true}}
+
+      # Want custom Tiled maps? Uncomment this and the content mount below.
+      # MAP_REGISTRY_PATH: /app/content/registry.json
+
+    volumes:
+      - vw_data:/app/data
+      # Mount the directory containing your custom map registry and assets.
+      # - ./content:/app/content:ro
+
+    # Expose the app locally. Use your own HTTPS proxy or enable Caddy below.
+    ports:
+      - "127.0.0.1:2567:2567"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:2567/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Want automatic HTTPS for VirtualWorkspace? Set VW_HOST and VW_ORIGIN in
+  # compose.env, then uncomment this service and its two volumes below.
+  # caddy:
+  #   image: caddy:2
+  #   restart: unless-stopped
+  #   environment:
+  #     VW_HOST: ${VW_HOST}
+  #     # Want Neko too? Uncomment BROWSER_HOST and its Caddyfile route.
+  #     # BROWSER_HOST: ${BROWSER_HOST}
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #     - "443:443/udp"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   depends_on:
+  #     virtualworkspace:
+  #       condition: service_healthy
+
+  # Want TURN for voice across restricted networks? Uncomment this service,
+  # backend VOICE_TURN_* settings above, and TURN_* / PUBLIC_IP in compose.env.
+  # coturn:
+  #   image: coturn/coturn:4
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   command:
+  #     - --no-cli
+  #     - --no-tls
+  #     - --no-dtls
+  #     - --fingerprint
+  #     - --use-auth-secret
+  #     - --static-auth-secret=${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in compose.env}
+  #     - --realm=${VW_HOST}
+  #     - --external-ip=${PUBLIC_IP}
+  #     - --listening-port=3478
+  #     - --min-port=49160
+  #     - --max-port=49200
+  #     - --no-multicast-peers
+  #     - --log-file=stdout
+
+  # Want collaborative documents? Uncomment Etherpad, its database and volumes,
+  # the /pad Caddyfile route, Etherpad passwords and its EXTERNAL_TOOLS entry.
+  # etherpad:
+  #   image: ghcr.io/ether/etherpad:latest
+  #   restart: unless-stopped
+  #   user: "0:0"
+  #   environment:
+  #     NODE_ENV: production
+  #     DB_TYPE: postgres
+  #     DB_HOST: etherpad-db
+  #     DB_PORT: "5432"
+  #     DB_NAME: etherpad
+  #     DB_USER: etherpad
+  #     DB_PASS: ${ETHERPAD_DB_PASSWORD:?Set ETHERPAD_DB_PASSWORD in compose.env}
+  #     ADMIN_PASSWORD: ${ETHERPAD_ADMIN_PASSWORD:?Set ETHERPAD_ADMIN_PASSWORD in compose.env}
+  #     DEFAULT_PAD_TEXT: " "
+  #     DISABLE_IP_LOGGING: "true"
+  #     TRUST_PROXY: "true"
+  #   volumes:
+  #     - etherpad_var:/opt/etherpad-lite/var
+  #     - etherpad_plugins:/opt/etherpad-lite/src/plugin_packages
+  #   depends_on:
+  #     etherpad-db:
+  #       condition: service_healthy
+
+  # etherpad-db:
+  #   image: postgres:17-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: etherpad
+  #     POSTGRES_USER: etherpad
+  #     POSTGRES_PASSWORD: ${ETHERPAD_DB_PASSWORD:?Set ETHERPAD_DB_PASSWORD in compose.env}
+  #   volumes:
+  #     - etherpad_db:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U etherpad -d etherpad"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Want a whiteboard? Uncomment WBO, its volume, the /board Caddyfile route
+  # and its EXTERNAL_TOOLS entry.
+  # wbo:
+  #   image: lovasoa/wbo:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     WBO_BASE_PATH: /board
+  #     WBO_IP_SOURCE: X-Forwarded-For
+  #   volumes:
+  #     - wbo_data:/opt/app/server-data
+
+  # Want a shared browser? Uncomment Neko, the Neko Caddyfile route,
+  # BROWSER_HOST, PUBLIC_IP and both NEKO_* passwords in compose.env.
+  # neko:
+  #   image: ghcr.io/m1k1o/neko/firefox:latest
+  #   restart: unless-stopped
+  #   shm_size: 2gb
+  #   environment:
+  #     NEKO_MEMBER_MULTIUSER_USER_PASSWORD: ${NEKO_USER_PASSWORD}
+  #     NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: ${NEKO_ADMIN_PASSWORD}
+  #     NEKO_WEBRTC_EPR: 52000-52100
+  #     NEKO_WEBRTC_NAT1TO1: ${PUBLIC_IP}
+  #   ports:
+  #     - "52000-52100:52000-52100/udp"
+
+volumes:
+  vw_data:
+
+  # caddy_data:
+  # caddy_config:
+
+  # etherpad_var:
+  # etherpad_plugins:
+  # etherpad_db:
+  # wbo_data:

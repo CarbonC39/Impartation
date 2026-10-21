@@ -1,0 +1,28 @@
+{$VW_HOST} {
+	encode zstd gzip
+
+	# Want collaborative documents? Uncomment this route with Etherpad.
+	# redir /pad /pad/ 308
+	# handle_path /pad/* {
+	# 	reverse_proxy etherpad:9001 {
+	# 		header_up X-Forwarded-Prefix /pad
+	# 	}
+	# }
+
+	# Want a whiteboard? Uncomment this route with WBO.
+	# redir /board /board/ 308
+	# handle /board/* {
+	# 	reverse_proxy wbo:80
+	# }
+
+	# Everything else belongs to VirtualWorkspace.
+	handle {
+		reverse_proxy virtualworkspace:2567
+	}
+}
+
+# Want a shared browser? Uncomment this route with Neko and BROWSER_HOST.
+# {$BROWSER_HOST} {
+# 	encode zstd gzip
+# 	reverse_proxy neko:8080
+# }

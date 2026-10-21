@@ -5,6 +5,7 @@ data
 .env
 .env.*
 !.env.example
+compose.env
 .git
 .github
 test-results

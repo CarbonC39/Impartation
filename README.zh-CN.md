@@ -57,6 +57,8 @@ npm run dev
 
 根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`REGISTRATION_MODE` 默认为 `open`；`code` 模式还需设置 `REGISTRATION_CODE`，`admin` 模式关闭公开注册。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后拒绝其他账号进入，直到有空位。同一账号在同一 Space 只允许一个连接，新进入会踢掉旧连接（包括等待重连的旧连接）；普通网络断线重连恢复原 session 和席位。可以同时进入不同 Space。Tiled 支持项目 Custom Classes 默认值、typed/object-reference properties、JSON Object Templates、atlas 瓦片动画和简单多边形区域/碰撞；地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
 
+整站 Docker Compose 部署示例使用独立的 [`compose.env.example`](compose.env.example)、[`compose.example.yml`](compose.example.yml) 和 [`Caddyfile`](Caddyfile)，启动命令、网络端口及外部工具边界见[托管指南](docs/hosting.md#compose-站点示例)。本地 `npm run dev` 仍使用根目录 `.env.example`。
+
 生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。单独托管前端时，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket；下方 Docker 镜像则在同一端口提供前后端。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
 
 [GitHub Actions 工作流](.github/workflows/build-release.yml)在每次 push 后执行 `npm run check`。`main` 分支检查通过后，以该提交创建并标记为 **Latest** 的 Release，附带 `virtual-workspace.tar.gz`；同时发布 `ghcr.io/carbonc39/virtualworkspace:latest` 和 `sha-<提交哈希>` 镜像，支持 `linux/amd64` 与 `linux/arm64`。压缩包包含编译后的代码与资源；解压后执行 `npm ci --omit=dev`，配置生产环境变量，将 `FRONTEND_DIST_PATH` 指向解压目录下的 `apps/frontend/dist`，再执行 `npm start`。仓库 Actions 需要 Release 和 GHCR 的写入权限；若镜像包为私有，部署主机还需拉取权限。

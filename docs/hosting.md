@@ -54,6 +54,34 @@ Space 隔离不会自动创建第三方白板、文档或观看房间。`EXTERNA
 
 封面不会通过地图 API 自动发布。开发时 `assets/covers/main.png` 对应 `/covers/main.png`；前端构建会把它复制到 `apps/frontend/dist/covers/main.png`。运行时替换后端地图目录不会更新这份构建副本。使用现有镜像时，可像下面这样挂载一个专用封面目录；独立托管前端时，要把封面部署到该前端站点。
 
+## Compose 站点示例
+
+仓库根目录的 `compose.example.yml` 默认只启动单实例 VirtualWorkspace，绑定宿主机 `127.0.0.1:2567`。Caddy、coturn、Etherpad/PostgreSQL、WBO 和 Neko 都以注释形式提供。Compose 使用自己的 `compose.env.example`；根目录 `.env.example` 用于本地 Node/Vite 开发。先复制并修改部署变量，再校验配置和启动：
+
+```sh
+cp compose.env.example compose.env
+# 修改 compose.env 中的访问来源、身份密钥和注册策略
+docker compose --env-file compose.env -f compose.example.yml config --quiet
+docker compose --env-file compose.env -f compose.example.yml up -d
+```
+
+默认示例的 `VW_ORIGIN=http://localhost:2567` 适用于 Docker 宿主机本地浏览器。供其他设备访问时，使用自己的 HTTPS 反向代理连接宿主机 `127.0.0.1:2567`，并把 `VW_ORIGIN` 改为实际公开的 HTTPS origin。若想用示例 Caddy 提供 HTTPS，取消注释 Compose 的 `caddy` 服务及 `caddy_data`、`caddy_config` 卷，在 `compose.env` 设置 `VW_HOST` 并把 `VW_ORIGIN` 改为 `https://<VW_HOST>`；让 DNS 指向宿主机并开放 TCP 80/443。配置更新后使用 `up -d` 重新创建受影响的容器，仅 `restart` 不会重新注入环境变量。
+
+需要其他功能时，按示例中对应的注释一起取消：
+
+| 想要的功能 | 需要启用的内容 |
+| --- | --- |
+| TURN 语音中继 | `coturn`、VirtualWorkspace 的三项 `VOICE_TURN_*`、`compose.env` 中的 `PUBLIC_IP` 和 `TURN_SHARED_SECRET`。需开放 TCP/UDP 3478 和 UDP 49160–49200；NAT 部署需转发这些端口。共享密钥只供后端和 coturn 使用。 |
+| 协作文档 | `etherpad`、`etherpad-db`、三个数据卷、Caddyfile 的 `/pad` 路由、两个 Etherpad 密码，以及 `EXTERNAL_TOOLS` 的 `shared-document`。如未用示例 Caddy，自行提供相应代理路由。 |
+| 白板 | `wbo`、`wbo_data` 卷、Caddyfile 的 `/board` 路由，以及 `EXTERNAL_TOOLS` 的 `shared-canvas`。如未用示例 Caddy，自行提供相应代理路由。 |
+| 共享浏览器 | `neko`、Caddyfile 的 Neko 路由、Compose 中 Caddy 的 `BROWSER_HOST`、`compose.env` 中的 `BROWSER_HOST`、`PUBLIC_IP` 和两个 Neko 密码。需开放 UDP 52000–52100；NAT 部署需转发。 |
+
+默认没有配置外置入口。示例 `EXTERNAL_TOOLS` JSON 同时包含 Etherpad 和 WBO；只启用一个时删去另一项。工具 URL 对浏览器公开，入口不授予工具权限。工具访问控制需由工具或代理提供；`embed`、`allowSameOrigin` 的效果须在目标浏览器核对。共同作画的 `shared-drawing` 与同步观看的 `lounge-screen` 需另行部署相应服务并配置浏览器可达 URL，见[入口契约](integration-plan.md)。
+
+Neko 使用独立的 `BROWSER_HOST` 域名；启用后可按用途在 `EXTERNAL_TOOLS` 中配置其 URL。共享浏览器不自动提供 SyncTV 的 YouTube/Bilibili 房间与播放同步语义。Compose 示例使用浮动镜像标签，升级前应记录实际镜像版本并备份数据库与工具数据卷；发布环境可按自己的更新策略固定镜像摘要。
+
+启动后用 `docker compose --env-file compose.env -f compose.example.yml ps` 和 `logs` 查看容器状态；默认配置检查 `http://127.0.0.1:2567/health` 和 `/api/world`。启用 HTTPS 和外置服务后，再从公开地址检查这些接口和服务页面。此处是部署步骤，仓库配置校验不等于已在目标主机完成端到端验收。
+
 ## Docker：挂载自己的地图与封面
 
 下面复用仓库的大厅和交互试验场作为起点。从仓库根目录准备文件；`tiles.png` 暂作封面占位，可替换成自己的普通图片：
