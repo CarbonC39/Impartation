@@ -20,7 +20,7 @@ Better Auth 负责用户名/密码凭据、cookie session、密码校验和重�
 
 ## Session 与资料
 
-`GET /api/me` 返回已验证 session 对应的资料；`PATCH /api/me` 更新显示名称、地图角色形象和当前换装外观。`avatar` 是预设地图角色形象 ID，不是个人头像；权限角色 `member`/`admin` 独立保存，资料更新不能修改权限。进入 Colyseus 房间及每次受保护的消息处理时，服务端验证 session 仍有效、账号未冻结，并读取服务端 profile；客户端提交的 user ID、session ID 或 role 不作为授权依据。同一账号在同一 Space 只能保持一个连接，重复加入会被服务端拒绝，即使使用另一登录 session 也一样；连接掉线等待重连期间仍保留席位，明确离开或重连超时后释放。账号在不同 Space 可以各有一个连接。
+`GET /api/me` 返回已验证 session 对应的资料；`PATCH /api/me` 更新显示名称、地图角色形象和当前换装外观。`avatar` 是预设地图角色形象 ID，不是个人头像；权限角色 `member`/`admin` 独立保存，资料更新不能修改权限。进入 Colyseus 房间及每次受保护的消息处理时，服务端验证 session 仍有效、账号未冻结，并读取服务端 profile；客户端提交的 user ID、session ID 或 role 不作为授权依据。同一账号在同一 Space 只能保持一个连接，重复加入会被服务端拒绝，即使使用另一登录 session 也一样；连接掉线等待重连期间仍保留席位，明确离开或重连超时后释放。正常刷新或导航离页会主动离开，允许立即重新进入；缓存页面恢复时会回到进入界面，迟到的加入结果会被释放。账号在不同 Space 可以各有一个连接。
 
 修改密码使用 `POST /api/me/password`，需要当前密码。成功后撤销该账号的所有 session，并清除当前浏览器 cookie。重置密码由管理员生成一次性 URL；生成链接本身不撤销 session，用户成功设置新密码时 Better Auth 会撤销该账号的所有 session。重置链接带有短期 token，应私下交给目标用户，不要写入公开日志或聊天。
 

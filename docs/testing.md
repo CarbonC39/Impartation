@@ -51,7 +51,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 显式交互浏览器用例检查选择器按钮和目标 GID 画面、私密区域锁定按钮，以及镜子打开原有衣橱、保存/返回后保留房间和 session。自动化用例使用临时测试地图和独立 Space fixtures；仓库另提供可从大厅进入的交互试验场，手动体验路径见 [地图说明](tiled.md#交互试验场)。
 
-账号浏览器用例检查注册、登录、退出、修改密码、跨设备资料与造型槽，以及同源标签页切换账号后的草稿隔离。[accounts.spec.ts](../apps/frontend/e2e/accounts.spec.ts) 的管理员面板与重置表单用 HTTP 响应替身检查二次确认、自我管理限制、链接展示和重置 token 的地址清理；真实管理员授权、重置令牌生命周期及 session 撤销由 Node HTTP/WebSocket 测试验证。
+账号浏览器用例检查注册、登录、退出、修改密码、跨设备资料与造型槽，以及同源标签页切换账号后的草稿隔离。空间用例验证重复账号连接被拒绝、刷新后立即重进、合成 pagehide/pageshow 缓存恢复，以及延迟 matchmaking 响应完成后的连接释放；合成事件不代表验证了各浏览器的真实缓存命中策略。[accounts.spec.ts](../apps/frontend/e2e/accounts.spec.ts) 的管理员面板与重置表单用 HTTP 响应替身检查二次确认、自我管理限制、链接展示和重置 token 的地址清理；真实管理员授权、重置令牌生命周期及 session 撤销由 Node HTTP/WebSocket 测试验证。
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 

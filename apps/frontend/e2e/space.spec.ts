@@ -458,11 +458,64 @@ test('map zoom choice persists across visits', async ({ page }) => {
   await expect(page.locator('#camera-zoom')).toHaveValue('6');
   await expect(page.locator('#account-status')).toContainText('@');
   await captureRenderedScene(page);
-  await openAvatarScreen(page);
-  await page.locator('#join').click();
-  await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await joinSavedProfile(page);
+  await expect(page.locator('#status')).toContainText('已进入空间', { timeout: 7_000 });
   await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.cameras.main.zoom)).toBe(6);
+});
+
+test('pagehide releases the current room and bfcache restore allows rejoining', async ({ page }) => {
+  await enter(page, 'PagehideRejoin');
+  const sessionId = await sessionOf(page);
+  const observer = await observe();
+  try {
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+    await expect(page.locator('#game canvas')).toHaveCount(0);
+    await expect.poll(() => observer.state.players.has(sessionId)).toBe(false);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await joinSavedProfile(page);
+    const rejoinedSessionId = await sessionOf(page);
+    expect(rejoinedSessionId).not.toBe(sessionId);
+    await expect.poll(() => observer.state.players.has(rejoinedSessionId)).toBe(true);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+test('a room that resolves after pagehide is released instead of replacing the restored page', async ({ page }) => {
+  await signInFresh(page, 'PendingJoinPagehide');
+  await openAvatarScreen(page);
+  let releaseMatchmake!: () => void;
+  let signalMatchmake!: () => void;
+  let signalSocketClose!: () => void;
+  const held = new Promise<void>(resolve => { releaseMatchmake = resolve; });
+  const requested = new Promise<void>(resolve => { signalMatchmake = resolve; });
+  const socketClosed = new Promise<void>(resolve => { signalSocketClose = resolve; });
+  const matchmakeRoute = '**/matchmake/joinOrCreate/space';
+  page.on('websocket', socket => { socket.on('close', signalSocketClose); });
+  await page.route(matchmakeRoute, async route => {
+    signalMatchmake();
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.locator('#join').click();
+    await page.locator('#prejoin-enter').click();
+    await requested;
+    await page.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    releaseMatchmake();
+    await socketClosed;
+    await expect(page.locator('#game canvas')).toHaveCount(0);
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await joinSavedProfile(page);
+    await page.unroute(matchmakeRoute);
+  } finally {
+    releaseMatchmake();
+    if (!page.isClosed()) await page.unroute(matchmakeRoute);
+  }
 });
 
 test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
@@ -542,7 +595,7 @@ async function joinSavedProfile(page: Page) {
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
-async function observe(): Promise<Room<SpaceProtocol>> {
+async function observe(spaceId = 'main'): Promise<Room<SpaceProtocol>> {
   const endpoint = test.info().project.use.baseURL!;
   const username = nextUsername();
   const response = await fetch(endpoint + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: endpoint },
@@ -550,7 +603,7 @@ async function observe(): Promise<Room<SpaceProtocol>> {
   expect(response.status).toBe(200);
   const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const room = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
-    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'main' });
+    { name: 'E2EObserver', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId });
   room.onMessage('chat', () => {});
   if (!room.state?.players) await new Promise<void>(resolve => room.onStateChange.once(() => resolve()));
   return room;
@@ -1515,14 +1568,17 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
   await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#map-world-name')).toHaveText('Other');
-  const main = await observe();
+  const main = await observe('main');
   const identity = await page.request.get('/api/me');
   const profile = await identity.json() as { id: string };
   const sessionId = await sessionOf(page);
   const endpoint = test.info().project.use.baseURL!;
   const cookie = (await page.context().cookies()).map(value => `${value.name}=${value.value}`).join('; ');
-  const observer = await new Client(endpoint, { headers: { Cookie: cookie } }).joinOrCreate<SpaceProtocol>('space',
-    { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' });
+  const sameAccountClient = new Client(endpoint, { headers: { Cookie: cookie } });
+  await expect(sameAccountClient.joinOrCreate<SpaceProtocol>('space',
+    { name: 'OtherSpace', avatar: 'mint', appearance: DEFAULT_APPEARANCE, spaceId: 'other' }))
+    .rejects.toThrow(/Account already connected to this Space/);
+  const observer = await observe('other');
   observer.onMessage('chat', () => {});
   try {
     if (!observer.state?.players) await new Promise<void>(resolve => observer.onStateChange.once(() => resolve()));
