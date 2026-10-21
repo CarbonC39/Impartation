@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
 import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type WebTool, type SpaceProtocol } from '@virtual-workspace/shared';
 import type Phaser from 'phaser';
@@ -208,6 +208,16 @@ test('voice reports missing WebRTC separately from microphone support', async ({
 test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave', async ({ page, browser }) => {
   test.setTimeout(90000);
   const bob = await browser.newPage();
+  let aliceCredentialRequests = 0;
+  let bobCredentialRequests = 0;
+  const mockCredentials = (count: () => number) => async (route: Route) => {
+    const requestCount = count();
+    await route.fulfill({ json: { iceServers: [], expiresAt: Date.now() + (requestCount === 1 ? 250 : 60_000) } });
+  };
+  const countAlice = () => ++aliceCredentialRequests;
+  const countBob = () => ++bobCredentialRequests;
+  await page.route('**/api/voice-credentials', mockCredentials(countAlice));
+  await bob.route('**/api/voice-credentials', mockCredentials(countBob));
   const microphone = () => {
     const typedWindow = window as Window & { voiceAudioContexts?: AudioContext[] };
     typedWindow.voiceAudioContexts = [];
@@ -237,6 +247,19 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
     // Both test tones count as speech: this browser shows a mic over itself and over the remote peer.
     const visibleMics = () => visibleMicCount(page);
     await expect.poll(visibleMics, { timeout: 10000 }).toBe(2);
+    await expect.poll(() => aliceCredentialRequests).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => bobCredentialRequests).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(300);
+    await page.locator('#settings-toggle').click();
+    await page.locator('#voice-disconnect').click();
+    await bob.locator('#settings-toggle').click();
+    await bob.locator('#voice-disconnect').click();
+    await page.locator('#voice-mic').click();
+    await bob.locator('#voice-mic').click();
+    await expect(page.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
+    await expect(bob.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10000 });
+    expect(aliceCredentialRequests).toBeGreaterThanOrEqual(2);
+    expect(bobCredentialRequests).toBeGreaterThanOrEqual(2);
     // The speaker button silences incoming voices without closing the connection.
     const peerAudioMuted = () => page.locator('audio[data-voice-peer]').evaluateAll(elements =>
       elements.every(element => (element as HTMLAudioElement).muted));

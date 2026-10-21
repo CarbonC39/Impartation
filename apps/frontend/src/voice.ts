@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { canHear, voiceConfigSchema, type SpaceProtocol, type VoiceConfig, type VoiceIceCandidate,
+import { canHear, voiceConfigSchema, voiceCredentialsSchema, type SpaceProtocol, type VoiceConfig, type VoiceCredentials, type VoiceIceCandidate,
   type VoiceSignal, type VoiceOffer, type VoiceAnswer, type VoiceEnd } from '@virtual-workspace/shared';
 import { audioContext, captureErrorMessage, LevelMeter, microphoneUnavailableReason, openMicrophone,
   setPreferredMicrophone, SPEAKING_HOLD_MS, SPEAKING_LEVEL, streamDevice } from './microphone';
@@ -18,8 +18,11 @@ function voiceCapabilityError(): string | undefined {
 export class ProximityVoice {
   private configPromise?: Promise<VoiceConfig>;
   private config?: VoiceConfig;
+  private turnCredentials?: VoiceCredentials;
+  private turnCredentialsPromise?: Promise<VoiceCredentials>;
   private stream?: MediaStream;
   private peers = new Map<string, Peer>();
+  private pendingPeers = new Map<string, number>();
   private cooldown = new Map<string, number>();
   private timer?: number;
   private generation = 0;
@@ -195,6 +198,7 @@ export class ProximityVoice {
     if (this.levelTimer !== undefined) window.clearInterval(this.levelTimer);
     this.timer = undefined;
     this.levelTimer = undefined;
+    this.pendingPeers.clear();
     for (const id of [...this.peers.keys()]) this.closePeer(id, true);
     this.stream?.getTracks().forEach(track => track.stop());
     this.stream = undefined;
@@ -221,18 +225,19 @@ export class ProximityVoice {
       if (!canHear(own, other, this.config.disconnectRadius)) { this.closePeer(id, true); continue; }
       this.updateVolume(peer);
     }
-    if (this.peers.size >= this.config.maxPeers) { this.render(); return; }
+    const available = this.config.maxPeers - this.peers.size - this.pendingPeers.size;
+    if (available <= 0) { this.render(); return; }
     const nearby = [...this.room.state.players]
       .filter(([id, other]) => id !== this.room.sessionId && id > this.room.sessionId &&
-        !this.peers.has(id) && canHear(own, other, this.config!.connectRadius) &&
+        !this.peers.has(id) && !this.pendingPeers.has(id) && canHear(own, other, this.config!.connectRadius) &&
         Date.now() > (this.cooldown.get(id) ?? 0))
       .sort((a, b) => Math.hypot(own.x - a[1].x, own.y - a[1].y) - Math.hypot(own.x - b[1].x, own.y - b[1].y));
-    for (const [id] of nearby.slice(0, this.config.maxPeers - this.peers.size)) void this.startOffer(id);
+    for (const [id] of nearby.slice(0, available)) void this.startOffer(id);
     this.render();
   }
 
-  private createPeer(id: string, connectionId: string): Peer {
-    const connection = new RTCPeerConnection({ iceServers: this.config!.iceServers });
+  private createPeerWithIce(id: string, connectionId: string, iceServers: RTCIceServer[]): Peer {
+    const connection = new RTCPeerConnection({ iceServers });
     const audio = document.createElement('audio');
     audio.autoplay = true;
     audio.muted = this.deafened;
@@ -271,6 +276,25 @@ export class ProximityVoice {
     return peer;
   }
 
+  private async currentIceServers(): Promise<RTCIceServer[]> {
+    if (!this.config) throw new Error('语音配置尚未加载');
+    const cached = this.turnCredentials;
+    if (!cached || (cached.expiresAt > 0 && cached.expiresAt - Date.now() <= 60_000)) {
+      if (!this.turnCredentialsPromise) {
+        const request = fetch('/api/voice-credentials', { credentials: 'same-origin', signal: AbortSignal.timeout(12_000) })
+          .then(async response => {
+            if (!response.ok) throw new Error(response.status === 401 ? '登录状态已失效，无法获取 TURN 凭据' : 'TURN 凭据加载失败');
+            return voiceCredentialsSchema.parse(await response.json());
+          });
+        this.turnCredentialsPromise = request;
+      }
+      const request = this.turnCredentialsPromise;
+      try { this.turnCredentials = await request; }
+      finally { if (this.turnCredentialsPromise === request) this.turnCredentialsPromise = undefined; }
+    }
+    return [...this.config.iceServers, ...(this.turnCredentials?.iceServers ?? [])];
+  }
+
   private updateVolume(peer: Peer) {
     const own = this.room.state.players.get(this.room.sessionId);
     const other = this.room.state.players.get(peer.id);
@@ -290,10 +314,17 @@ export class ProximityVoice {
   }
 
   private async startOffer(id: string) {
-    if (!this.stream || !this.config || this.peers.has(id)) return;
+    if (!this.stream || !this.config || this.peers.has(id) || this.pendingPeers.has(id) ||
+      this.peers.size + this.pendingPeers.size >= this.config.maxPeers) return;
+    const generation = this.generation;
+    this.pendingPeers.set(id, generation);
     let peer: Peer | undefined;
     try {
-      peer = this.createPeer(id, crypto.randomUUID());
+      const iceServers = await this.currentIceServers();
+      if (generation !== this.generation || this.pendingPeers.get(id) !== generation || !this.stream ||
+        !this.room.connection.isOpen || this.peers.has(id)) return;
+      peer = this.createPeerWithIce(id, crypto.randomUUID(), iceServers);
+      if (this.pendingPeers.get(id) === generation) this.pendingPeers.delete(id);
       const offer = await peer.connection.createOffer();
       await peer.connection.setLocalDescription(offer);
       if (this.peers.get(id) !== peer || !offer.sdp) return;
@@ -301,17 +332,31 @@ export class ProximityVoice {
       if (!accepted) throw new Error('Peer unavailable');
       peer.ready = true;
       this.flushLocalCandidates(peer);
-    } catch { if (peer && this.peers.get(id) === peer) this.closePeer(id, true); }
+    } catch (error) {
+      if (peer && this.peers.get(id) === peer) this.closePeer(id, true);
+      if (!peer && generation === this.generation && !this.disposed) { this.error = captureErrorMessage(error); this.render(); }
+    }
+    finally { if (this.pendingPeers.get(id) === generation) this.pendingPeers.delete(id); }
   }
 
   private async onOffer(signal: VoiceSignal<VoiceOffer>) {
-    if (!this.stream || !this.config || this.peers.size >= this.config.maxPeers || this.peers.has(signal.sessionId)) {
+    if (!this.stream || !this.config || this.peers.size + this.pendingPeers.size >= this.config.maxPeers ||
+      this.peers.has(signal.sessionId) || this.pendingPeers.has(signal.sessionId)) {
       if (this.room.connection.isOpen) this.room.send('voiceEnd', { peerId: signal.sessionId, connectionId: signal.connectionId });
       return;
     }
+    const generation = this.generation;
+    this.pendingPeers.set(signal.sessionId, generation);
     let peer: Peer | undefined;
     try {
-      peer = this.createPeer(signal.sessionId, signal.connectionId);
+      const iceServers = await this.currentIceServers();
+      if (generation !== this.generation || this.pendingPeers.get(signal.sessionId) !== generation || !this.stream ||
+        !this.room.connection.isOpen || this.peers.has(signal.sessionId)) {
+        if (this.room.connection.isOpen) this.room.send('voiceEnd', { peerId: signal.sessionId, connectionId: signal.connectionId });
+        return;
+      }
+      peer = this.createPeerWithIce(signal.sessionId, signal.connectionId, iceServers);
+      if (this.pendingPeers.get(signal.sessionId) === generation) this.pendingPeers.delete(signal.sessionId);
       await peer.connection.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
       const answer = await peer.connection.createAnswer();
       await peer.connection.setLocalDescription(answer);
@@ -321,10 +366,11 @@ export class ProximityVoice {
       peer.ready = true;
       this.flushLocalCandidates(peer);
       await this.flushCandidates(peer);
-    } catch {
+    } catch (error) {
       if (peer && this.peers.get(peer.id) === peer) this.closePeer(peer.id, true);
       else if (this.room.connection.isOpen) this.room.send('voiceEnd', { peerId: signal.sessionId, connectionId: signal.connectionId });
-    }
+      if (!peer && generation === this.generation && !this.disposed) { this.error = captureErrorMessage(error); this.render(); }
+    } finally { if (this.pendingPeers.get(signal.sessionId) === generation) this.pendingPeers.delete(signal.sessionId); }
   }
 
   private async onAnswer(signal: VoiceSignal<VoiceAnswer>) {

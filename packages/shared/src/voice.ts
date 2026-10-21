@@ -37,6 +37,14 @@ export const voiceConfigSchema = z.object({
   'disconnectRadius must be greater than connectRadius');
 export type VoiceConfig = z.infer<typeof voiceConfigSchema>;
 
+/** Short-lived TURN credentials are returned only to a verified signed-in session. */
+export const voiceCredentialsSchema = z.object({
+  iceServers: z.array(iceServerSchema).max(16),
+  /** Unix timestamp in milliseconds; zero means no dynamic TURN server is configured. */
+  expiresAt: z.number().int().nonnegative(),
+}).strict();
+export type VoiceCredentials = z.infer<typeof voiceCredentialsSchema>;
+
 export type AudienceContext = { mapId: string; privateAreaId: string };
 /**
  * Private areas are closed rooms: chat and voice pass only between players inside the same area,

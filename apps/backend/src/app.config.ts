@@ -7,6 +7,8 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './identity.js';
 import { accountRoutes } from './account-routes.js';
 import { config, voiceConfig } from './config.js';
+import { activeProfile, identityFromHeaders } from './identity.js';
+import { issueVoiceCredentials } from './voice-credentials.js';
 import { worldRegistry, renderMaps, worldAssets } from './world.js';
 import { loadWebTools } from './interactions/web/config.js';
 
@@ -32,6 +34,13 @@ export const server = defineServer({
     app.use('/api', express.json({ limit: '16kb', strict: false }));
     app.get('/api/world', (_req, res) => { res.json(worldRegistry); });
     app.get('/api/voice-config', (_req, res) => { res.json(voiceConfig); });
+    app.get('/api/voice-credentials', async (req, res) => {
+      const headers = new Headers();
+      if (req.headers.cookie) headers.set('cookie', req.headers.cookie);
+      const identity = await identityFromHeaders(headers);
+      if (!identity || !await activeProfile(identity)) { res.sendStatus(401); return; }
+      res.json(issueVoiceCredentials(identity.userId));
+    });
     app.get('/api/maps/:id/map.json', (req, res) => {
       const map = renderMaps.get(req.params.id);
       if (!map) { res.sendStatus(404); return; }
