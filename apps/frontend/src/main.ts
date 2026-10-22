@@ -98,16 +98,17 @@ let renderingMap = '';
 let renderGeneration = 0;
 let joinGeneration = 0;
 let queueAttempt: SpaceQueueClient | undefined;
-const queuePanel = element('space-queue-panel');
+let pendingJoinStream: MediaStream | undefined;
+const queuePanel = element<HTMLDialogElement>('space-queue-panel');
 const queueStatus = element('space-queue-status');
-element<HTMLButtonElement>('space-queue-cancel').addEventListener('click', () => {
+function closeQueueAndReturn() {
   joinGeneration++;
   queueAttempt?.cancel();
-  queueAttempt = undefined;
-  queuePanel.hidden = true;
   cleanup();
-  showScreen('avatar-screen');
-});
+  showScreen('login-screen');
+}
+element<HTMLButtonElement>('space-queue-cancel').addEventListener('click', closeQueueAndReturn);
+queuePanel.addEventListener('cancel', event => { event.preventDefault(); closeQueueAndReturn(); });
 let pageLeaving = false;
 let selectedWorld = '阳光大厅';
 let leavingIntentionally = false;
@@ -461,7 +462,9 @@ function setConnected(value: boolean) {
 function cleanup() {
   queueAttempt?.cancel();
   queueAttempt = undefined;
-  queuePanel.hidden = true;
+  if (queuePanel.open) queuePanel.close();
+  pendingJoinStream?.getTracks().forEach(track => track.stop());
+  pendingJoinStream = undefined;
   if (worldWardrobe) { restoreWardrobeNavigation(); showScreen('login-screen'); }
   touchPad.clear();
   layoutEditor.close();
@@ -513,13 +516,16 @@ async function enterWorld(plan: VoicePlan) {
     plan.stream?.getTracks().forEach(track => track.stop());
     return;
   }
-  showScreen('map-screen');
+  pendingJoinStream = plan.stream;
   join.disabled = true;
   joinFeedback.textContent = '';
   status.textContent = '连接中…';
   const generation = ++joinGeneration;
   const isCurrentJoin = () => generation === joinGeneration && !pageLeaving;
-  const stopPlannedStream = () => { plan.stream?.getTracks().forEach(track => track.stop()); plan.stream = undefined; };
+  const stopPlannedStream = () => {
+    plan.stream?.getTracks().forEach(track => track.stop());
+    plan.stream = undefined; pendingJoinStream = undefined;
+  };
   try {
     await identityReady;
     if (!isCurrentJoin()) { stopPlannedStream(); return; }
@@ -531,14 +537,17 @@ async function enterWorld(plan: VoicePlan) {
     if (!space || !spaceDirectory) throw new Error('请先选择空间');
     worldRegistry = { initialMap: space.initialMap, maps: spaceDirectory.maps.filter(map => space.maps.includes(map.id)) };
     const roomOptions = spaceJoinSchema.parse({ ...options, spaceId: space.id });
-    queuePanel.hidden = false;
-    queueStatus.textContent = '正在读取排队状态…';
+    joinFeedback.textContent = '正在检查空间人数…';
     queueAttempt = new SpaceQueueClient(space.id, ahead => {
+      if (!queuePanel.open) queuePanel.showModal();
+      joinFeedback.textContent = '';
       queueStatus.textContent = ahead === 0 ? '前面没有其他人，等待空位…' : `前面还有 ${ahead} 人`;
     });
     const queueTicket = await queueAttempt.wait();
     if (!isCurrentJoin()) { stopPlannedStream(); queueAttempt.cancel(); return; }
-    queuePanel.hidden = true;
+    if (queuePanel.open) queuePanel.close();
+    joinFeedback.textContent = '';
+    showScreen('map-screen');
     status.textContent = '轮到你了，正在连接…';
     const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, { ...roomOptions, ...(queueTicket ? { queueTicket } : {}) });
     let joinedRoom: Room<SpaceProtocol>;
@@ -633,6 +642,7 @@ async function enterWorld(plan: VoicePlan) {
     if (plan.enabled) {
       const stream = plan.stream;
       plan.stream = undefined;
+      pendingJoinStream = undefined;
       void voice.enable({ ...(stream ? { stream } : {}), muted: plan.muted });
     }
   } catch (error) {

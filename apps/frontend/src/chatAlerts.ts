@@ -5,7 +5,7 @@ const NOTIFICATION_KEY = 'virtual-workspace-chat-alert-notification';
 
 function saved(key: string) { return readPreference(key) === 'true'; }
 
-/** Owns per-browser alerts for incoming chat while the page is in the background. */
+/** Owns per-browser alerts for incoming chat while the tab or window is inactive. */
 export class ChatAlerts {
   private soundEnabled = saved(SOUND_KEY);
   private notificationEnabled = saved(NOTIFICATION_KEY);
@@ -31,7 +31,7 @@ export class ChatAlerts {
   }
 
   notify(senderId: string, ownSessionId: string, name: string, text: string) {
-    if (document.hidden !== true || senderId === ownSessionId) return;
+    if ((!document.hidden && document.hasFocus()) || senderId === ownSessionId) return;
     if (this.soundEnabled) this.playSound();
     if (this.notificationEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
@@ -101,6 +101,6 @@ export class ChatAlerts {
     const supported = typeof Notification !== 'undefined';
     this.notificationSwitch.disabled = !supported;
     if (!supported) this.status.textContent = '此浏览器不支持通知；消息音效仍可单独使用。';
-    else if (showDefaultStatus) this.status.textContent = '仅在页面隐藏时提醒其他人的新消息。';
+    else if (showDefaultStatus) this.status.textContent = '仅在标签页隐藏或浏览器窗口失焦时提醒其他人的新消息。';
   }
 }

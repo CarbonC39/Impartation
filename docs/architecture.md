@@ -88,7 +88,7 @@ sequenceDiagram
 
 Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时其他账号按服务端顺序排队，不创建额外实例；同账号可替换自己的席位。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 将席位转移给新连接，关闭旧连接并取消旧重连资格。普通断线重连保留原 session ID 和玩家状态，不重复占用席位；重连期间仍占用的席位可被新连接替换。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
 
-排队接口为 `POST /api/space-queue`（JSON `{spaceId}`）、`GET /api/space-queue/:spaceId/:ticket` 和 `DELETE /api/space-queue/:spaceId/:ticket`。POST/DELETE 校验来源，全部接口验证 Better Auth session；返回的 `ahead` 是当前队列中排在前面的账号数。轮到用户时 `ready=true`，客户端把 `ticket` 作为 `spaceJoinSchema.queueTicket` 提交。服务端按账号与登录 session 验证凭证；一个 Space 同时只发放一个待入场凭证，20 秒未入场则轮到下一人。等待中的资格需要轮询续期，30 秒未轮询会过期；关闭排队界面主动 DELETE。排队状态保存在单进程内，重启后需重新排队。
+排队接口为 `POST /api/space-queue`（JSON `{spaceId}`）、`GET /api/space-queue/:spaceId/:ticket` 和 `DELETE /api/space-queue/:spaceId/:ticket`。POST/DELETE 校验来源，全部接口验证 Better Auth session；返回的 `ahead` 是当前队列中排在前面的账号数。轮到用户时 `ready=true`，客户端把 `ticket` 作为 `spaceJoinSchema.queueTicket` 提交。服务端按账号与登录 session 验证凭证；一个 Space 同时只发放一个待入场凭证，20 秒未入场则轮到下一人。等待中的资格需要轮询续期，30 秒未轮询会过期；关闭排队弹窗（含 Esc）主动 DELETE 并返回 Space 选择页。排队状态保存在单进程内，重启后需重新排队。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 

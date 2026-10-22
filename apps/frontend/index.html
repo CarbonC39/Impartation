@@ -126,14 +126,14 @@
             <p id="prejoin-status" class="hint" role="status" aria-live="polite"></p>
             <div class="prejoin-actions"><button id="prejoin-cancel" class="secondary" type="button">返回换装</button><button id="prejoin-enter" class="primary big" type="button">进入<span id="prejoin-enter-world">阳光大厅</span></button></div>
           </dialog>
+          <dialog id="space-queue-panel" class="panel space-queue-panel" aria-labelledby="space-queue-title">
+            <h2 id="space-queue-title">正在排队进入空间</h2>
+            <p id="space-queue-status" role="status" aria-live="polite">正在读取排队状态…</p>
+            <button id="space-queue-cancel" class="secondary" type="button">关闭排队，返回 Space 选择</button>
+          </dialog>
         </section>
 
         <section class="flow-screen map-screen" id="map-screen" aria-label="全屏世界地图" hidden>
-          <section id="space-queue-panel" class="panel space-queue-panel" aria-labelledby="space-queue-title" hidden>
-            <h2 id="space-queue-title">正在排队进入空间</h2>
-            <p id="space-queue-status" role="status" aria-live="polite">正在读取排队状态…</p>
-            <button id="space-queue-cancel" class="secondary" type="button">关闭排队并返回</button>
-          </section>
           <div class="map-topbar">
             <div class="hud-chip"><strong id="map-world-name">阳光大厅</strong><span id="status" role="status" aria-live="polite">连接中…</span><span id="voice-status" role="status" aria-live="polite">语音已关闭</span></div>
             <div class="hud-buttons">

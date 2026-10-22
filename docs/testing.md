@@ -26,7 +26,7 @@ Playwright 自动启动独立开发服务和临时地图 registry；测试使用
 nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromium)" npm run check:all'
 ```
 
-排队顺序、账号和登录 session 绑定由 Node HTTP/WebSocket 测试验证；浏览器测试用 HTTP 响应替身检查关闭排队界面会取消资格。消息提醒浏览器用例模拟通知权限和 Web Audio，并发送真实聊天，检查授权时机、隐藏标签页和发送者过滤；真实音效输出及系统通知展示需在目标浏览器验收。
+排队顺序、账号和登录 session 绑定由 Node HTTP/WebSocket 测试验证；浏览器测试用 HTTP 响应替身检查关闭排队弹窗会取消资格并返回 Space 选择页。消息提醒浏览器用例模拟通知权限和 Web Audio，并发送真实聊天，检查授权时机、隐藏标签页、窗口失焦和发送者过滤；真实音效输出及系统通知展示需在目标浏览器验收。
 
 ## 覆盖范围
 

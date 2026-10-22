@@ -244,8 +244,9 @@ body.avatar-open #theme-toggle { justify-self: end; }
 body.map-open .masthead, body.map-open #theme-panel { display: none !important; }
 body.map-open #app-shell { max-width: none; padding: 0; }
 .map-screen { position: fixed; inset: 0; overflow: hidden; background: #2b423e; }
-.space-queue-panel { position: absolute; z-index: 30; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 32px)); padding: 24px; display: flex; flex-direction: column; gap: 16px; text-align: center; }
-.space-queue-panel[hidden] { display: none; }
+.space-queue-panel { width: min(420px, calc(100vw - 32px)); border: 0; padding: 24px; color: var(--ink); text-align: center; }
+.space-queue-panel::backdrop { background: #2a223588; }
+.space-queue-panel[open] { display: flex; flex-direction: column; gap: 16px; }
 .space-queue-panel h2 { font-size: 22px; }
 .map-screen { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .map-screen :is(input, textarea, select, #messages, .feature-panel) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
