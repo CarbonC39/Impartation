@@ -4,6 +4,8 @@
 
 Virtual Workspace 由浏览器客户端和一个 Node.js 后端组成。浏览器使用 Phaser 4 渲染地图，通过 HTTP 获取账号、资料、地图和工具配置，通过 Colyseus 0.18 WebSocket 收发输入、状态和交互请求。后端拥有玩家位置、地图归属和内置 integration 状态的写入权；SQLite 保存账号资料、已保存造型、在线断开命令和留言。Tiled 文件决定世界几何与交互语义，第三方服务拥有自己的内容、账号和权限。
 
+角色附件由独立的 `ATTACHMENTS` registry 管理，不属于 `appearance` 或已保存造型。Tiled 附件来源通过 `attachment` 交互注册，房间状态同步当前附件 ID、来源和唯一来源的占用者；服务端校验角色所在区域后才分配，清除、替换或离开时释放唯一占用。客户端在现有角色 sprite 帧上叠加透明附件图层，移动、聊天和坐下仍使用原有规则。
+
 ## 1. 代码结构与依赖方向
 
 仓库使用 npm workspaces，要求 Node.js 24 或更新版本，所有 workspace 启用 TypeScript strict。

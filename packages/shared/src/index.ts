@@ -75,6 +75,7 @@ export type Pomodoro = SchemaType<typeof Pomodoro>;
 
 export const Player = schema({
   name: t.string(), avatar: t.string(), appearance: t.string().default('{}'), x: t.number(), y: t.number(),
+  attachmentId: t.string().default(''), attachmentSource: t.string().default(''),
   userId: t.string(), role: t.string().default('member'),
   mapId: t.string(), connected: t.boolean().default(true), voiceEnabled: t.boolean().default(false), typing: t.boolean().default(false), zoneId: t.string().default(''), webToolZone: t.string().default(''), webToolAt: t.number().default(0), privateAreaId: t.string().default(''),
   facing: t.string().default('down'), motion: t.string().default('idle'),
@@ -88,6 +89,8 @@ export const WorldObjectState = schema({
 export type WorldObjectState = SchemaType<typeof WorldObjectState>;
 export const MapObjectState = schema({ objects: t.map(WorldObjectState) }, 'MapObjectState');
 export type MapObjectState = SchemaType<typeof MapObjectState>;
+export const AttachmentSourceState = schema({ holder: t.string().default('') }, 'AttachmentSourceState');
+export type AttachmentSourceState = SchemaType<typeof AttachmentSourceState>;
 export const PrivateAreaState = schema({
   locked: t.boolean().default(false), members: t.map('boolean'), resetAt: t.number().default(0),
 }, 'PrivateAreaState');
@@ -106,6 +109,7 @@ export const SpaceState = schema({
   spaceId: t.string(),
   players: t.map(Player), notes: t.map(BoardNote), pomodoros: t.map(Pomodoro), serverTime: t.number(),
   worldObjects: t.map(MapObjectState), privateAreas: t.map(MapPrivateAreaState),
+  attachmentSources: t.map(AttachmentSourceState),
 }, 'SpaceState');
 export type SpaceState = SchemaType<typeof SpaceState>;
 
@@ -132,6 +136,7 @@ export type WebTool = z.infer<typeof webToolSchema>;
 export * from './world.js';
 export * from './interactions.js';
 export * from './character.js';
+export * from './attachments.js';
 export * from './accounts.js';
 export * from './color.js';
 export * from './voice.js';

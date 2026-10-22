@@ -33,7 +33,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段；语音信令、ICE 配置和距离资格 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长；动作点朝向/偏移、同格动作匹配、非法动作锚点和方向输入朝向 | [world.test.ts](../apps/backend/test/world.test.ts) |
 | 显式交互制作 | 选择器单/多变体、数字对象引用、分组偏移、未知属性保留和非法配置拒绝 | [interaction-authoring.test.ts](../apps/backend/test/interaction-authoring.test.ts) |
-| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；私密成员平等权限、重入、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送；私密区域聊天与语音隔离 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
+| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；附件无限共享、唯一来源竞争与释放、随机集合及与坐下/移动共存；私密成员平等权限、重入、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送；私密区域聊天与语音隔离 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
 | Tiled 属性与模板 | Custom Classes 默认值、typed properties、直接与嵌套 object references、模板继承与 GID 映射、动画帧校验 | [tiled-normalizer.test.ts](../apps/backend/test/tiled-normalizer.test.ts) |
 | 瓦片动画浏览器 | WebGL/Canvas 普通层、ySort、abovePlayers 和变体目标的真实帧像素变化、帧时长与深度 | [tiled-animation.spec.ts](../apps/frontend/e2e/tiled-animation.spec.ts) |
 | 多边形语义 | 凹多边形、绕序、图层偏移、包围框空角、边界接触、脚底碰撞、私密区域重叠与非法几何 | [polygon.test.ts](../apps/backend/test/polygon.test.ts) |

@@ -259,6 +259,8 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .session-id { display: none; } /* Kept in #status text for diagnostics only. */
 .zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
+.attachment-chip { position: absolute; z-index: 4; top: 122px; left: 16px; }
+.attachment-chip button { padding: 4px 8px; font-size: 12px; }
 .settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .settings-panel h2 { font-size: 16px; }
 .zoom-field { display: flex; flex-direction: column; gap: 6px; }
@@ -622,6 +624,7 @@ body.tool-open .map-dock { z-index: 22; left: 16px; top: 50%; bottom: auto; tran
   .map-topbar > .hud-chip { max-width: calc(100vw - 20px); flex-wrap: wrap; gap: 6px 10px; }
   .hud-buttons { justify-content: flex-start; }
   .zone-chip { top: 118px; left: 10px; }
+  .attachment-chip { top: 164px; left: 10px; }
   .settings-panel { top: 118px; right: 10px; }
   #interaction-panels { top: 168px; left: 10px; }
   .chat-card { left: auto; right: 10px; bottom: 10px; width: var(--chat-width, min(240px, 60vw)); }

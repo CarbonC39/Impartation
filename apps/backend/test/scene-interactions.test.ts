@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import { matchMaker } from '@colyseus/core';
-import { DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, type SpaceProtocol } from '@virtual-workspace/shared';
+import { ATTACHMENTS, DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, attachmentSourceKey, type SpaceProtocol } from '@virtual-workspace/shared';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'workspace-interactions-'));
@@ -40,6 +40,12 @@ const makeMap = () => ({
         properties: props({ targetMap: 'home', targetSpawn: 'private' }) },
       { id: 41, name: 'offset-entry', class: 'action', point: true, x: 136, y: 160,
         properties: props({ action: 'sit', offsetX: 16 }) },
+      { id: 50, name: 'drink', class: 'attachment', x: 32, y: 96, width: 24, height: 24,
+        properties: props({ mode: 'single-unlimited', attachmentIds: 'punch' }) },
+      { id: 51, name: 'crown', class: 'attachment', x: 64, y: 96, width: 24, height: 24,
+        properties: props({ mode: 'single-unique', attachmentIds: 'party-crown' }) },
+      { id: 52, name: 'food', class: 'attachment', x: 96, y: 96, width: 24, height: 24,
+        properties: props({ mode: 'multiple-unlimited-random', attachmentIds: 'cookie,grape,guava,cheese,ham' }) },
     ] },
   ],
 });
@@ -79,6 +85,58 @@ async function until(predicate: () => boolean, timeout = 3000) {
 }
 const pause = () => delay(510);
 function roomFor(client: Room<SpaceProtocol>) { return harness.getRoomById<SpaceRoom>(client.roomId); }
+
+test('attachments replace without changing actions; unique claims are released and random sources stay available', async () => {
+  const alice = await connect('Alice'); const bob = await connect('Bob');
+  const room = roomFor(alice);
+  const a = room.state.players.get(alice.sessionId)!; const b = room.state.players.get(bob.sessionId)!;
+  const place = (player: typeof a, x: number) => { player.x = x; player.y = 104; };
+  place(a, 40); place(b, 40);
+  assert.equal((await alice.request('takeAttachment', { sourceId: 'drink' })).ok, true);
+  assert.equal((await bob.request('takeAttachment', { sourceId: 'drink' })).ok, true);
+  assert.equal(a.attachmentId, 'punch'); assert.equal(b.attachmentId, 'punch');
+  assert.equal((await bob.request('takeAttachment', { sourceId: 'crown' })).ok, false, 'source location is checked on the server');
+  place(a, 72); place(b, 72); await pause();
+  const results = await Promise.all([alice, bob].map(client => client.request('takeAttachment', { sourceId: 'crown' })));
+  assert.equal(results.filter(result => result.ok).length, 1);
+  const winner = results[0].ok ? alice : bob; const loser = winner === alice ? bob : alice;
+  const holder = room.state.players.get(winner.sessionId)!;
+  const source = room.state.attachmentSources.get(attachmentSourceKey('home', 'crown'))!;
+  assert.equal(source.holder, winner.sessionId);
+  assert.equal(holder.attachmentId, 'party-crown');
+  await pause();
+  assert.equal((await loser.request('takeAttachment', { sourceId: 'crown' })).ok, false);
+  place(holder, 104); await pause();
+  const seen = new Set<string>();
+  for (let i = 0; i < 8; i++) {
+    assert.equal((await winner.request('takeAttachment', { sourceId: 'food' })).ok, true);
+    assert.ok(['cookie', 'grape', 'guava', 'cheese', 'ham'].includes(holder.attachmentId));
+    seen.add(holder.attachmentId);
+    if (i < 7) await pause();
+  }
+  assert.equal(source.holder, '', 'replacing a unique attachment releases its source');
+  assert.ok(seen.size >= 1);
+  holder.x = 64; holder.y = 68; holder.facing = 'up';
+  await pause();
+  assert.equal((await winner.request('activateAction', { action: 'sit' })).ok, true);
+  assert.equal(holder.action, 'sit');
+  const attachmentWhileSitting = holder.attachmentId;
+  winner.send('input', { x: 1, y: 0 });
+  await until(() => holder.action === 'none');
+  assert.equal(holder.attachmentId, attachmentWhileSitting);
+  winner.send('input', { x: 0, y: 0 });
+  await pause();
+  assert.equal((await loser.request('takeAttachment', { sourceId: 'crown' })).ok, true);
+  assert.equal(source.holder, loser.sessionId);
+  assert.equal((await loser.request('clearAttachment', {})).ok, true);
+  assert.equal(source.holder, '');
+  assert.equal(room.state.players.get(loser.sessionId)?.attachmentId, '');
+  place(holder, 72); await pause();
+  assert.equal((await winner.request('takeAttachment', { sourceId: 'crown' })).ok, true);
+  await winner.leave();
+  await until(() => source.holder === '');
+  assert.equal(ATTACHMENTS.punch.name, '潘趣酒');
+});
 
 test('simultaneous claims have one winner, validate variants, replicate target state and release on cancel', async () => {
   const alice = await connect('Alice'); const bob = await connect('Bob');

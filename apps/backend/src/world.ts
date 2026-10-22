@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
-import { mapRegistrySchema, parseWorldMap, validateWorldRegistry, type WorldRegistry } from '@virtual-workspace/shared';
+import { attachmentSource, mapRegistrySchema, parseWorldMap, validateWorldRegistry, type WorldRegistry } from '@virtual-workspace/shared';
 import { config } from './config.js';
 import { normalizeTiledMap, normalizeTiledTileset, resolveTiledProject } from './tiled-normalizer.js';
 
@@ -40,7 +40,7 @@ export function loadWorldRegistry(path: string) {
     });
     // External JSON tilesets must be expanded before resolving authored local variant tile IDs.
     const world = parseWorldMap(render);
-    if (world.variantTargets.length) {
+    if (world.variantTargets.length || world.zones.some(zone => zone.kind === 'attachment' && attachmentSource(zone).visualGid !== undefined)) {
       const atlases = z.array(z.object({
         firstgid: z.number().int().positive(), tilecount: z.number().int().positive().optional(),
         tilewidth: z.number().int().positive().optional(), tileheight: z.number().int().positive().optional(),
@@ -52,6 +52,13 @@ export function loadWorldRegistry(path: string) {
         if (!atlas?.image || !atlas.tilecount || !atlas.tilewidth || !atlas.tileheight || gid >= atlas.firstgid + atlas.tilecount ||
           (atlas.objectalignment !== undefined && !['unspecified', 'bottomleft'].includes(atlas.objectalignment)))
           throw new Error(`Variant target ${target.id} requires an atlas tile GID with bottom-left alignment: ${gid}`);
+      }
+      for (const zone of world.zones.filter(zone => zone.kind === 'attachment')) {
+        const gid = attachmentSource(zone).visualGid;
+        if (gid === undefined) continue;
+        const atlas = atlases.filter(set => set.firstgid <= gid).sort((a, b) => b.firstgid - a.firstgid)[0];
+        if (!atlas?.image || !atlas.tilecount || !atlas.tilewidth || !atlas.tileheight || gid >= atlas.firstgid + atlas.tilecount)
+          throw new Error(`Attachment source ${zone.id} requires an atlas tile GID: ${gid}`);
       }
     }
     // Image layers can appear anywhere, including groups. Other Tiled metadata is retained.

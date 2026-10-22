@@ -13,6 +13,7 @@ import { db } from '../db.js';
 import { config, voiceConfig } from '../config.js';
 import { cancelAction } from '../interactions/action/handler.js';
 import { VoiceSignaling } from './VoiceSignaling.js';
+import { clearPlayerAttachment } from '../interactions/attachment/handler.js';
 
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; metadata: { spaceId: string } }> {
   state = new SpaceState();
@@ -364,6 +365,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     this.voice.clear(sessionId);
     const player = this.state.players.get(sessionId);
     if (player) cancelAction({ state: this.state, maps: this.maps }, player, sessionId);
+    if (player) clearPlayerAttachment({ state: this.state }, player, sessionId);
     this.identities.delete(sessionId);
     const reservation = [...this.connectedUsers].find(([, current]) => current === sessionId);
     if (reservation) this.connectedUsers.delete(reservation[0]);

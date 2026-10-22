@@ -70,6 +70,22 @@ Tiled 的 `object` property 保存地图内对象的数值 ID。解析器允许 
 - 出生点应位于可通行区域。服务端使用脚点上方的 12×8 地面碰撞矩形校验边界和障碍，尺寸独立于角色图片。
 - `collisions` 中每个矩形或多边形对象都是服务器端障碍。地面瓦片图案不会自动产生碰撞。
 
+### 角色附件来源
+
+在 `interactions` 对象层放置 `class = attachment` 的矩形或多边形区域。对象名称是该地图内唯一的来源 ID。配置两个自定义字符串属性：`mode` 与 `attachmentIds`。`attachmentIds` 使用英文逗号分隔资源 ID；服务启动时会校验 ID 是否存在、是否重复，以及模式所需的数量。
+
+| `mode` | `attachmentIds` | 取用规则 |
+| --- | --- | --- |
+| `single-unlimited` | 一个 ID | 始终可取，多人可同时持有 |
+| `single-unique` | 一个 ID | 同一 Space 的该来源同时只能由一人持有；清除、替换或离开后重新可取 |
+| `multiple-unlimited-random` | 两个或更多 ID | 每次独立随机取一个，来源始终可取 |
+
+角色同时只显示一个附件；新附件直接替换旧附件。附件不会进入账号资料、造型槽或衣橱，普通断线重连会保留房间内的持有状态。素材登记在 `packages/shared/src/attachments.ts`，图片放在 `assets/attachments/`，图集尺寸、方向和动作帧排列与角色图层相同。附件在造型图层之上按相同脚点、帧和透明度绘制，不参与碰撞或角色动作规则。
+
+需要随唯一来源占用消失的图块应从普通静态瓦片层移除，并在来源对象上填写 `visualGid`、`visualX`、`visualY` 三个 int 属性。`visualGid` 是地图 atlas 的 GID，X/Y 是该图块左上角的地图像素坐标，必须对齐 16px 网格并位于地图内。客户端会在运行时为它创建独立的可见图层，根据房间同步状态隐藏和恢复；同一图块不要仍留在静态层。未填写这三个属性的来源继续使用普通静态地图装饰。
+
+大厅有 `drink-west`、`drink-east`（潘趣酒，单件无限），`food-west`、`food-east`（五种食物，随机无限）和 `crown-west`（派对皇冠，单件唯一）作为可走入的示例来源。进入区域后点「取用附件」；地图左上角常驻显示当前名称与「清除」按钮。皇冠图块会在取走时消失，在释放后重新显示。
+
 ### 多边形区域与动画
 
 `collisions` 和所有区域交互（包括 Portal、web、privateArea、wardrobe）支持 Tiled polygon object。顶点相对于对象 x/y，group/layer 偏移同样生效；顺时针、逆时针和凹多边形均可使用。顶点数为 3–1024，不允许自交、重复点、重叠边、孔洞或零面积。点类型出生点、action、variantSelector 以及变体目标不使用多边形。规范化 API 保留绝对世界坐标顶点和包围矩形，触发、准入和碰撞按实际多边形计算。

@@ -5,6 +5,7 @@ import { registerServerInteractions } from './registry.js';
 import { createPrivateAreaInteraction } from './privateArea/handler.js';
 import { createVariantSelectorInteraction } from './variantSelector/handler.js';
 import { createActionInteraction, type ActionContext } from './action/handler.js';
+import { createAttachmentInteraction } from './attachment/handler.js';
 
 export function createInteractions(context: ActionContext) {
   const access = createPrivateAreaInteraction(context);
@@ -16,5 +17,6 @@ export function createInteractions(context: ActionContext) {
     action: createActionInteraction(composed),
     variantSelector: createVariantSelectorInteraction(context),
     privateArea: access,
+    attachment: createAttachmentInteraction(context),
   }), access };
 }

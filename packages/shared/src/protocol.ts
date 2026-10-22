@@ -4,6 +4,7 @@ import type {
   BoardPostInput,
   ChatMessage,
   InteractionResult,
+  TakeAttachmentInput,
   SpaceJoinOptions,
   MovementInput,
   PomodoroActionInput,
@@ -38,6 +39,8 @@ export type SpaceProtocol = {
     privateArea: (client: unknown, input: PrivateAreaOperationInput) => InteractionResult;
     cancelAction: (client: unknown, input: Record<string, never>) => InteractionResult;
     activateAction: (client: unknown, input: ActivateActionInput) => InteractionResult;
+    takeAttachment: (client: unknown, input: TakeAttachmentInput) => InteractionResult;
+    clearAttachment: (client: unknown, input: Record<string, never>) => InteractionResult;
     voiceEnabled: (client: unknown, input: { enabled: boolean }) => boolean;
     voiceOffer: (client: unknown, input: VoiceOffer) => boolean;
     voiceAnswer: (client: unknown, input: VoiceAnswer) => boolean;

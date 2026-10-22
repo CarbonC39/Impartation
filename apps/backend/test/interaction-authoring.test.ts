@@ -91,6 +91,25 @@ test('private areas are numeric-ID rectangles and reject overlap', () => {
   ]), /Private areas must not overlap/);
 });
 
+test('attachment sources require known distinct IDs and the correct count for each mode', () => {
+  const source = (mode: string, attachmentIds: string): TiledObject => ({
+    id: 40, name: 'attachment-source', class: 'attachment', x: 32, y: 64, width: 32, height: 32,
+    properties: properties({ mode, attachmentIds }),
+  });
+  assert.equal(parse([source('single-unique', 'party-crown')]).zones[0]?.kind, 'attachment');
+  assert.equal(parse([source('multiple-unlimited-random', 'cookie,grape')]).zones[0]?.kind, 'attachment');
+  for (const [mode, ids] of [
+    ['single-unique', 'cookie,grape'], ['single-unlimited', 'unknown'],
+    ['multiple-unlimited-random', 'cookie'], ['multiple-unlimited-random', 'cookie,cookie'],
+  ]) assert.throws(() => parse([source(mode!, ids!)]));
+  const visual = source('single-unique', 'party-crown');
+  visual.properties!.push(...properties({ visualGid: 82, visualX: 64, visualY: 96 }));
+  assert.equal(parse([visual]).zones[0]?.properties.visualGid, 82);
+  assert.throws(() => parse([{ ...visual, properties: properties({ mode: 'single-unique', attachmentIds: 'party-crown', visualGid: 82 }) }]));
+  assert.throws(() => parse([{ ...visual, properties: properties({ mode: 'single-unique', attachmentIds: 'party-crown', visualGid: 82, visualX: 63, visualY: 96 }) }]));
+  assert.throws(() => parse([{ ...visual, properties: properties({ mode: 'single-unique', attachmentIds: 'party-crown', visualGid: 82, visualX: 320, visualY: 96 }) }]));
+});
+
 test('parser rejects malformed variant declarations and unresolved or invalid targets', () => {
   assert.throws(() => parse([selector(20, 90, 'computer,computer')], [target(90)]), /Variants must be unique/);
   assert.throws(() => parse([selector(20, 90)], []));

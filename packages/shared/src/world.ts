@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { InteractionRegistry } from './interactions.js';
 import type { MovementInput } from './index.js';
 import { actionNameSchema, characterActionSchema, facingSchema, isCharacterAction, type Facing } from './character.js';
+import { attachmentSourcePropertiesSchema } from './attachments.js';
 import { contains, polygonArea, overlapArea, areasOverlap, type Point, type Rect, type Area } from './geometry.js';
 export { contains, polygonArea, overlapArea, areasOverlap } from './geometry.js';
 export type { Point, Rect, Area } from './geometry.js';
@@ -84,6 +85,7 @@ export const portalPropertiesSchema = z.object({ targetMap: identifier, targetSp
 interactionDefinitions.register('wardrobe', { validate: zone => { z.object({}).parse(zone.properties); } });
 interactionDefinitions.register('privateArea', { validate: zone => { z.object({}).parse(zone.properties); } });
 interactionDefinitions.register('Portal', { validate: zone => { portalPropertiesSchema.parse(zone.properties); } });
+interactionDefinitions.register('attachment', { validate: zone => { attachmentSourcePropertiesSchema.parse(zone.properties); } });
 
 /** Extract authoritative semantics without imposing renderer-specific Tiled restrictions. */
 export function parseWorldMap(raw: unknown, definitions = interactionDefinitions): WorldMap {
@@ -205,6 +207,12 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
       throw new Error('Private areas must not overlap');
   }
   const world: WorldMap = { width: map.width * TILE_SIZE, height: map.height * TILE_SIZE, spawns, collisions, zones, actions, selectors, variantTargets };
+  for (const zone of zones.filter(zone => zone.kind === 'attachment')) {
+    const visual = attachmentSourcePropertiesSchema.parse(zone.properties);
+    if (visual.visualX !== undefined && visual.visualY !== undefined &&
+      (visual.visualX + TILE_SIZE > world.width || visual.visualY + TILE_SIZE > world.height))
+      throw new Error('Attachment source visual must stay inside map bounds');
+  }
   for (const obj of [...collisions, ...zones, ...variantTargets]) {
     if (obj.width <= 0 || obj.height <= 0 || obj.x < 0 || obj.y < 0 ||
       obj.x + obj.width > world.width || obj.y + obj.height > world.height) throw new Error('Semantic area must have positive size and stay inside map bounds');

@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
-import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, TICK_MS, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
 import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
 import { cameraZoom } from './cameraZoom';
 
-type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[]; status: CharacterStatus;
+type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[]; attachment: Phaser.GameObjects.Sprite; status: CharacterStatus;
   animation: string; elapsed: number };
 type ChatBubble = { text: string; expiresAt: number };
 export type ScreenPoint = { x: number; y: number };
@@ -28,6 +28,7 @@ const BUBBLE_CHARS = 60;
 export class SpaceScene extends Phaser.Scene {
   private sprites = new Map<string, PlayerVisual>();
   private objectVisuals?: WorldObjectVisuals;
+  private attachmentSourceLayers = new Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>();
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private inputElapsed = 0;
   private lastInput = '';
@@ -58,6 +59,8 @@ export class SpaceScene extends Phaser.Scene {
     for (const id of layerAssetIds) {
       this.load.spritesheet(id, layerAssets[id], { frameWidth: avatar.frameWidth, frameHeight: avatar.frameHeight });
     }
+    for (const [id, asset] of Object.entries(ATTACHMENTS))
+      this.load.spritesheet(`attachment:${id}`, asset.path, { frameWidth: avatar.frameWidth, frameHeight: avatar.frameHeight });
     preloadStatusTextures(this);
   }
   create() {
@@ -109,6 +112,17 @@ export class SpaceScene extends Phaser.Scene {
       }
     }
     for (const zone of this.mapEntry.world.zones) {
+      if (zone.kind !== 'attachment') continue;
+      const { visualGid, visualX, visualY } = attachmentSource(zone);
+      if (visualGid === undefined || visualX === undefined || visualY === undefined) continue;
+      const visual = map.createBlankLayer(`__attachment_${zone.id}`, tiles, 0, 0, map.width, map.height);
+      if (!visual) throw new Error(`Unable to render attachment source: ${zone.id}`);
+      visual.putTileAt(visualGid, visualX / map.tileWidth, visualY / map.tileHeight);
+      visual.setDepth(0.01);
+      trackCanvasAnimations(visual);
+      this.attachmentSourceLayers.set(zone.id, visual);
+    }
+    for (const zone of this.mapEntry.world.zones) {
       if (zone.polygon) {
         const points = zone.polygon.map(p => new Phaser.Math.Vector2(p.x, p.y));
         this.add.graphics().fillStyle(0xd5d080, 0.15).lineStyle(1, 0xd5d080, 0.6)
@@ -134,6 +148,7 @@ export class SpaceScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', visibility);
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
+      this.attachmentSourceLayers.clear();
       this.canvasTiles = [];
       this.hooks.zoneAnchor(undefined);
       canvas.removeEventListener('pointerdown', focusCanvas);
@@ -154,6 +169,8 @@ export class SpaceScene extends Phaser.Scene {
     const players = this.room.state?.players;
     if (!players) return;
     this.objectVisuals?.update(this.room.state.worldObjects.get(this.mapEntry.id), this.animationElapsed);
+    for (const [sourceId, layer] of this.attachmentSourceLayers)
+      layer.setVisible(!this.room.state.attachmentSources.get(attachmentSourceKey(this.mapEntry.id, sourceId))?.holder);
     const namesVisible = this.hooks.namesVisible();
     for (const [id, player] of players) {
       if (player.mapId !== this.mapEntry.id) continue;
@@ -163,9 +180,11 @@ export class SpaceScene extends Phaser.Scene {
         const layers = APPEARANCE_LAYERS.map(() => this.add.sprite(player.x, player.y, APPEARANCE_ASSETS.body[0])
           .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight));
         const character = layers[0]!.setName(id);
+        const attachment = this.add.sprite(player.x, player.y, APPEARANCE_ASSETS.body[0])
+          .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight).setVisible(false);
         if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
         const status = new CharacterStatus(this, id, id === this.room.sessionId, this.cameras.main.zoom);
-        sprite = { sprite: character, layers, status, animation: '', elapsed: 0 };
+        sprite = { sprite: character, layers, attachment, status, animation: '', elapsed: 0 };
         this.sprites.set(id, sprite);
       }
       const blend = Math.min(1, delta / TICK_MS);
@@ -190,6 +209,12 @@ export class SpaceScene extends Phaser.Scene {
           .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
           .setDepth(sprite.sprite.y + index * 0.001);
       }
+      const attachmentId = player.attachmentId as AttachmentId;
+      const asset = ATTACHMENTS[attachmentId];
+      sprite.attachment.setVisible(Boolean(asset));
+      if (asset) sprite.attachment.setTexture(`attachment:${attachmentId}`, renderedFrame)
+        .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
+        .setDepth(sprite.sprite.y + APPEARANCE_LAYERS.length * 0.001);
       sprite.status.update(sprite.sprite.x, sprite.sprite.y + 1, sprite.sprite.y - avatar.groundAnchor.y - 1, {
         name: player.name, nameVisible: namesVisible, connected: player.connected,
         bubble: this.bubbles.get(id)?.text,
@@ -205,6 +230,7 @@ export class SpaceScene extends Phaser.Scene {
     for (const [id, sprite] of this.sprites) {
       if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) {
         for (const layer of sprite.layers) layer.destroy();
+        sprite.attachment.destroy();
         sprite.status.destroy();
         this.sprites.delete(id);
         this.bubbles.delete(id);
