@@ -93,6 +93,21 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     return SpaceRoom.instances.get(spaceId)?.connectedUsers.has(userId) ?? false;
   }
 
+  /** Count only players with a live connection; reconnect reservations do not appear online. */
+  static occupancy(spaceId: string, mapIds: readonly string[]) {
+    const room = SpaceRoom.instances.get(spaceId);
+    const maps = mapIds.map(mapId => ({ mapId, online: 0 }));
+    const byMap = new Map(maps.map(entry => [entry.mapId, entry]));
+    let online = 0;
+    for (const player of room?.state.players.values() ?? []) {
+      if (!player.connected) continue;
+      online++;
+      const map = byMap.get(player.mapId);
+      if (map) map.online++;
+    }
+    return { spaceId, online, capacity: config.SPACE_MAX_CLIENTS, maps };
+  }
+
   private holdDisposal() {
     if (this.takeoverHolds++ === 0) {
       this.takeoverAutoDispose = this.autoDispose;

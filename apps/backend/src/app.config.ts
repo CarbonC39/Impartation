@@ -35,6 +35,9 @@ export const server = defineServer({
     app.use('/api', express.json({ limit: '16kb', strict: false }));
     app.use('/api', spaceQueueRoutes);
     app.get('/api/world', (_req, res) => { res.json(worldRegistry); });
+    app.get('/api/occupancy', (_req, res) => {
+      res.json({ spaces: worldRegistry.spaces.map(space => SpaceRoom.occupancy(space.id, space.maps)) });
+    });
     app.get('/api/voice-config', (_req, res) => { res.json(voiceConfig); });
     app.get('/api/voice-credentials', async (req, res) => {
       const headers = new Headers();

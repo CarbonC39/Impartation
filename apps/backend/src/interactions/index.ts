@@ -6,6 +6,7 @@ import { createPrivateAreaInteraction } from './privateArea/handler.js';
 import { createVariantSelectorInteraction } from './variantSelector/handler.js';
 import { createActionInteraction, type ActionContext } from './action/handler.js';
 import { createAttachmentInteraction } from './attachment/handler.js';
+import { createQuickTravelInteraction } from './quickTravel/handler.js';
 
 export function createInteractions(context: ActionContext) {
   const access = createPrivateAreaInteraction(context);
@@ -14,6 +15,7 @@ export function createInteractions(context: ActionContext) {
     board: createBoardInteraction(context),
     pomodoro: createPomodoroInteraction(context),
     Portal: createPortalInteraction(composed),
+    quickTravel: createQuickTravelInteraction(composed),
     action: createActionInteraction(composed),
     variantSelector: createVariantSelectorInteraction(context),
     privateArea: access,

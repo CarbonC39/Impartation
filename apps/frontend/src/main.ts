@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
+import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, occupancyResponseSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -42,6 +42,14 @@ const send = element<HTMLButtonElement>('send');
 const messageInput = element<HTMLInputElement>('message');
 const messages = element<HTMLOListElement>('messages');
 const zone = element('zone');
+const connectionPanel = element('connection-panel');
+const connectionTitle = element('connection-title');
+const connectionMessage = element('connection-message');
+const connectionActions = element('connection-actions');
+const mapListPanel = element('map-list-panel');
+const mapListToggle = element<HTMLButtonElement>('map-list-toggle');
+const mapList = element('map-list');
+const mapListStatus = element('map-list-status');
 let game: Phaser.Game | undefined;
 let scene: SpaceScene | undefined;
 let gameDestruction: Promise<void> = Promise.resolve();
@@ -63,6 +71,8 @@ mountThemePanel(element<HTMLButtonElement>('theme-toggle'), element('theme-panel
 const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.origin);
 let room: Room<SpaceProtocol> | undefined;
 let connected = false;
+type ConnectionPhase = 'connected' | 'reconnecting' | 'disconnected';
+let connectionPhase: ConnectionPhase = 'disconnected';
 let interactions: InteractionDispatcher | undefined;
 let actions: CharacterActions | undefined;
 let voice: ProximityVoice | undefined;
@@ -308,8 +318,9 @@ async function loadSpaces() {
       const cover = document.createElement('img');
       cover.className = 'world-art'; cover.src = space.cover; cover.alt = '';
       const name = document.createElement('span'); name.className = 'world-title'; name.textContent = space.name;
+      const occupancy = document.createElement('span'); occupancy.className = 'world-occupancy'; occupancy.dataset.occupancy = space.id;
       const action = document.createElement('span'); action.className = 'world-join';
-      tile.append(cover, name);
+      tile.append(cover, name, occupancy);
       if (space.description) {
         const description = document.createElement('span'); description.className = 'world-description'; description.textContent = space.description;
         tile.append(description);
@@ -318,8 +329,24 @@ async function loadSpaces() {
       return tile;
     }));
     renderWorldTiles();
+    void loadOccupancy();
   } catch (error) { list.textContent = `空间目录加载失败：${String(error)}`; }
 }
+async function loadOccupancy() {
+  if (!spaceDirectory || document.hidden) return;
+  try {
+    const response = await fetch('/api/occupancy', { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error('人数读取失败');
+    const occupancy = occupancyResponseSchema.parse(await response.json());
+    for (const entry of occupancy.spaces) {
+      const label = [...document.querySelectorAll<HTMLElement>('#world-list .world-occupancy')]
+        .find(node => node.dataset.occupancy === entry.spaceId);
+      if (label) label.textContent = `${entry.online} / ${entry.capacity} 人在线`;
+    }
+  } catch { /* Keep the last known count while the backend reconnects. */ }
+}
+window.setInterval(() => { void loadOccupancy(); }, 5000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void loadOccupancy(); });
 function renderWorldTiles() {
   element('world-subtitle').textContent = currentProfile ? '选好世界后进入试衣间' : '先登录，再选一个世界';
   for (const action of document.querySelectorAll('#world-list .world-join')) action.textContent = currentProfile ? '去换装' : '登录后进入';
@@ -458,7 +485,63 @@ function setConnected(value: boolean) {
   messageInput.disabled = !value;
   interactions?.setConnected(value);
   actions?.refresh();
+  renderMapList();
 }
+function setConnectionPhase(phase: ConnectionPhase, message = '') {
+  connectionPhase = phase;
+  connectionPanel.hidden = phase === 'connected';
+  connectionActions.hidden = phase !== 'disconnected';
+  connectionTitle.textContent = phase === 'reconnecting' ? '连接中断，正在重连' : '连接已断开';
+  connectionMessage.textContent = message || (phase === 'reconnecting'
+    ? '正在尝试恢复连接，移动和实时交互已暂停。'
+    : '无法恢复连接。可以重新连接空间，或刷新页面。');
+  connectionPanel.dataset.phase = phase;
+}
+let mapListSignature = '';
+function renderMapList(force = false) {
+  const currentMap = room?.state.players.get(room.sessionId)?.mapId;
+  const counts = new Map<string, number>();
+  for (const player of room?.state.players.values() ?? []) {
+    if (player.connected) counts.set(player.mapId, (counts.get(player.mapId) ?? 0) + 1);
+  }
+  const signature = JSON.stringify([connected, currentMap, (worldRegistry?.maps ?? []).map(map => [map.id, counts.get(map.id) ?? 0])]);
+  if (!force && signature === mapListSignature) return;
+  mapListSignature = signature;
+  mapList.replaceChildren(...(worldRegistry?.maps ?? []).map(map => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'secondary map-list-entry'; button.dataset.mapId = map.id;
+    button.disabled = !connected || map.id === currentMap;
+    button.setAttribute('aria-current', map.id === currentMap ? 'location' : 'false');
+    const name = document.createElement('span'); name.textContent = map.id;
+    const count = document.createElement('span'); count.textContent = `${counts.get(map.id) ?? 0} 人${map.id === currentMap ? ' · 当前地图' : ''}`;
+    button.append(name, count);
+    return button;
+  }));
+}
+mapListToggle.addEventListener('click', () => {
+  mapListPanel.hidden = !mapListPanel.hidden;
+  mapListToggle.setAttribute('aria-expanded', String(!mapListPanel.hidden));
+  if (!mapListPanel.hidden) renderMapList(true);
+});
+mapList.addEventListener('click', event => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-map-id]');
+  const activeRoom = room;
+  if (!button?.dataset.mapId || !connected || !activeRoom?.connection.isOpen) return;
+  button.disabled = true;
+  mapListStatus.textContent = '正在切换地图…';
+  void activeRoom.request('quickTravel', { mapId: button.dataset.mapId }).then(result => {
+    if (room === activeRoom) mapListStatus.textContent = result.message;
+  }).catch(error => {
+    if (room === activeRoom) mapListStatus.textContent = `切换失败：${String(error)}`;
+  }).finally(() => { if (room === activeRoom) renderMapList(true); });
+});
+element<HTMLButtonElement>('reconnect-now').addEventListener('click', () => {
+  if (connectionPhase !== 'disconnected' || !currentProfile) return;
+  setConnectionPhase('reconnecting', '正在重新进入空间…');
+  showScreen('avatar-screen');
+  void enterWorld({ enabled: false, muted: false });
+});
+element<HTMLButtonElement>('reload-page').addEventListener('click', () => window.location.reload());
 function cleanup() {
   queueAttempt?.cancel();
   queueAttempt = undefined;
@@ -482,6 +565,10 @@ function cleanup() {
   room = undefined;
   setUnread(0);
   setConnected(false);
+  mapListPanel.hidden = true;
+  mapListSignature = '';
+  mapListToggle.setAttribute('aria-expanded', 'false');
+  mapListStatus.textContent = '';
   join.disabled = false;
   leave.disabled = true;
   zone.textContent = '当前区域：无';
@@ -517,6 +604,7 @@ async function enterWorld(plan: VoicePlan) {
     return;
   }
   pendingJoinStream = plan.stream;
+  leavingIntentionally = false;
   join.disabled = true;
   joinFeedback.textContent = '';
   status.textContent = '连接中…';
@@ -610,21 +698,37 @@ async function enterWorld(plan: VoicePlan) {
       audience = next;
       appendChat(next ? '已进入私密房间：聊天和语音只在房间内互通。' : '已回到公共区域：聊天和语音恢复公共范围。', 'chat-system');
     });
-    room.onDrop(() => { if (room !== nativeRoom) return; setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
-    room.onReconnect(() => { if (room !== nativeRoom) return; setConnected(true); status.textContent = '连接已恢复'; });
+    room.onDrop(() => {
+      if (room !== nativeRoom) return;
+      touchPad.clear(); resetTyping(); setConnected(false);
+      setConnectionPhase('reconnecting');
+      status.textContent = '连接中断，正在自动重连…';
+    });
+    room.onReconnect(() => {
+      if (room !== nativeRoom) return;
+      setConnected(true); setConnectionPhase('connected');
+      status.textContent = '连接已恢复';
+      void loadOccupancy();
+    });
     room.onLeave(code => {
       if (room !== nativeRoom) return;
       nativeRoom.reconnection.enabled = false;
-      cleanup(); status.textContent = code === SPACE_REPLACED_CLOSE_CODE
-        ? '账号已在其他设备进入此空间，当前连接已下线'
-        : '已离开，可以重新进入';
+      const intentional = leavingIntentionally || pageLeaving;
+      cleanup();
+      const reason = code === SPACE_REPLACED_CLOSE_CODE
+        ? '账号已在其他设备进入此空间，当前连接已下线。'
+        : '连接已断开，自动重连未能恢复。';
+      status.textContent = intentional ? '已离开，可以重新进入' : reason;
+      setConnectionPhase('disconnected', intentional ? '' : `${reason}可以重新连接空间，或刷新页面。`);
+      if (intentional) showScreen('login-screen');
       void accounts.refreshProfile().then(value => { if (!value) showScreen('login-screen'); })
         .catch(error => { status.textContent = `无法刷新登录状态：${error instanceof Error ? error.message : String(error)}`; });
     });
-    room.onError((_code, message) => { if (room === nativeRoom) status.textContent = `房间错误：${message}`; });
+    room.onError((_code, message) => { if (room === nativeRoom && connectionPhase === 'connected') status.textContent = `房间错误：${message}`; });
     const activeRoom = room;
     room.onStateChange(() => {
       if (room !== activeRoom) return;
+      renderMapList();
       const mapId = activeRoom.state.players.get(activeRoom.sessionId)?.mapId;
       if (mapId && renderedMap !== mapId && renderingMap !== mapId) {
         void renderWorld(mapId, activeRoom).catch(error => { status.textContent = `地图加载失败：${String(error)}`; });
@@ -633,6 +737,8 @@ async function enterWorld(plan: VoicePlan) {
     await renderWorld(room.state?.players?.get(room.sessionId)?.mapId ?? worldRegistry.initialMap, room);
     if (!isCurrentJoin() || room !== nativeRoom) { stopPlannedStream(); return; }
     setConnected(true);
+    setConnectionPhase('connected');
+    void loadOccupancy();
     leave.disabled = false;
     const sessionId = document.createElement('span');
     sessionId.className = 'session-id';

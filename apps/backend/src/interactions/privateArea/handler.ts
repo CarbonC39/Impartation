@@ -27,8 +27,13 @@ export function createPrivateAreaInteraction(context: Context) {
       overlap(area, to) <= overlap(area, from) + 1e-8;
   });
   const syncPlayer = (sessionId: string, player: Player) => {
+    const previousAreaId = player.privateAreaId;
     player.privateAreaId = '';
-    if (!player.connected) return;
+    if (!player.connected) {
+      release(sessionId);
+      return;
+    }
+    const occupied = new Set<string>();
     for (const area of areas(player.mapId)) {
       if (!contains(area, player.x, player.y)) continue;
       const state = stateFor(player.mapId, area.id)!;
@@ -36,7 +41,15 @@ export function createPrivateAreaInteraction(context: Context) {
         state.members.set(sessionId, true);
         state.resetAt = 0;
         player.privateAreaId = area.id;
+        occupied.add(area.id);
       }
+    }
+    // Membership granted by a peer can authorize entry from outside. Once a
+    // player who occupied an area physically leaves it, that session loses it.
+    if (previousAreaId && !occupied.has(previousAreaId)) {
+      const state = stateFor(player.mapId, previousAreaId);
+      state?.members.delete(sessionId);
+      if (state && !state.members.size) reset(state);
     }
   };
   const reset = (state: PrivateAreaState) => { state.locked = false; state.members.clear(); state.resetAt = 0; };

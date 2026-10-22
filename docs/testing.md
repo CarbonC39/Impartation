@@ -35,7 +35,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 | 共享协议 | 输入类型、长度与数值边界，剥离伪造身份与计时字段；语音信令、ICE 配置和距离资格 | [protocol.test.ts](../apps/backend/test/protocol.test.ts) |
 | 地图与移动 | Tiled 语义与渲染约束分离、嵌套/偏移层、命名出生点、Portal 目标、碰撞、边界与移动步长；动作点朝向/偏移、同格动作匹配、非法动作锚点和方向输入朝向 | [world.test.ts](../apps/backend/test/world.test.ts) |
 | 显式交互制作 | 选择器单/多变体、数字对象引用、分组偏移、未知属性保留和非法配置拒绝 | [interaction-authoring.test.ts](../apps/backend/test/interaction-authoring.test.ts) |
-| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；附件无限共享、唯一来源竞争与释放、随机集合及与坐下/移动共存；私密成员平等权限、重入、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送；私密区域聊天与语音隔离 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
+| 场景多人交互 | 并发独占、变体同步、取消/移动/断线/Portal 清理；附件无限共享、唯一来源竞争与释放、随机集合及与坐下/移动共存；私密成员平等权限、离开即撤权、完整脚底边界/动作偏移/Portal 准入、空置重置及同图传送；私密区域聊天与语音隔离；Space/Map 人数和地图快捷切换 | [scene-interactions.test.ts](../apps/backend/test/scene-interactions.test.ts) |
 | Tiled 属性与模板 | Custom Classes 默认值、typed properties、直接与嵌套 object references、模板继承与 GID 映射、动画帧校验 | [tiled-normalizer.test.ts](../apps/backend/test/tiled-normalizer.test.ts) |
 | 瓦片动画浏览器 | WebGL/Canvas 普通层、ySort、abovePlayers 和变体目标的真实帧像素变化、帧时长与深度 | [tiled-animation.spec.ts](../apps/frontend/e2e/tiled-animation.spec.ts) |
 | 多边形语义 | 凹多边形、绕序、图层偏移、包围框空角、边界接触、脚底碰撞、私密区域重叠与非法几何 | [polygon.test.ts](../apps/backend/test/polygon.test.ts) |
@@ -53,7 +53,7 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 显式交互浏览器用例检查选择器按钮和目标 GID 画面、私密区域锁定按钮，以及镜子打开原有衣橱、保存/返回后保留房间和 session。自动化用例使用临时测试地图和独立 Space fixtures；仓库另提供可从大厅进入的交互试验场，手动体验路径见 [地图说明](tiled.md#交互试验场)。
 
-账号浏览器用例检查注册、登录、退出、修改密码、跨设备资料与造型槽，以及同源标签页切换账号后的草稿隔离。空间用例验证同账号新连接替换旧连接、旧重连 token 失效、普通断线恢复原 session、刷新后立即重进、合成 pagehide/pageshow 缓存恢复，以及延迟 matchmaking 响应完成后的连接释放；合成事件不代表验证了各浏览器的真实缓存命中策略。[accounts.spec.ts](../apps/frontend/e2e/accounts.spec.ts) 的管理员面板与重置表单用 HTTP 响应替身检查二次确认、自我管理限制、链接展示和重置 token 的地址清理；真实管理员授权、重置令牌生命周期及 session 撤销由 Node HTTP/WebSocket 测试验证。
+账号浏览器用例检查注册、登录、退出、修改密码、跨设备资料与造型槽，以及同源标签页切换账号后的草稿隔离。空间用例验证 Space 人数与地图列表、快捷切换、同账号新连接替换旧连接、旧重连 token 失效、普通断线恢复原 session、断线期间禁用聊天和恢复失败提示、刷新后立即重进、合成 pagehide/pageshow 缓存恢复，以及延迟 matchmaking 响应完成后的连接释放；合成事件不代表验证了各浏览器的真实缓存命中策略。[accounts.spec.ts](../apps/frontend/e2e/accounts.spec.ts) 的管理员面板与重置表单用 HTTP 响应替身检查二次确认、自我管理限制、链接展示和重置 token 的地址清理；真实管理员授权、重置令牌生命周期及 session 撤销由 Node HTTP/WebSocket 测试验证。
 
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 

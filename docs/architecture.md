@@ -90,6 +90,8 @@ Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配
 
 排队接口为 `POST /api/space-queue`（JSON `{spaceId}`）、`GET /api/space-queue/:spaceId/:ticket` 和 `DELETE /api/space-queue/:spaceId/:ticket`。POST/DELETE 校验来源，全部接口验证 Better Auth session；返回的 `ahead` 是当前队列中排在前面的账号数。轮到用户时 `ready=true`，客户端把 `ticket` 作为 `spaceJoinSchema.queueTicket` 提交。服务端按账号与登录 session 验证凭证；一个 Space 同时只发放一个待入场凭证，20 秒未入场则轮到下一人。等待中的资格需要轮询续期，30 秒未轮询会过期；关闭排队弹窗（含 Esc）主动 DELETE 并返回 Space 选择页。排队状态保存在单进程内，重启后需重新排队。
 
+`GET /api/occupancy` 返回 `{ spaces: [{ spaceId, online, capacity, maps: [{ mapId, online }] }] }`，顺序按 registry。人数直接统计当前 Space room 中 `connected` 的玩家；等待重连的席位不计在线人数，容量仍以房间席位上限为准。Space 列表定期读取该接口；进入后地图列表从同步的玩家状态计算各地图人数。地图列表发送 `quickTravel { mapId }` 请求，服务端仅接受当前 Space 注册的地图，选择可进入的命名 spawn，并以现有权威 `mapId` 和坐标更新完成切换。普通加入仍从 `initialMap` 开始，Portal 与快捷切换并存。
+
 ## 3. 世界数据：Tiled 到权威状态与画面
 
 ### 3.1 同一源数据的两种用途
@@ -197,7 +199,7 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 
 variantSelector 复用动作锚点的重叠候选、朝向与偏移规则。朝向不符时玩家仍原地执行动作，释放已有认领并复原其目标，不打开选择器或应用新变体；朝向相符才进行对齐和认领。一次身份复验后的同步处理完成空闲检查和认领，任何交错请求最多一人成功；只有该玩家保持所需动作、朝向和锚点位置时可选择。`selectVariant` 接受声明的名称或 `null`；`null` 清除目标并设置 `variantCleared`，保留当前动作与认领，不需要额外 authored 空选项。名称选择将其设回 false。移动、取消、断线、跨地图或认领失效时释放占用并重置目标显示，恢复 Tiled 基础图块（无基础 GID 时透明）；动画切换保持同一认领时保留当前选择或清除状态，单选项不会重复自动应用。周期巡检仅在过期认领仍属于原 session 时重置目标，避免覆盖新占用者。每个选择器拥有独立目标，沙发多个座位分别制作。
 
-privateArea 开放时进入者加入临时会话，成员权限平等；成员离开物理区域后保留重入、锁定与添加在线玩家的资格。锁定时，服务端以完整 12×8 脚底碰撞体阻止非成员进入，同时检查动作偏移和 Portal 落点；成员仍可自由离开。所有锁定/成员修改都在身份复验后的同步片段完成。默认出生点在锁区时加入/重连尝试其它命名 spawn；没有可进入 spawn 时拒绝入场。同地图 Portal 保留成员资格，跨地图清理旧地图成员资格。
+privateArea 开放时进入者加入临时会话，成员权限平等；成员物理离开区域或连接断开时立即失去资格，重连不会恢复旧资格。锁定时，服务端以完整 12×8 脚底碰撞体阻止非成员进入，同时检查动作偏移、Portal 和快捷切换落点；成员仍可自由离开。所有锁定/成员修改都在身份复验后的同步片段完成。默认出生点在锁区时加入/重连尝试其它命名 spawn；没有可进入 spawn 时拒绝入场。同地图 Portal 落在区域内时保留成员资格，跨地图清理旧地图成员资格。
 
 无成员时立即清空锁；有成员但连续 60 秒没有在线成员在物理区域内时清空会话。断线立即删除该连接在所有区域的成员资格，房间销毁也会重置。`Player.privateAreaId` 仅表示当前位置的空间上下文；授权以服务端成员表为准。聊天与语音按 shared `sameAudience(mapId, privateAreaId)` 隔离：双方都在区域外（公共频道，聊天跨地图），或在同一地图的同一区域内，才互通。语音 `canHear` 组合该规则，服务端拒绝跨边界信令，玩家越过区域边界的那一帧立即复查并结束不再合格的语音配对；WebRTC 为点对点，隔离依赖诚实一端按 voiceEnd 关闭连接。区域隔离以物理位置为准：成员离开区域后回到公共频道。Schema 可见性（位置、正在输入等）仍对整个房间公开，不提供读取隔离。
 
@@ -217,7 +219,7 @@ Portal 保留同一 Space room、连接、身份和聊天。加入时提交必�
 
 后端 `onDrop` 标记玩家 disconnected、删除移动输入，立即释放 variantSelector 并删除私密成员资格；旧 action 座位保留重连窗口内的占用。随后对允许重试的网络 close code 提供 20 秒重连窗口；SDK 在同一 Room 实例上自动重试。`onReconnect` 再检查身份，恢复 connected。最终 `onLeave` 才删除玩家、身份引用和限流记录；`onDispose` 调用各 integration 的清理钩子。
 
-浏览器断线时禁用聊天和交互控制，重连后恢复。最终离开时，`main.ts.cleanup` 使未完成地图加载失效，dispose dispatcher，销毁 Phaser Game，并复位连接与页面状态。交互 handler 负责移除自身 DOM 监听、房间订阅、计时器和 iframe。外置工具面板会 abort 配置 fetch；内置面板与 Portal 不取消已发出的 `room.request`，而是在销毁或区域变化后忽略迟到响应的界面更新。清理是 handler 接入契约的一部分。
+浏览器断线时显示 reconnecting 状态，禁用移动、聊天和交互控制，重连后恢复 connected 状态。最终失败或被顶号时显示 disconnected 状态和手动重新连接、刷新入口，不无限自动刷新。最终离开时，`main.ts.cleanup` 使未完成地图加载失效，dispose dispatcher，销毁 Phaser Game，并复位连接与页面状态。交互 handler 负责移除自身 DOM 监听、房间订阅、计时器和 iframe。外置工具面板会 abort 配置 fetch；内置面板与 Portal 不取消已发出的 `room.request`，而是在销毁或区域变化后忽略迟到响应的界面更新。清理是 handler 接入契约的一部分。
 
 ## 5. Interaction 与 presentation 扩展
 

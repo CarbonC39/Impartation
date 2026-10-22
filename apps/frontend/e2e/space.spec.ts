@@ -47,6 +47,21 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
   return account;
 }
 
+test('Space count and map menu show live players and quick travel between maps', async ({ page }) => {
+  await signInFresh(page, 'MapTraveler');
+  await expect(page.locator('#world-list [data-world="main"] .world-occupancy')).toContainText('0 / 32');
+  await openAvatarScreen(page);
+  await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await page.locator('#map-list-toggle').click();
+  await expect(page.locator('#map-list [data-map-id="workspace"]')).toHaveAttribute('aria-current', 'location');
+  await expect(page.locator('#map-list [data-map-id="workspace"]')).toContainText('1 人');
+  await page.locator('#map-list [data-map-id="studio"]').click();
+  await expect(page.locator('#map-list-status')).toHaveText('已切换地图');
+  await expect(page.locator('#map-list [data-map-id="studio"]')).toHaveAttribute('aria-current', 'location');
+  await expect(page.locator('#map-list [data-map-id="studio"]')).toContainText('1 人');
+});
+
 test('registration and sign-in create a session and clear credential fields after success', async ({ page }) => {
   await page.goto('/');
   const username = nextUsername();
@@ -1830,9 +1845,13 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
     await expect.poll(() => page.evaluate(() => Boolean((window as RenderingWindow).sceneUnderTest))).toBe(true);
     await page.context().setOffline(true);
     await expect(page.locator('#status')).toContainText('连接中断');
+    await expect(page.locator('#connection-panel')).toBeVisible();
+    await expect(page.locator('#reconnect-now')).toBeHidden();
+    await expect(page.locator('#message')).toBeDisabled();
     await expect.poll(() => observer.state.players.get(sessionId)?.connected, { timeout: 12_000 }).toBe(false);
     await page.context().setOffline(false);
     await expect(page.locator('#status')).toContainText('连接已恢复');
+    await expect(page.locator('#connection-panel')).toBeHidden();
     await expect.poll(() => observer.state.players.get(sessionId)?.connected).toBe(true);
     expect(await page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.['room'].sessionId)).toBe(sessionId);
 
@@ -1845,6 +1864,9 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
     const replacementSessionId = replacement.sessionId;
     await expect.poll(() => observer.state.players.get(replacementSessionId)?.userId).toBe(profile.id);
     await expect(page.locator('#status')).toContainText('账号已在其他设备进入此空间，当前连接已下线');
+    await expect(page.locator('#connection-panel')).toBeVisible();
+    await expect(page.locator('#reconnect-now')).toBeVisible();
+    await expect(page.locator('#reload-page')).toBeVisible();
     await expect.poll(() => [...observer.state.players.values()].filter(player => player.userId === profile.id).length).toBe(1);
     expect(observer.state.players.has(sessionId)).toBe(false);
     expect(observer.state.players.get(replacement.sessionId)?.mapId).toBe('studio');
@@ -1852,6 +1874,10 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
     await page.waitForTimeout(1000);
     expect([...observer.state.players.values()].filter(player => player.userId === profile.id)).toHaveLength(1);
     await expect(page.locator('#status')).toContainText('账号已在其他设备进入此空间，当前连接已下线');
+    await page.locator('#reconnect-now').click();
+    await expect(page.locator('#status')).toContainText('已进入空间');
+    await expect(page.locator('#connection-panel')).toBeHidden();
+    expect(await sessionOf(page)).not.toBe(sessionId);
   } finally {
     await page.context().setOffline(false);
     await observer.leave(); await main.leave();

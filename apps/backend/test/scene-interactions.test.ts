@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import { matchMaker } from '@colyseus/core';
-import { ATTACHMENTS, DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, attachmentSourceKey, type SpaceProtocol } from '@virtual-workspace/shared';
+import { ATTACHMENTS, DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, attachmentSourceKey, occupancyResponseSchema, type SpaceProtocol } from '@virtual-workspace/shared';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'workspace-interactions-'));
@@ -85,6 +85,28 @@ async function until(predicate: () => boolean, timeout = 3000) {
 }
 const pause = () => delay(510);
 function roomFor(client: Room<SpaceProtocol>) { return harness.getRoomById<SpaceRoom>(client.roomId); }
+
+test('occupancy follows connected room players and quick travel uses only this Space maps', async () => {
+  const read = async () => occupancyResponseSchema.parse(await (await fetch(endpoint + '/api/occupancy')).json());
+  assert.deepEqual((await read()).spaces.map(space => [space.spaceId, space.online]), [['main', 0], ['other', 0]]);
+  const alice = await connect('Traveler');
+  const other = await connect('Other', 'other');
+  const room = roomFor(alice);
+  const player = room.state.players.get(alice.sessionId)!;
+  assert.equal(player.mapId, 'home', 'normal joins still use initialMap');
+  assert.deepEqual((await read()).spaces.map(space => [space.spaceId, space.online, space.maps.map(map => map.online)]),
+    [['main', 1, [1, 0]], ['other', 1, [0, 1]]]);
+  assert.equal((await alice.request('quickTravel', { mapId: 'missing' })).ok, false);
+  assert.equal(player.mapId, 'home');
+  assert.equal((await alice.request('quickTravel', { mapId: 'studio' })).ok, true);
+  assert.equal(player.mapId, 'studio');
+  assert.deepEqual((await read()).spaces[0]?.maps.map(map => map.online), [0, 1]);
+  await alice.leave();
+  await until(() => !room.state.players.has(alice.sessionId));
+  assert.equal((await read()).spaces[0]?.online, 0);
+  assert.equal((await read()).spaces[1]?.online, 1);
+  assert.equal(other.state.spaceId, 'other');
+});
 
 test('attachments replace without changing actions; unique claims are released and random sources stay available', async () => {
   const alice = await connect('Alice'); const bob = await connect('Bob');
@@ -291,7 +313,7 @@ test('invalid and orphaned selector claims restore targets without cancelling un
   }
 });
 
-test('private membership is peer controlled, survives exit, blocks physical admission and resets when inactive', async () => {
+test('private membership is peer controlled, ends on physical exit, blocks admission and resets after the last member leaves', async () => {
   const alice = await connect('Alice'); const bob = await connect('Bob'); const carol = await connect('Carol');
   const room = roomFor(alice); const a = room.state.players.get(alice.sessionId)!; const b = room.state.players.get(bob.sessionId)!;
   const access = room['interactions'].access;
@@ -308,9 +330,7 @@ test('private membership is peer controlled, survives exit, blocks physical admi
   assert.equal((await bob.request('activateAction', { action: 'sit' })).ok, false, 'action offsets cannot bypass locked border');
   assert.equal(access.canMove('home', bob.sessionId, { x: 176, y: 224.1 }, { x: 176, y: 231.6 }), true, 'outsiders straddling a new lock can retreat');
   assert.equal(access.canMove('home', bob.sessionId, { x: 176, y: 224.1 }, { x: 176, y: 224.05 }), false, 'straddling outsiders cannot move further inside');
-  // Existing members can exit and still control or re-enter the context.
-  a.x = 32; a.y = 32; access.tick();
-  assert.equal(a.privateAreaId, ''); assert.equal(area.members.has(alice.sessionId), true);
+  // A peer can invite another connected player while retaining physical membership.
   await pause();
   assert.equal((await alice.request('privateArea', { areaId: '30', operation: 'addMember', playerId: bob.sessionId })).ok, true);
   b.x = 176; b.y = 160; access.tick();
@@ -319,6 +339,11 @@ test('private membership is peer controlled, survives exit, blocks physical admi
   await pause();
   assert.equal((await bob.request('privateArea', { areaId: '30', operation: 'addMember', playerId: carol.sessionId })).ok, true);
   assert.equal((await carol.request('privateArea', { areaId: '30', operation: 'lock', locked: true })).ok, true);
+  a.x = 32; a.y = 32; access.tick();
+  assert.equal(a.privateAreaId, ''); assert.equal(area.members.has(alice.sessionId), false);
+  assert.equal((await alice.request('privateArea', { areaId: '30', operation: 'lock', locked: false })).ok, false,
+    'leaving removes the session permission immediately');
+  assert.equal(area.locked, true, 'another physical member keeps the area session alive');
   b.x = 32; b.y = 32;
   const now = Date.now(); access.tick(now); assert.equal(area.resetAt, now + PRIVATE_AREA_IDLE_MS);
   access.tick(now + PRIVATE_AREA_IDLE_MS);
@@ -406,15 +431,15 @@ test('Portal rejects locked destination and map change/drop prune temporary memb
   assert.equal(state.members.size, 0); assert.equal(state.locked, false);
 });
 
-test('same-map Portal preserves membership when transferring into a locked private area', async () => {
+test('same-map Portal cannot restore membership after a player physically leaves a locked area', async () => {
   const alice = await connect('Alice'); const bob = await connect('Bob'); const room = roomFor(alice);
   const a = room.state.players.get(alice.sessionId)!; const b = room.state.players.get(bob.sessionId)!;
   a.x = b.x = 176; a.y = b.y = 160; room['interactions'].access.tick();
   assert.equal((await alice.request('privateArea', { areaId: '30', operation: 'lock', locked: true })).ok, true);
   a.x = 280; a.y = 88; room['interactions'].access.tick(); await pause();
-  assert.equal((await alice.request('portal', { zoneId: 'local-door' })).ok, true);
+  assert.equal((await alice.request('portal', { zoneId: 'local-door' })).ok, false);
   const area = room.state.privateAreas.get('home')!.areas.get('30')!;
-  assert.equal(area.members.has(alice.sessionId), true); assert.equal(a.privateAreaId, '30'); assert.equal(area.locked, true);
+  assert.equal(area.members.has(alice.sessionId), false); assert.equal(a.privateAreaId, ''); assert.equal(area.locked, true);
 });
 
 test('map loader rejects missing atlas GIDs before publishing variant targets', () => {

@@ -146,6 +146,7 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .world-art.create { display: flex; align-items: center; justify-content: center; height: 92px; background: var(--cell); }
 .world-art.create svg { width: 40px; height: 40px; }
 .world-title { padding: 14px 14px 0; font-size: 22px; font-weight: 900; }
+.world-occupancy { padding: 4px 14px 0; font-size: 13px; font-weight: 700; color: var(--ink2); }
 .world-description { padding: 6px 14px 0; font-size: 13px; line-height: 1.5; color: var(--ink2); }
 .world-join { margin-top: auto; padding: 8px 14px 14px; font-size: 13px; font-weight: 700; color: var(--ink2); }
 .world-tile:hover:not(:disabled) .world-join { color: var(--ink); }
@@ -261,6 +262,16 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 #status { color: var(--ink2); overflow-wrap: anywhere; }
 #voice-status { color: var(--ink2); overflow-wrap: anywhere; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.connection-panel { position: absolute; z-index: 12; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 28px)); padding: 22px; display: flex; flex-direction: column; gap: 12px; text-align: center; box-shadow: var(--px-sm); }
+.connection-panel[hidden], .map-list-panel[hidden] { display: none; }
+.connection-panel h2 { font-size: 20px; }
+.connection-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.connection-actions[hidden] { display: none; }
+.map-list-panel { position: absolute; z-index: 8; top: 76px; right: 16px; width: min(300px, calc(100vw - 32px)); max-height: min(60vh, 500px); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.map-list-panel h2 { font-size: 18px; }
+.map-list { display: flex; flex-direction: column; gap: 8px; }
+.map-list-entry { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; }
+.map-list-entry span:last-child { color: var(--ink2); font-size: 12px; white-space: nowrap; }
 .session-id { display: none; } /* Kept in #status text for diagnostics only. */
 .zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
 .attachment-chip { position: absolute; z-index: 4; top: 122px; left: 16px; }
@@ -627,6 +638,7 @@ body.tool-open .map-dock { z-index: 22; left: 16px; top: 50%; bottom: auto; tran
   .map-topbar { top: 10px; left: 10px; right: 10px; flex-direction: column; }
   .map-topbar > .hud-chip { max-width: calc(100vw - 20px); flex-wrap: wrap; gap: 6px 10px; }
   .hud-buttons { justify-content: flex-start; }
+  .map-list-panel { top: 118px; right: 10px; }
   .zone-chip { top: 118px; left: 10px; }
   .attachment-chip { top: 164px; left: 10px; }
   .settings-panel { top: 118px; right: 10px; }
