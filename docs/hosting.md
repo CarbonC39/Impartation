@@ -4,7 +4,7 @@
 
 ## 部署方式与持久数据
 
-当前使用单后端进程和本地 SQLite。每个 Space 最多运行一个 Colyseus room；所有 Space 共用 `SPACE_MAX_CLIENTS`，默认 32。满员时拒绝新连接，重连保留中的席位也占用容量。增加后端副本不会让它们共享同一个 Space。
+当前使用单后端进程和本地 SQLite。每个 Space 最多运行一个 Colyseus room；所有 Space 共用 `SPACE_MAX_CLIENTS`，默认 32。满员时新账号排队，重连保留中的席位也占用容量。增加后端副本不会让它们共享同一个 Space。排队顺序也只保存在当前后端进程内，重启后需要重新排队。
 
 | 内容 | Docker 镜像中的默认位置 | 维护方式 |
 | --- | --- | --- |
@@ -178,6 +178,6 @@ curl -fsS -o /dev/null http://127.0.0.1:2567/space-covers/main.png
 | 修改地图后仍看到旧内容 | 后端是否已重启、页面是否刷新；是否误改了前端 `dist` 内的地图副本而非后端读取的地图集 |
 | 地图显示正常但走路/Portal 不对 | Tiled 语义对象层、碰撞矩形和命名出生点；视觉瓦片不会自动生成碰撞 |
 | 新 Space 没有旧留言 | 是否更换 Space ID；历史迁移留言在 `main`，不同 Space 的相同资源 ID 也不会共用留言 |
-| `Space is full` | 当前连接与重连保留席位，以及 `SPACE_MAX_CLIENTS`；该设置是每个 Space 的上限，全部 Space 共用同一个配置值 |
+| `Space is full` | 当前连接与重连保留席位，以及 `SPACE_MAX_CLIENTS`；排队入场凭证控制谁先领取空位，不增加房间容量 |
 
 地图目录、Space 元数据、地图资源和工具 URL 是浏览器可读取的配置。Space 列表本身不提供私有空间 ACL；站点门禁由托管者的代理提供，第三方服务保留自己的权限边界。

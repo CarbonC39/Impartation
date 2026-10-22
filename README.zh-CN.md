@@ -55,7 +55,7 @@ npm run dev
 
 自定义 Space 和地图请先看[托管指南](docs/hosting.md)，其中包括 registry 配置、Docker 地图与封面挂载、更新回滚和部署验收步骤。
 
-根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`REGISTRATION_MODE` 默认为 `open`；`code` 模式还需设置 `REGISTRATION_CODE`，`admin` 模式关闭公开注册。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后拒绝其他账号进入，直到有空位。同一账号在同一 Space 只允许一个连接，新进入会踢掉旧连接（包括等待重连的旧连接）；普通网络断线重连恢复原 session 和席位。可以同时进入不同 Space。Tiled 支持项目 Custom Classes 默认值、typed/object-reference properties、JSON Object Templates、atlas 瓦片动画和简单多边形区域/碰撞；地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
+根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`REGISTRATION_MODE` 默认为 `open`；`code` 模式还需设置 `REGISTRATION_CODE`，`admin` 模式关闭公开注册。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后新账号按进入顺序排队，界面显示前方人数。关闭排队界面会退出队列；浏览器失联 30 秒后排队资格过期。同一账号在同一 Space 只允许一个连接，新进入会踢掉旧连接（包括等待重连的旧连接）；普通网络断线重连恢复原 session 和席位。可以同时进入不同 Space。地图设置中可分别开启消息音效和浏览器通知，只在标签页隐藏时提醒其他人的聊天；浏览器通知需授权，不使用 service worker。Tiled 支持项目 Custom Classes 默认值、typed/object-reference properties、JSON Object Templates、atlas 瓦片动画和简单多边形区域/碰撞；地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
 
 整站 Docker Compose 部署示例使用独立的 [`compose.env.example`](compose.env.example)、[`compose.example.yml`](compose.example.yml) 和 [`Caddyfile`](Caddyfile)，启动命令、网络端口及外部工具边界见[托管指南](docs/hosting.md#compose-站点示例)。本地 `npm run dev` 仍使用根目录 `.env.example`。
 

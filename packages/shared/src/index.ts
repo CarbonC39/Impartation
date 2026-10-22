@@ -29,7 +29,7 @@ export const joinSchema = z.object({
   appearance: appearanceSchema.default(DEFAULT_APPEARANCE),
 });
 // Profile editing and joining have distinct contracts; only joining selects a Space.
-export const spaceJoinSchema = joinSchema.extend({ spaceId: spaceIdSchema });
+export const spaceJoinSchema = joinSchema.extend({ spaceId: spaceIdSchema, queueTicket: z.uuid().optional() });
 export type SpaceJoinOptions = z.infer<typeof spaceJoinSchema>;
 export const inputSchema = z.object({
   x: z.number().int().min(-1).max(1),

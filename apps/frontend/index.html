@@ -129,6 +129,11 @@
         </section>
 
         <section class="flow-screen map-screen" id="map-screen" aria-label="全屏世界地图" hidden>
+          <section id="space-queue-panel" class="panel space-queue-panel" aria-labelledby="space-queue-title" hidden>
+            <h2 id="space-queue-title">正在排队进入空间</h2>
+            <p id="space-queue-status" role="status" aria-live="polite">正在读取排队状态…</p>
+            <button id="space-queue-cancel" class="secondary" type="button">关闭排队并返回</button>
+          </section>
           <div class="map-topbar">
             <div class="hud-chip"><strong id="map-world-name">阳光大厅</strong><span id="status" role="status" aria-live="polite">连接中…</span><span id="voice-status" role="status" aria-live="polite">语音已关闭</span></div>
             <div class="hud-buttons">
@@ -149,6 +154,10 @@
             </div>
             <button id="names-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>显示昵称</button>
             <button id="typing-switch" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-track"></span>让别人看到我正在输入</button>
+            <h2>消息提醒</h2>
+            <button id="chat-sound-alert-switch" class="switch" type="button" role="switch" aria-checked="false"><span class="switch-track"></span>消息音效</button>
+            <button id="chat-notification-switch" class="switch" type="button" role="switch" aria-checked="false"><span class="switch-track"></span>浏览器通知</button>
+            <p id="chat-alert-status" class="hint" role="status" aria-live="polite">仅在页面隐藏时提醒其他人的新消息。</p>
             <div class="zoom-field"><div class="zoom-head"><label for="chat-opacity">聊天栏不透明度</label><output id="chat-opacity-value" for="chat-opacity">50%</output></div><div class="zoom-track"><input id="chat-opacity" class="range" type="range" min="0" max="100" step="1" /><div class="zoom-ticks" aria-hidden="true"><span style="--t: 0">0%</span><span style="--t: 0.5">50%</span><span style="--t: 1">100%</span></div></div></div>
             <h2>附近语音</h2>
             <label class="mic-field">麦克风<select id="voice-device"></select></label>
