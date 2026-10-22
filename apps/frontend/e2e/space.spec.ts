@@ -520,6 +520,94 @@ test('a room that resolves after pagehide is released instead of replacing the r
   }
 });
 
+test('closing the queue dialog cancels its ticket and returns to Space selection', async ({ page }) => {
+  await signInFresh(page, 'QueueCancel');
+  await openAvatarScreen(page);
+  const ticket = '11111111-1111-4111-8111-111111111111';
+  let cancelled = 0;
+  let matchmade = false;
+  await page.route('**/api/space-queue', route => route.fulfill({ json: { ticket, ahead: 2, ready: false } }));
+  await page.route(`**/api/space-queue/main/${ticket}`, route => {
+    if (route.request().method() === 'DELETE') { cancelled++; return route.fulfill({ status: 204 }); }
+    return route.fulfill({ json: { ticket, ahead: 2, ready: false } });
+  });
+  await page.route('**/matchmake/joinOrCreate/space', route => { matchmade = true; return route.continue(); });
+  await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#space-queue-panel')).toBeVisible();
+  await expect(page.locator('#space-queue-panel')).toHaveAttribute('open', '');
+  await expect(page.locator('#space-queue-status')).toHaveText('前面还有 2 人');
+  await page.locator('#space-queue-cancel').click();
+  await expect(page.locator('#space-queue-panel')).toBeHidden();
+  await expect(page.locator('#login-screen')).toBeVisible();
+  await expect(page.locator('#world-list')).toBeVisible();
+  await expect.poll(() => cancelled).toBe(1);
+  await openAvatarScreen(page);
+  await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#space-queue-panel')).toHaveAttribute('open', '');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#login-screen')).toBeVisible();
+  await expect.poll(() => cancelled).toBe(2);
+  expect(matchmade).toBe(false);
+});
+
+test('chat alerts cover hidden tabs and unfocused windows but skip focused windows and own messages', async ({ page, browser }) => {
+  await page.addInitScript(() => {
+    const state = { hidden: false, focused: true, requests: 0, sounds: 0, messages: [] as string[] };
+    Object.defineProperty(window, '__chatAlertTest', { value: state });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => state.hidden });
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => state.focused });
+    Object.defineProperty(window, 'Notification', { configurable: true, value: class {
+      static permission = 'default';
+      static requestPermission() { state.requests++; this.permission = 'granted'; return Promise.resolve('granted'); }
+      constructor(_title: string, options?: { body?: string }) { state.messages.push(options?.body ?? ''); }
+    } });
+  });
+  await enter(page, 'AlertReceiver');
+  await page.evaluate(() => {
+    const state = (window as unknown as { __chatAlertTest: { sounds: number } }).__chatAlertTest;
+    Object.defineProperty(window, 'AudioContext', { configurable: true, value: class {
+      state = 'running'; currentTime = 0; destination = {};
+      resume() { return Promise.resolve(); }
+      createOscillator() { return { type: 'sine', frequency: { value: 0 }, connect() {}, start() { state.sounds++; }, stop() {} }; }
+      createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    } });
+  });
+  const sender = await browser.newPage();
+  try {
+    await enter(sender, 'AlertSender');
+    await page.locator('#settings-toggle').click();
+    await page.locator('#chat-notification-switch').click();
+    await expect(page.locator('#chat-notification-switch')).toHaveAttribute('aria-checked', 'true');
+    await page.locator('#chat-sound-alert-switch').click();
+    await expect(page.locator('#chat-sound-alert-switch')).toHaveAttribute('aria-checked', 'true');
+    await page.evaluate(() => { (window as unknown as { __chatAlertTest: { hidden: boolean } }).__chatAlertTest.hidden = true; });
+    await sender.locator('#message').fill('后台新消息');
+    await sender.locator('#send').click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __chatAlertTest: { messages: string[] } }).__chatAlertTest.messages)).toEqual(['后台新消息']);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __chatAlertTest: { sounds: number } }).__chatAlertTest.sounds)).toBe(1);
+    await page.locator('#message').fill('自己的消息');
+    await page.locator('#send').click();
+    await expect(page.locator('#messages')).toContainText('自己的消息');
+    await page.evaluate(() => {
+      const state = (window as unknown as { __chatAlertTest: { hidden: boolean; focused: boolean } }).__chatAlertTest;
+      state.hidden = false; state.focused = false;
+    });
+    await sender.waitForTimeout(550);
+    await sender.locator('#message').fill('失焦新消息');
+    await sender.locator('#send').click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __chatAlertTest: { messages: string[] } }).__chatAlertTest.messages)).toEqual(['后台新消息', '失焦新消息']);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __chatAlertTest: { sounds: number } }).__chatAlertTest.sounds)).toBe(2);
+    await page.evaluate(() => { (window as unknown as { __chatAlertTest: { focused: boolean } }).__chatAlertTest.focused = true; });
+    await sender.waitForTimeout(550);
+    await sender.locator('#message').fill('前台新消息');
+    await sender.locator('#send').click();
+    await expect(page.locator('#messages')).toContainText('前台新消息');
+    expect(await page.evaluate(() => (window as unknown as { __chatAlertTest: { requests: number; sounds: number; messages: string[] } }).__chatAlertTest)).toMatchObject({ requests: 1, sounds: 2, messages: ['后台新消息', '失焦新消息'] });
+  } finally { await sender.close(); }
+});
+
 test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
   // Synthetic test pixels exercise all eight rows while the supplied artwork is walk-only.
   const sheet = await page.evaluate(() => {

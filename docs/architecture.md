@@ -86,7 +86,9 @@ sequenceDiagram
 
 界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
 
-Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝其他账号加入，不创建额外实例；同账号可替换自己的席位。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 将席位转移给新连接，关闭旧连接并取消旧重连资格。普通断线重连保留原 session ID 和玩家状态，不重复占用席位；重连期间仍占用的席位可被新连接替换。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
+Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时其他账号按服务端顺序排队，不创建额外实例；同账号可替换自己的席位。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 将席位转移给新连接，关闭旧连接并取消旧重连资格。普通断线重连保留原 session ID 和玩家状态，不重复占用席位；重连期间仍占用的席位可被新连接替换。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
+
+排队接口为 `POST /api/space-queue`（JSON `{spaceId}`）、`GET /api/space-queue/:spaceId/:ticket` 和 `DELETE /api/space-queue/:spaceId/:ticket`。POST/DELETE 校验来源，全部接口验证 Better Auth session；返回的 `ahead` 是当前队列中排在前面的账号数。轮到用户时 `ready=true`，客户端把 `ticket` 作为 `spaceJoinSchema.queueTicket` 提交。服务端按账号与登录 session 验证凭证；一个 Space 同时只发放一个待入场凭证，20 秒未入场则轮到下一人。等待中的资格需要轮询续期，30 秒未轮询会过期；关闭排队弹窗（含 Esc）主动 DELETE 并返回 Space 选择页。排队状态保存在单进程内，重启后需重新排队。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 
@@ -275,7 +277,7 @@ iframe sandbox 默认仅开放 `allow-scripts allow-forms allow-popups`，referr
 
 地图 registry 的 `maps` 保存可复用的地图定义；`spaces` 是有序数组，提供开始页显示顺序及 `{id, name, description?, cover, initialMap, maps}` 元数据。Space ID 匹配 `/^[a-z0-9][a-z0-9_-]*$/` 且应保持稳定；名称用于展示，cover 是静态图片路径。`GET /api/world` 返回 `{maps, spaces}`，其中 maps 是规范化地图。启动时验证每个 Space 的 `initialMap` 与地图列表，并要求 Portal 目标留在该 Space 地图集合中。
 
-客户端使用 `spaceJoinSchema`（join schema 加必填 `spaceId`）加入；`PATCH /api/me` 仍只更新全局身份资料，不涉及 Space。Room state 发布 `spaceId`。单进程每个 Space 最多有一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝加入，不创建第二个实例。空间列表元数据、地图目录和工具配置由启动配置提供。玩家、聊天、语音、地图对象、私密区域与番茄钟状态按 Space room 隔离；同一 Space room 内跨地图共享其对应状态。空房仍按既有 autoDispose 规则销毁。
+客户端使用 `spaceJoinSchema`（join schema 加必填 `spaceId`）加入；`PATCH /api/me` 仍只更新全局身份资料，不涉及 Space。Room state 发布 `spaceId`。单进程每个 Space 最多有一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时新账号排队，不创建第二个实例。空间列表元数据、地图目录和工具配置由启动配置提供。玩家、聊天、语音、地图对象、私密区域与番茄钟状态按 Space room 隔离；同一 Space room 内跨地图共享其对应状态。空房仍按既有 autoDispose 规则销毁。
 
 Better Auth 负责用户名/密码凭据、session cookie 和密码重置 token，未打包进浏览器。session 有效期为 30 天，cookie cache 关闭。注册策略为公开、注册码或仅管理员创建。密码变更与重置成功后撤销该用户全部 session；管理员生成重置链接时不提前撤销 session。账号冻结会撤销 session 并使在线连接下线；单独 kick 只排队断开当前连接，不阻止用户重新登录。
 

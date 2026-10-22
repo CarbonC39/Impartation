@@ -11,6 +11,7 @@ import { activeProfile, identityFromHeaders } from './identity.js';
 import { issueVoiceCredentials } from './voice-credentials.js';
 import { worldRegistry, renderMaps, worldAssets } from './world.js';
 import { loadWebTools } from './interactions/web/config.js';
+import { spaceQueueRoutes } from './space-queue-routes.js';
 
 const webTools = loadWebTools(config.EXTERNAL_TOOLS, worldRegistry.maps.map(map => map.world));
 
@@ -32,6 +33,7 @@ export const server = defineServer({
       return handleAuth(req, res);
     });
     app.use('/api', express.json({ limit: '16kb', strict: false }));
+    app.use('/api', spaceQueueRoutes);
     app.get('/api/world', (_req, res) => { res.json(worldRegistry); });
     app.get('/api/voice-config', (_req, res) => { res.json(voiceConfig); });
     app.get('/api/voice-credentials', async (req, res) => {

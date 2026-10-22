@@ -14,6 +14,7 @@ import { config, voiceConfig } from '../config.js';
 import { cancelAction } from '../interactions/action/handler.js';
 import { VoiceSignaling } from './VoiceSignaling.js';
 import { clearPlayerAttachment } from '../interactions/attachment/handler.js';
+import { spaceQueue } from '../space-queue.js';
 
 export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; metadata: { spaceId: string } }> {
   state = new SpaceState();
@@ -53,12 +54,14 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     if (!(request instanceof Request) || new URL(request.url).pathname !== '/matchmake/joinOrCreate/space') return true;
     const parsed = spaceJoinSchema.parse(options);
     const room = SpaceRoom.instances.get(parsed.spaceId);
-    if (!room?.hasReachedMaxClients()) return true;
+    if (!room?.hasReachedMaxClients() && !spaceQueue.hasEntries(parsed.spaceId)) return true;
     SpaceRoom.checkOrigin(context);
     const identity = await identityFromHeaders(context.headers);
     if (!identity) throw new ServerError(401, 'A valid account session is required');
-    const previous = room.connectedUsers.get(identity.userId);
-    if (!previous) return true;
+    const previous = room?.connectedUsers.get(identity.userId);
+    if (!spaceQueue.mayJoin(parsed.spaceId, parsed.queueTicket, identity.userId, identity.sessionId,
+      Boolean(previous), SpaceRoom.isAvailable(parsed.spaceId))) throw new ServerError(409, 'Wait for your queue turn');
+    if (!room?.hasReachedMaxClients() || !previous) return true;
     ensureProfile(identity.userId, parsed);
     const releaseDisposal = room.holdDisposal();
     try {
@@ -79,6 +82,15 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     if (origin && !config.IDENTITY_TRUSTED_ORIGINS.split(',').map(value => value.trim()).includes(origin)) {
       throw new Error('Untrusted connection origin');
     }
+  }
+
+  static isAvailable(spaceId: string) {
+    const room = SpaceRoom.instances.get(spaceId);
+    return !room || !room.hasReachedMaxClients();
+  }
+
+  static ownsSeat(spaceId: string, userId: string) {
+    return SpaceRoom.instances.get(spaceId)?.connectedUsers.has(userId) ?? false;
   }
 
   private holdDisposal() {
@@ -280,10 +292,14 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     if (parsed.spaceId !== this.state.spaceId) throw new ServerError(403, 'Space does not match this room');
     const identity = await identityFromHeaders(context.headers);
     if (!identity) throw new Error('A valid account session is required');
+    if (!spaceQueue.mayJoin(parsed.spaceId, parsed.queueTicket, identity.userId, identity.sessionId,
+      this.connectedUsers.has(identity.userId), SpaceRoom.isAvailable(parsed.spaceId))) {
+      throw new ServerError(409, 'Wait for your queue turn');
+    }
     ensureProfile(identity.userId, parsed);
     return identity;
   }
-  async onJoin(client: SpaceClient, _options: SpaceJoinOptions, auth: Identity) {
+  async onJoin(client: SpaceClient, options: SpaceJoinOptions, auth: Identity) {
     this.pendingAdmissions.set(auth.userId, client.sessionId);
     try {
       if (!await activeProfile(auth)) throw new ServerError(401, 'Account session expired');
@@ -311,6 +327,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     this.joinedAt.set(client.sessionId, Date.now());
     this.state.players.set(client.sessionId, player);
     this.interactions.access.syncPlayer(client.sessionId, player);
+    spaceQueue.joined(this.state.spaceId, options.queueTicket, auth.userId, SpaceRoom.isAvailable(this.state.spaceId));
   }
   onDrop(client: SpaceClient, code: number) {
     this.voice.clear(client.sessionId);
@@ -376,6 +393,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     this.lastChat.delete(sessionId);
     this.typingUntil.delete(sessionId);
     this.lastInteraction.delete(sessionId);
+    spaceQueue.seatChanged(this.state.spaceId, SpaceRoom.isAvailable(this.state.spaceId));
   }
   onDispose() {
     if (SpaceRoom.instances.get(this.state.spaceId) === this) SpaceRoom.instances.delete(this.state.spaceId);

@@ -989,6 +989,53 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
       oldClient.ref.terminate();
     }
   });
+  test('full Space queues accounts in order, releases closed queues, and binds admission to the login session', async () => {
+    const ownerCookie = await createIdentity();
+    const bobCookie = await createIdentity();
+    const charlieCookie = await createIdentity();
+    const bobOtherLogin = await signIn(bobCookie);
+    const owner = await join('Owner', 'mint', ownerCookie);
+    const authoritative = harness.getRoomById<SpaceRoom>(owner.roomId);
+    authoritative.maxClients = 1;
+    const options = { name: 'Visitor', avatar: 'mint' as const, spaceId: 'main' };
+    const enqueue = async (cookie: string) => {
+      const response = await fetch(endpoint + '/api/space-queue', { method: 'POST',
+        headers: { Cookie: cookie, Origin: endpoint, 'Content-Type': 'application/json' }, body: JSON.stringify({ spaceId: 'main' }) });
+      assert.equal(response.status, 200, await response.clone().text());
+      return await response.json() as { ticket: string; ahead: number; ready: boolean };
+    };
+    const position = async (cookie: string, ticket: string) => {
+      const response = await fetch(`${endpoint}/api/space-queue/main/${ticket}`, { headers: { Cookie: cookie } });
+      assert.equal(response.status, 200, await response.clone().text());
+      return await response.json() as { ticket: string; ahead: number; ready: boolean };
+    };
+    const cancel = async (cookie: string, ticket: string) => {
+      const response = await fetch(`${endpoint}/api/space-queue/main/${ticket}`, { method: 'DELETE', headers: { Cookie: cookie, Origin: endpoint } });
+      assert.equal(response.status, 204);
+    };
+    const bob = await enqueue(bobCookie);
+    const charlie = await enqueue(charlieCookie);
+    assert.deepEqual([bob.ahead, bob.ready, charlie.ahead, charlie.ready], [0, false, 1, false]);
+    await assert.rejects(sdk(charlieCookie).joinOrCreate('space', options), /Wait for your queue turn/);
+    await assert.rejects(sdk(bobOtherLogin).joinOrCreate('space', { ...options, queueTicket: bob.ticket }), /Wait for your queue turn/);
+    await cancel(bobCookie, bob.ticket);
+    assert.equal((await position(charlieCookie, charlie.ticket)).ahead, 0);
+    assert.equal((await fetch(`${endpoint}/api/space-queue/main/${bob.ticket}`, { headers: { Cookie: bobCookie } })).status, 410);
+    await owner.leave();
+    await until(() => authoritative.state.players.size === 0);
+    let ready = false;
+    for (let attempt = 0; attempt < 30 && !ready; attempt++) {
+      ready = (await position(charlieCookie, charlie.ticket)).ready;
+      if (!ready) await delay(50);
+    }
+    assert.equal(ready, true);
+    const admitted = await sdk(charlieCookie).joinOrCreate('space', { ...options, queueTicket: charlie.ticket });
+    connections.push(admitted);
+    admitted.onMessage('chat', () => {}); admitted.onError(() => {});
+    await admitted.waitForInitialState();
+    assert.equal(admitted.state.players.size, 1);
+    assert.equal((await fetch(`${endpoint}/api/space-queue/main/${charlie.ticket}`, { headers: { Cookie: charlieCookie } })).status, 410);
+  });
   test('a reconnect timeout releases the player and rejects the expired token', async () => {
     const cookie = await createIdentity();
     const alice = await join('Alice', 'mint', cookie);
