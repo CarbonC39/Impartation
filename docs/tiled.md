@@ -32,7 +32,7 @@ Tiled 的 `object` property 保存地图内对象的数值 ID。解析器允许 
 
 上例的 `/covers/main.png` 需要另外发布到前端静态目录，例如构建前放入 `assets/covers/main.png`。地图 API 不会自动托管 `cover`；只改 `MAP_REGISTRY_PATH` 不会更新前端静态资源。共享地图里的 Portal 也必须对每个引用它的 Space 都有效，不能仅检查初始 Space。
 
-客户端从 `GET /api/world` 读取 `{ maps, spaces }`：`spaces` 提供列表元数据，`maps` 是规范化地图目录；再按地图 URL 请求对应渲染 JSON 和显式资源。服务端以源 `.tmj` 提取权威语义。单进程中每个 Space 最多有一个 live Colyseus room；`spaceJoinSchema` 要求客户端提交 `spaceId`，服务端按它匹配该 Space。满员时明确拒绝加入，不会再创建第二个 room。`SPACE_MAX_CLIENTS` 对所有 Space 共用，默认 32。
+客户端从 `GET /api/world` 读取 `{ maps, spaces }`：`spaces` 提供列表元数据，`maps` 是规范化地图目录；再按地图 URL 请求对应渲染 JSON 和显式资源。服务端以源 `.tmj` 提取权威语义。单进程中每个 Space 最多有一个 live Colyseus room；`spaceJoinSchema` 要求客户端提交 `spaceId`，服务端按它匹配该 Space。满员时新账号排队等待席位，不会再创建第二个 room。`SPACE_MAX_CLIENTS` 对所有 Space 共用，默认 32。
 
 ## 交互试验场
 

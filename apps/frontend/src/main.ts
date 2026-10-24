@@ -14,6 +14,8 @@ import { mountAccounts } from './accounts';
 import './style.css';
 import { createCharacterActions, type CharacterActions } from './interactions/actions';
 import { readPreference, writePreference } from './preferences';
+import { ChatAlerts } from './chatAlerts';
+import { SpaceQueueClient } from './spaceQueue';
 import { mountThemePanel } from './theme';
 import { Wardrobe } from './wardrobe';
 import { mountOutfitSlots } from './outfitSlots';
@@ -101,6 +103,19 @@ let renderedMap = '';
 let renderingMap = '';
 let renderGeneration = 0;
 let joinGeneration = 0;
+let queueAttempt: SpaceQueueClient | undefined;
+let pendingJoinStream: MediaStream | undefined;
+const queuePanel = element<HTMLDialogElement>('space-queue-panel');
+const queueStatus = element('space-queue-status');
+function closeQueueAndReturn() {
+  joinGeneration++;
+  queueAttempt?.cancel();
+  cleanup();
+  setConnectionState('disconnected', '已取消排队，可以重新进入');
+  showScreen('login-screen');
+}
+element<HTMLButtonElement>('space-queue-cancel').addEventListener('click', closeQueueAndReturn);
+queuePanel.addEventListener('cancel', event => { event.preventDefault(); closeQueueAndReturn(); });
 let pageLeaving = false;
 let selectedWorld = '阳光大厅';
 let leavingIntentionally = false;
@@ -117,6 +132,8 @@ function mergeAppearanceDraft(draft: JoinOptions['appearance'], previous: Profil
 }
 
 const chatCard = element('chat-card');
+const chatAlerts = new ChatAlerts(element<HTMLButtonElement>('chat-sound-alert-switch'),
+  element<HTMLButtonElement>('chat-notification-switch'), element('chat-alert-status'));
 const chatToggle = element<HTMLButtonElement>('chat-toggle');
 const chatUnread = element('chat-unread');
 let unread = 0;
@@ -466,6 +483,11 @@ function setConnectionState(value: ConnectionState, message: string, notify = fa
 function cleanup() {
   stopConnectionWatch?.();
   stopConnectionWatch = undefined;
+  queueAttempt?.cancel();
+  queueAttempt = undefined;
+  if (queuePanel.open) queuePanel.close();
+  pendingJoinStream?.getTracks().forEach(track => track.stop());
+  pendingJoinStream = undefined;
   if (worldWardrobe) { restoreWardrobeNavigation(); showScreen('login-screen'); }
   touchPad.clear();
   layoutEditor.close();
@@ -518,14 +540,18 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     plan.stream?.getTracks().forEach(track => track.stop());
     return;
   }
-  showScreen('map-screen');
+  pendingJoinStream = plan.stream;
   join.disabled = true;
   joinFeedback.textContent = '';
   leavingIntentionally = false;
   setConnectionState('connecting', retry ? '正在重新连接空间…' : '连接中…', retry);
   const generation = ++joinGeneration;
   const isCurrentJoin = () => generation === joinGeneration && !pageLeaving;
-  const stopPlannedStream = () => { plan.stream?.getTracks().forEach(track => track.stop()); plan.stream = undefined; };
+  const stopPlannedStream = () => {
+    if (pendingJoinStream === plan.stream) pendingJoinStream = undefined;
+    plan.stream?.getTracks().forEach(track => track.stop());
+    plan.stream = undefined;
+  };
   try {
     await identityReady;
     if (!isCurrentJoin()) { stopPlannedStream(); return; }
@@ -537,12 +563,28 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     if (!space || !spaceDirectory) throw new Error('请先选择空间');
     worldRegistry = { initialMap: space.initialMap, maps: spaceDirectory.maps.filter(map => space.maps.includes(map.id)) };
     const roomOptions = spaceJoinSchema.parse({ ...options, spaceId: space.id });
-    const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, roomOptions);
+    joinFeedback.textContent = '正在检查空间人数…';
+    const attempt = new SpaceQueueClient(space.id, ahead => {
+      if (!isCurrentJoin()) return;
+      if (!queuePanel.open) queuePanel.showModal();
+      joinFeedback.textContent = '';
+      queueStatus.textContent = ahead === 0 ? '前面没有其他人，等待空位…' : `前面还有 ${ahead} 人`;
+    });
+    queueAttempt = attempt;
+    const queueTicket = await attempt.wait();
+    if (!isCurrentJoin()) { stopPlannedStream(); attempt.cancel(); return; }
+    if (queuePanel.open) queuePanel.close();
+    joinFeedback.textContent = '';
+    showScreen('map-screen');
+    status.textContent = '轮到你了，正在连接…';
+    const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, { ...roomOptions, ...(queueTicket ? { queueTicket } : {}) });
     let joinedRoom: Room<SpaceProtocol>;
     try { joinedRoom = await withTimeout(pendingRoom, 15_000, '连接空间超时，请检查服务是否启动后重试'); }
     catch (error) { void pendingRoom.then(leaveConnection).catch(() => {}); throw error; }
     if (!isCurrentJoin()) { stopPlannedStream(); leaveConnection(joinedRoom); return; }
     room = joinedRoom;
+    attempt.cancel();
+    queueAttempt = undefined;
     joinedRoom.reconnection.minUptime = 0;
     joinedRoom.reconnection.maxEnqueuedMessages = 0;
     // These callbacks must exist before waiting for state or loading map assets.
@@ -613,6 +655,7 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     };
     room.onMessage('chat', message => {
       if (room !== nativeRoom) return;
+      chatAlerts.notify(message.sessionId, room.sessionId, message.name, message.text);
       appendChat(`${message.privateAreaId ? '［房间］' : ''}${message.name}：${message.text}`, message.privateAreaId ? 'chat-private' : undefined);
       if (chatCard.classList.contains('collapsed')) setUnread(unread + 1);
       scene?.showBubble(message.sessionId, message.text);
@@ -654,6 +697,7 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     if (plan.enabled && connected) {
       const stream = plan.stream;
       plan.stream = undefined;
+      pendingJoinStream = undefined;
       void voice.enable({ ...(stream ? { stream } : {}), muted: plan.muted });
     } else stopPlannedStream();
   } catch (error) {

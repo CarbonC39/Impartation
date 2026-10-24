@@ -244,6 +244,10 @@ body.avatar-open #theme-toggle { justify-self: end; }
 body.map-open .masthead, body.map-open #theme-panel { display: none !important; }
 body.map-open #app-shell { max-width: none; padding: 0; }
 .map-screen { position: fixed; inset: 0; overflow: hidden; background: #2b423e; }
+.space-queue-panel { width: min(420px, calc(100vw - 32px)); border: 0; padding: 24px; color: var(--ink); text-align: center; }
+.space-queue-panel::backdrop { background: #2a223588; }
+.space-queue-panel[open] { display: flex; flex-direction: column; gap: 16px; }
+.space-queue-panel h2 { font-size: 22px; }
 .map-screen { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .map-screen :is(input, textarea, select, #messages, .feature-panel) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 #map-layout, .map-stage, #game { position: absolute; inset: 0; }
@@ -261,7 +265,7 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
 .attachment-chip { position: absolute; z-index: 4; top: 122px; left: 16px; }
 .attachment-chip button { padding: 4px 8px; font-size: 12px; }
-.settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; max-height: calc(100% - 92px); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .settings-panel h2 { font-size: 16px; }
 .zoom-field { display: flex; flex-direction: column; gap: 6px; }
 .zoom-head { display: flex; justify-content: space-between; align-items: baseline; }
