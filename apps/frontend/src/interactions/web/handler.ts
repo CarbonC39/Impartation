@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { webToolsSchema, type SpaceProtocol, type WebTool, type Zone } from '@virtual-workspace/shared';
+import { webToolsSchema, type SpaceProtocol, type WebTool, type Zone } from '@impartation/shared';
 import { zoneLabels } from '../labels';
 import { element } from '../panel';
 import { createPresentations, type PresentationRegistry } from './presentations';

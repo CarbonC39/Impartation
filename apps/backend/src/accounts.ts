@@ -1,6 +1,6 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { DEFAULT_APPEARANCE } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE } from '@impartation/shared';
 import { config } from './config.js';
 import { db } from './db.js';
 import { auth, ensureProfile, identityEvents, passwordResetLink, profile, revokeUserSessions, setRole } from './identity.js';

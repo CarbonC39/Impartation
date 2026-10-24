@@ -1,11 +1,12 @@
 import type { Room } from '@colyseus/sdk';
-import { canHear, voiceConfigSchema, voiceCredentialsSchema, type SpaceProtocol, type VoiceConfig, type VoiceCredentials, type VoiceIceCandidate,
-  type VoiceSignal, type VoiceOffer, type VoiceAnswer, type VoiceEnd } from '@virtual-workspace/shared';
+import { canConnectVoice, canHear, voiceConfigSchema, voiceCredentialsSchema, type SpaceProtocol, type VoiceConfig, type VoiceCredentials, type VoiceIceCandidate,
+  type VoiceSignal, type VoiceOffer, type VoiceAnswer, type VoiceEnd } from '@impartation/shared';
 import { audioContext, captureErrorMessage, LevelMeter, microphoneUnavailableReason, openMicrophone,
   setPreferredMicrophone, SPEAKING_HOLD_MS, SPEAKING_LEVEL, streamDevice } from './microphone';
 
 type Peer = { id: string; connectionId: string; connection: RTCPeerConnection; audio: HTMLAudioElement;
-  candidates: RTCIceCandidateInit[]; localCandidates: RTCIceCandidateInit[]; ready: boolean };
+  sender: RTCRtpSender; candidates: RTCIceCandidateInit[]; localCandidates: RTCIceCandidateInit[]; ready: boolean;
+  trackUpdate: Promise<void> };
 
 function voiceCapabilityError(): string | undefined {
   const microphone = microphoneUnavailableReason();
@@ -29,6 +30,7 @@ export class ProximityVoice {
   private muted = false;
   private deafened = false;
   private disposed = false;
+  private connected = true;
   private error = '';
   private unsubscribers: (() => void)[] = [];
   private meters = new Map<string, LevelMeter>();
@@ -45,13 +47,16 @@ export class ProximityVoice {
       room.onMessage('voiceIceCandidate', signal => { void this.onCandidate(signal); }),
       room.onMessage('voiceEnd', signal => this.onEnd(signal)),
     );
+    const refreshPeers = () => this.scan();
+    room.onStateChange(refreshPeers);
+    this.unsubscribers.push(() => room.onStateChange.remove(refreshPeers));
     this.render();
   }
 
   private render() {
     const enabled = Boolean(this.stream);
     const live = enabled && !this.muted;
-    this.micButton.disabled = this.disposed || !this.room.connection.isOpen;
+    this.micButton.disabled = this.disposed || !this.connected || !this.room.connection.isOpen;
     this.micButton.setAttribute('aria-pressed', String(live));
     const micLabel = live ? '关闭麦克风' : '开启麦克风';
     this.micButton.setAttribute('aria-label', micLabel);
@@ -64,6 +69,7 @@ export class ProximityVoice {
 
   /** Mic button: starts voice on first use, then switches the microphone on and off while staying connected. */
   async toggleMic() {
+    if (!this.connected) return;
     if (this.stream) { this.toggleMute(); return; }
     await this.enable();
   }
@@ -72,8 +78,8 @@ export class ProximityVoice {
   setDeafened(deafened: boolean) {
     this.deafened = deafened;
     for (const peer of this.peers.values()) {
-      peer.audio.muted = deafened;
-      if (!deafened) void peer.audio.play().catch(() => {});
+      this.updateVolume(peer);
+      if (!peer.audio.muted) void peer.audio.play().catch(() => {});
     }
     this.render();
   }
@@ -83,7 +89,7 @@ export class ProximityVoice {
    * does not prompt twice; otherwise the preferred device is opened here.
    */
   async enable(options: { stream?: MediaStream; muted?: boolean } = {}) {
-    if (this.stream || this.disposed || !this.room.connection.isOpen) { options.stream?.getTracks().forEach(track => track.stop()); return; }
+    if (this.stream || this.disposed || !this.connected || !this.room.connection.isOpen) { options.stream?.getTracks().forEach(track => track.stop()); return; }
     const capabilityError = voiceCapabilityError();
     if (capabilityError) { options.stream?.getTracks().forEach(track => track.stop()); this.error = capabilityError; this.render(); return; }
     const generation = ++this.generation;
@@ -131,13 +137,9 @@ export class ProximityVoice {
       const next = await openMicrophone(deviceId);
       if (generation !== this.generation || !this.stream) { next.getTracks().forEach(track => track.stop()); return; }
       const previous = this.stream;
-      const track = next.getAudioTracks()[0];
-      for (const peer of this.peers.values()) {
-        for (const sender of peer.connection.getSenders()) {
-          if (sender.track?.kind === 'audio') await sender.replaceTrack(track ?? null).catch(() => {});
-        }
-      }
       this.useStream(next);
+      for (const peer of this.peers.values()) this.updateOutgoingTrack(peer);
+      await Promise.all([...this.peers.values()].map(peer => peer.trackUpdate));
       previous.getTracks().forEach(item => item.stop());
       this.error = '';
     } catch (error) { this.error = captureErrorMessage(error); }
@@ -149,6 +151,10 @@ export class ProximityVoice {
   /** True while a player audible to this browser (or this browser itself, unmuted) is talking. */
   isSpeaking(sessionId: string): boolean {
     if (sessionId === this.room.sessionId && (!this.stream || this.muted)) return false;
+    if (sessionId !== this.room.sessionId) {
+      const peer = this.peers.get(sessionId);
+      if (!peer || peer.audio.muted || peer.audio.volume === 0) return false;
+    }
     return performance.now() - (this.loudAt.get(sessionId) ?? -Infinity) < SPEAKING_HOLD_MS;
   }
 
@@ -177,11 +183,12 @@ export class ProximityVoice {
     if (!this.stream) return;
     this.muted = !this.muted;
     this.stream.getAudioTracks().forEach(track => { track.enabled = !this.muted; });
-    for (const peer of this.peers.values()) void peer.audio.play().catch(() => {});
+    for (const peer of this.peers.values()) if (!peer.audio.muted) void peer.audio.play().catch(() => {});
     this.render();
   }
 
   setConnected(connected: boolean) {
+    this.connected = connected;
     if (!connected) { this.disable(); this.error = ''; }
     this.render();
   }
@@ -204,7 +211,7 @@ export class ProximityVoice {
     this.stream = undefined;
     this.setMeter(this.room.sessionId);
     this.muted = false;
-    if (this.room.connection.isOpen) this.room.send('voiceEnabled', { enabled: false });
+    if (this.connected && this.room.connection.isOpen) this.room.send('voiceEnabled', { enabled: false });
     this.render();
   }
 
@@ -217,19 +224,20 @@ export class ProximityVoice {
   }
 
   private scan() {
-    if (!this.stream || !this.config || !this.room.connection.isOpen) return;
+    if (!this.connected || !this.stream || !this.config || !this.room.connection.isOpen) return;
     const own = this.room.state.players.get(this.room.sessionId);
     if (!own?.connected) return;
     for (const [id, peer] of this.peers) {
       const other = this.room.state.players.get(id);
-      if (!canHear(own, other, this.config.disconnectRadius)) { this.closePeer(id, true); continue; }
+      if (!canConnectVoice(own, other, this.config.disconnectRadius)) { this.closePeer(id, true); continue; }
       this.updateVolume(peer);
+      this.updateOutgoingTrack(peer);
     }
     const available = this.config.maxPeers - this.peers.size - this.pendingPeers.size;
     if (available <= 0) { this.render(); return; }
     const nearby = [...this.room.state.players]
       .filter(([id, other]) => id !== this.room.sessionId && id > this.room.sessionId &&
-        !this.peers.has(id) && !this.pendingPeers.has(id) && canHear(own, other, this.config!.connectRadius) &&
+        !this.peers.has(id) && !this.pendingPeers.has(id) && canConnectVoice(own, other, this.config!.connectRadius) &&
         Date.now() > (this.cooldown.get(id) ?? 0))
       .sort((a, b) => Math.hypot(own.x - a[1].x, own.y - a[1].y) - Math.hypot(own.x - b[1].x, own.y - b[1].y));
     for (const [id] of nearby.slice(0, available)) void this.startOffer(id);
@@ -245,10 +253,16 @@ export class ProximityVoice {
     audio.dataset.voicePeer = id;
     audio.style.display = 'none';
     document.body.append(audio);
-    const peer: Peer = { id, connectionId, connection, audio, candidates: [], localCandidates: [], ready: false };
+    const track = this.stream!.getAudioTracks()[0];
+    const own = this.room.state.players.get(this.room.sessionId);
+    const other = this.room.state.players.get(id);
+    const maySend = Boolean(track && own && other && this.config && canHear(own, other, this.config.disconnectRadius));
+    const sender = maySend ? connection.addTrack(track!, this.stream!) : connection.addTransceiver('audio', { direction: 'sendrecv' }).sender;
+    const peer: Peer = { id, connectionId, connection, audio, sender, candidates: [], localCandidates: [], ready: false,
+      trackUpdate: Promise.resolve() };
     this.peers.set(id, peer);
     this.updateVolume(peer);
-    this.stream!.getAudioTracks().forEach(track => connection.addTrack(track, this.stream!));
+    if (maySend) this.updateOutgoingTrack(peer);
     connection.ontrack = event => {
       if (this.peers.get(id) !== peer) return;
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
@@ -298,9 +312,26 @@ export class ProximityVoice {
   private updateVolume(peer: Peer) {
     const own = this.room.state.players.get(this.room.sessionId);
     const other = this.room.state.players.get(peer.id);
-    if (!own || !other || !this.config || own.mapId !== other.mapId) { peer.audio.volume = 0; return; }
+    if (!own || !other || !this.config || own.mapId !== other.mapId) { peer.audio.volume = 0; peer.audio.muted = true; return; }
+    peer.audio.muted = this.deafened || !canHear(other, own, this.config.disconnectRadius);
     const fraction = Math.min(1, Math.hypot(own.x - other.x, own.y - other.y) / this.config.disconnectRadius);
     peer.audio.volume = Math.max(0, 1 - fraction * fraction);
+  }
+
+  private updateOutgoingTrack(peer: Peer) {
+    if (!this.stream || !this.config) return;
+    // Read current audience and microphone state when this queued update runs. A stale queued
+    // allow-send decision must never reattach a track after a private-area boundary crossing.
+    peer.trackUpdate = peer.trackUpdate.then(async () => {
+      if (this.peers.get(peer.id) !== peer || !this.config) return;
+      const currentOwn = this.room.state.players.get(this.room.sessionId);
+      const currentOther = this.room.state.players.get(peer.id);
+      const track = currentOwn && currentOther && canHear(currentOwn, currentOther, this.config.disconnectRadius) ?
+        this.stream?.getAudioTracks()[0] ?? null : null;
+      if (peer.sender.track !== track) await peer.sender.replaceTrack(track);
+    }).catch(() => {
+      if (this.peers.get(peer.id) === peer) this.closePeer(peer.id, true);
+    });
   }
 
   private flushLocalCandidates(peer: Peer) {

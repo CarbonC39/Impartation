@@ -1,6 +1,6 @@
 import { contains, overlapArea, PLAYER_FOOTPRINT, PRIVATE_AREA_IDLE_MS, MapPrivateAreaState, PrivateAreaState,
   privateAreaOperationSchema, type PrivateAreaOperationInput, type InteractionResult,
-  type Player, type Point, type RegisteredMap, type Zone } from '@virtual-workspace/shared';
+  type Player, type Point, type RegisteredMap, type Zone } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 
 type Context = InteractionContext & { maps: ReadonlyMap<string, RegisteredMap>; throttle(client: SpaceClient): string | undefined };

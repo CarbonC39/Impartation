@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { appearanceSchema, type SpaceProtocol } from '@virtual-workspace/shared';
+import { appearanceSchema, type SpaceProtocol } from '@impartation/shared';
 import { drawAppearancePreview } from '../../appearancePreview';
 import { avatarDefinition } from '../../characters';
 import { readJsonPreference, readPreference, writePreference } from '../../preferences';

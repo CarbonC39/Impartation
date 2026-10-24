@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { Client, type Room } from '@colyseus/sdk';
-import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type WebTool, type SpaceProtocol } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type WebTool, type SpaceProtocol } from '@impartation/shared';
 import type Phaser from 'phaser';
 import type { SpaceScene } from '../src/SpaceScene';
 import { avatars } from '../src/characters';
@@ -276,6 +276,67 @@ test('two nearby opted-in browsers exchange WebRTC audio and stop on peer leave'
 });
 
 type RenderingWindow = Window & { sceneUnderTest?: SpaceScene };
+
+test('private listeners receive public chat and audio while their microphone track stays off the public peer', async ({ page, browser }) => {
+  test.setTimeout(60_000);
+  const bob = await browser.newPage();
+  const audioFixture = () => {
+    const host = window as Window & { testVoicePeers?: RTCPeerConnection[]; testTone?: AudioContext };
+    host.testVoicePeers = [];
+    const NativePeer = window.RTCPeerConnection;
+    window.RTCPeerConnection = class extends NativePeer {
+      constructor(configuration?: RTCConfiguration) { super(configuration); host.testVoicePeers!.push(this); }
+    };
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => {
+      const context = new AudioContext(); host.testTone = context;
+      const destination = context.createMediaStreamDestination();
+      const tone = context.createOscillator(); tone.connect(destination); tone.start();
+      return destination.stream;
+    } });
+  };
+  await page.addInitScript(audioFixture); await bob.addInitScript(audioFixture);
+  await enter(page, 'PrivateSpeaker', 'mint', () => captureRenderedScene(page));
+  await enter(bob, 'PublicSpeaker');
+  const sessionId = await sessionOf(page); const observer = await observe();
+  const move = async (key: string, arrived: () => boolean) => {
+    await page.locator('#game canvas').focus(); await page.keyboard.down(key);
+    try { await expect.poll(arrived, { intervals: [20] }).toBe(true); }
+    finally { await page.keyboard.up(key); }
+  };
+  const transmitting = (target: Page) => target.evaluate(() =>
+    ((window as Window & { testVoicePeers?: RTCPeerConnection[] }).testVoicePeers ?? [])
+      .some(peer => peer.connectionState !== 'closed' && peer.getSenders().some(sender => sender.track?.kind === 'audio')));
+  const muted = (target: Page) => target.locator('audio[data-voice-peer]').evaluateAll(nodes =>
+    nodes.length > 0 && nodes.every(node => (node as HTMLAudioElement).muted));
+  try {
+    await move('s', () => observer.state.players.get(sessionId)!.y >= 450);
+    await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('30');
+    await page.locator('#message').fill('房内消息'); await page.locator('#send').click();
+    await bob.locator('#message').fill('公共消息'); await bob.locator('#send').click();
+    await expect(page.locator('#messages')).toContainText('房内消息');
+    await expect(page.locator('#messages')).toContainText('公共消息');
+    await expect(bob.locator('#messages')).toContainText('公共消息');
+    await expect(bob.locator('#messages')).not.toContainText('房内消息');
+    await page.locator('#voice-mic').click(); await bob.locator('#voice-mic').click();
+    await expect(page.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10_000 });
+    await expect(bob.locator('#voice-status')).toContainText('附近 1 人', { timeout: 10_000 });
+    await expect.poll(() => transmitting(page)).toBe(false);
+    await expect.poll(() => transmitting(bob)).toBe(true);
+    await expect.poll(() => muted(page)).toBe(false);
+    await expect.poll(() => muted(bob)).toBe(true);
+    await expect.poll(() => page.locator('audio[data-voice-peer]').evaluateAll(nodes => nodes.some(node =>
+      (node as HTMLAudioElement).srcObject instanceof MediaStream))).toBe(true);
+    await move('w', () => observer.state.players.get(sessionId)!.y < 425);
+    await expect.poll(() => transmitting(page)).toBe(true);
+    await expect.poll(() => muted(bob)).toBe(false);
+    await move('s', () => observer.state.players.get(sessionId)!.y >= 450);
+    await expect.poll(() => transmitting(page)).toBe(false);
+    await expect.poll(() => muted(bob)).toBe(true);
+    await bob.locator('#sound-toggle').click(); await bob.locator('#sound-toggle').click();
+    expect(await muted(bob)).toBe(true);
+  } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
+});
+
 type StatusView = { bubble: string; mic: boolean; typing: boolean };
 
 /** Reads the canvas-drawn status (bubble text, mic, typing dots) above one character. */
@@ -518,6 +579,30 @@ test('a room that resolves after pagehide is released instead of replacing the r
     releaseMatchmake();
     if (!page.isClosed()) await page.unroute(matchmakeRoute);
   }
+});
+
+test('pagehide during SDK reconnection retires pending attempts before a fresh join', async ({ page }) => {
+  test.setTimeout(30_000);
+  await enter(page, 'PageRestore', 'mint', () => captureRenderedScene(page));
+  await expect.poll(() => page.evaluate(() => Boolean((window as RenderingWindow).sceneUnderTest))).toBe(true);
+  const previous = await sessionOf(page); const observer = await observe();
+  try {
+    await page.evaluate(() => {
+      const currentRoom = (window as RenderingWindow).sceneUnderTest!['room'];
+      currentRoom.reconnection.minDelay = currentRoom.reconnection.maxDelay = 500;
+      currentRoom.connection.close(4010, 'Navigation during reconnection');
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await expect(page.locator('#avatar-screen')).toBeVisible();
+    await expect(page.locator('#connection-notice')).toBeHidden();
+    await expect.poll(() => observer.state.players.has(previous), { timeout: 10_000 }).toBe(false);
+    await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
+    await expect(page.locator('#status')).toContainText('已进入空间');
+    expect(await sessionOf(page)).not.toBe(previous);
+    await page.waitForTimeout(600);
+    await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
 test('in-place static and animated sit use distinct action columns and movement cancels them', async ({ page }) => {
@@ -1742,9 +1827,19 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
     await expect.poll(() => page.evaluate(() => Boolean((window as RenderingWindow).sceneUnderTest))).toBe(true);
     await page.context().setOffline(true);
     await expect(page.locator('#status')).toContainText('连接中断');
+    await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'reconnecting');
+    await expect(page.locator('#connection-notice')).toBeVisible();
+    await expect(page.locator('#send')).toBeDisabled();
+    await expect(page.locator('#voice-mic')).toBeDisabled();
+    await expect(page.locator('#action-list button').first()).toBeDisabled();
+    await page.keyboard.press('ArrowRight');
+    expect(await page.evaluate(() => (window as RenderingWindow).sceneUnderTest!['room'].reconnection.enqueuedMessages.length)).toBe(0);
     await expect.poll(() => observer.state.players.get(sessionId)?.connected, { timeout: 12_000 }).toBe(false);
     await page.context().setOffline(false);
     await expect(page.locator('#status')).toContainText('连接已恢复');
+    await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
+    await expect(page.locator('#connection-notice')).toBeHidden();
+    await expect(page.locator('#send')).toBeEnabled();
     await expect.poll(() => observer.state.players.get(sessionId)?.connected).toBe(true);
     expect(await page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.['room'].sessionId)).toBe(sessionId);
 
@@ -1769,4 +1864,132 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
     await observer.leave(); await main.leave();
     if (replacement?.connection.isOpen) await replacement.leave();
   }
+});
+
+async function preserveBrowserWebSocketValidation(page: Page) {
+  // SDK 0.18 probes the Node WebSocket constructor first. Playwright's routed socket
+  // accepts that options object, while a native browser throws and lets the SDK fall back.
+  await page.addInitScript(() => {
+    const wrap = (constructor: typeof WebSocket) => new Proxy(constructor, {
+      construct(target, args: [string | URL, unknown?]) {
+        const protocols = args[1];
+        if (protocols && typeof protocols !== 'string' && !Array.isArray(protocols)) throw new TypeError('Invalid WebSocket protocols');
+        return Reflect.construct(target, args);
+      },
+    });
+    let constructor = wrap(window.WebSocket);
+    // Playwright installs its mock in a separate init script; preserve validation in either order.
+    Object.defineProperty(window, 'WebSocket', { configurable: true,
+      get: () => constructor, set: (value: typeof WebSocket) => { constructor = wrap(value); } });
+  });
+}
+
+test('server shutdown is shown as disconnected and a manual reconnect creates a fresh connection', async ({ page }) => {
+  await preserveBrowserWebSocketValidation(page);
+  let shutdown: (() => void) | undefined;
+  await page.routeWebSocket(url => url.searchParams.has('sessionId'), socket => {
+    const server = socket.connectToServer();
+    shutdown = () => {
+      socket.close({ code: 4001, reason: 'Server shutdown' });
+      server.close({ code: 4001, reason: 'Server shutdown' });
+    };
+  });
+  await enter(page, 'Shutdown', 'mint', () => captureRenderedScene(page));
+  const previous = await sessionOf(page);
+  expect(shutdown).toBeDefined();
+  shutdown!();
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'disconnected');
+  await expect(page.locator('#connection-message')).toContainText('服务正在停止或重启');
+  await expect(page.locator('#send')).toBeDisabled();
+  await expect(page.locator('#connection-refresh')).toBeVisible();
+  await page.locator('#reconnect').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#connection-notice')).toBeHidden();
+  expect(await sessionOf(page)).not.toBe(previous);
+  await page.locator('#message').fill('重连后可以聊天');
+  await page.locator('#send').click();
+  await expect(page.locator('#messages')).toContainText('重连后可以聊天');
+});
+
+test('exhausted SDK reconnection stops with retry controls and never refreshes automatically', async ({ page }) => {
+  await preserveBrowserWebSocketValidation(page);
+  let rejectConnections = false;
+  let attempts = 0;
+  let drop: (() => void) | undefined;
+  await page.routeWebSocket(url => url.searchParams.has('sessionId'), socket => {
+    attempts++;
+    if (rejectConnections) { socket.close({ code: 1001 }); return; }
+    const server = socket.connectToServer();
+    drop = () => { socket.close({ code: 1001 }); server.close({ code: 1001 }); };
+  });
+  await enter(page, 'RetryFailure', 'mint', () => captureRenderedScene(page));
+  await expect.poll(() => page.evaluate(() => Boolean((window as RenderingWindow).sceneUnderTest))).toBe(true);
+  let navigations = 0;
+  page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations++; });
+  await page.evaluate(() => {
+    const reconnection = (window as RenderingWindow).sceneUnderTest!['room'].reconnection;
+    reconnection.maxRetries = 3;
+    reconnection.minDelay = reconnection.maxDelay = 100;
+  });
+  rejectConnections = true;
+  drop!();
+  await expect(page.locator('#connection-message')).toContainText('自动重连失败');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'disconnected');
+  await expect(page.locator('#reconnect')).toBeEnabled();
+  const finishedAttempts = attempts;
+  await page.waitForTimeout(500);
+  expect(attempts).toBe(finishedAttempts);
+  expect(navigations).toBe(0);
+  rejectConnections = false;
+  await page.locator('#reconnect').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('#send')).toBeEnabled();
+});
+
+test('an unresponsive open WebSocket triggers SDK reconnection through the heartbeat watchdog', async ({ page }) => {
+  test.setTimeout(40_000);
+  await preserveBrowserWebSocketValidation(page);
+  let silent = false;
+  let sockets = 0;
+  await page.routeWebSocket(url => url.searchParams.has('sessionId'), socket => {
+    const number = ++sockets;
+    const server = socket.connectToServer();
+    // Only the original socket is broken; a new connection can receive its JOIN handshake.
+    server.onMessage(message => { if (!silent || number > 1) socket.send(message); });
+  });
+  await enter(page, 'SilentBackend', 'mint', () => captureRenderedScene(page));
+  await expect.poll(() => page.evaluate(() => Boolean((window as RenderingWindow).sceneUnderTest))).toBe(true);
+  await page.evaluate(() => {
+    const reconnection = (window as RenderingWindow).sceneUnderTest!['room'].reconnection;
+    reconnection.minDelay = reconnection.maxDelay = 1500;
+  });
+  const sessionId = await sessionOf(page);
+  silent = true;
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'reconnecting', { timeout: 22_000 });
+  await expect(page.locator('#send')).toBeDisabled();
+  silent = false;
+  await expect(page.locator('#status')).toContainText('连接已恢复', { timeout: 10_000 });
+  expect(sockets).toBeGreaterThan(1);
+  expect(await page.evaluate(() => (window as RenderingWindow).sceneUnderTest!['room'].sessionId)).toBe(sessionId);
+});
+
+test('a stalled reconnect handshake reaches a final failure instead of waiting indefinitely', async ({ page }) => {
+  await preserveBrowserWebSocketValidation(page);
+  await page.clock.install();
+  let stall = false;
+  let attempts = 0;
+  let drop: (() => void) | undefined;
+  await page.routeWebSocket(url => url.searchParams.has('sessionId'), socket => {
+    attempts++;
+    if (stall) { socket.onMessage(() => {}); return; }
+    const server = socket.connectToServer();
+    drop = () => { void socket.close({ code: 1001 }); void server.close({ code: 1001 }); };
+  });
+  await enter(page, 'StalledReconnect');
+  stall = true; drop!();
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'reconnecting');
+  await expect.poll(() => attempts).toBe(2);
+  await page.clock.fastForward(33_000);
+  await expect(page.locator('#connection-message')).toContainText('自动重连失败');
+  await expect(page.locator('#reconnect')).toBeEnabled();
 });

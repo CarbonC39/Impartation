@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AttachmentSourceState, attachmentSource, attachmentSourceKey, currentZone, takeAttachmentSchema,
-  type InteractionResult, type Player, type RegisteredMap, type TakeAttachmentInput } from '@virtual-workspace/shared';
+  type InteractionResult, type Player, type RegisteredMap, type TakeAttachmentInput } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 
 /** Clearing or replacing an attachment returns a unique source to the room. */

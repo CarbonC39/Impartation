@@ -648,3 +648,15 @@ body.tool-open .map-dock { z-index: 22; left: 16px; top: 50%; bottom: auto; tran
   .compose input { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { button, .switch-track::after, .tool-stage-seat, .tool-stage-seat canvas { transition: none; } .tool-stage-seat.entering, .tool-stage-seat canvas, .tool-stage-seat.typing::after { animation: none !important; } }
+.connection-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(14 26 30 / 72%);
+}
+.connection-notice[hidden] { display: none; }
+.connection-card { display: grid; gap: 16px; width: min(100%, 480px); padding: 24px; }
+.connection-buttons { display: flex; flex-wrap: wrap; gap: 10px; }

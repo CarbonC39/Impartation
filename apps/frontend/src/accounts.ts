@@ -1,4 +1,4 @@
-import { appearanceSchema } from '@virtual-workspace/shared';
+import { appearanceSchema } from '@impartation/shared';
 import { drawAppearancePreview } from './appearancePreview';
 import {
   adminUserAction, changePassword, createAdminUser, listAdminUsers, loadProfile,

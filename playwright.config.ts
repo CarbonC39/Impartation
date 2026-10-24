@@ -17,7 +17,7 @@ export default defineConfig({
     launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE },
   },
   webServer: {
-    command: 'npm exec -- concurrently -k -n server,client "npm run dev -w @virtual-workspace/backend" "npm run dev -w @virtual-workspace/frontend -- --port 5174"',
+    command: 'npm exec -- concurrently -k -n server,client "npm run dev -w @impartation/backend" "npm run dev -w @impartation/frontend -- --port 5174"',
     url: 'http://127.0.0.1:5174/health',
     reuseExistingServer: false,
     env: {

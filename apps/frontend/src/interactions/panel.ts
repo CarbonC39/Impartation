@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import type { SpaceProtocol, InteractionResult, Zone } from '@virtual-workspace/shared';
+import type { SpaceProtocol, InteractionResult, Zone } from '@impartation/shared';
 import type { InteractionHandler } from './dispatcher';
 
 export function element<T extends HTMLElement>(id: string): T {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
-import { attachmentSource, mapRegistrySchema, parseWorldMap, validateWorldRegistry, type WorldRegistry } from '@virtual-workspace/shared';
+import { attachmentSource, mapRegistrySchema, parseWorldMap, validateWorldRegistry, type WorldRegistry } from '@impartation/shared';
 import { config } from './config.js';
 import { normalizeTiledMap, normalizeTiledTileset, resolveTiledProject } from './tiled-normalizer.js';
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currentZone, portalPropertiesSchema, type InteractionResult, type RegisteredMap } from '@virtual-workspace/shared';
+import { currentZone, portalPropertiesSchema, type InteractionResult, type RegisteredMap } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 import type { PrivateAreaAccess } from '../privateArea/handler.js';
 import { cancelAction } from '../action/handler.js';

@@ -1,4 +1,4 @@
-import { InteractionRegistry, type Zone } from '@virtual-workspace/shared';
+import { InteractionRegistry, type Zone } from '@impartation/shared';
 
 export interface InteractionHandler {
   setZone(zone: Zone | undefined): void;

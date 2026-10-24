@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { ATTACHMENTS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type Zone } from '@virtual-workspace/shared';
+import { ATTACHMENTS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type Zone } from '@impartation/shared';
 import type { InteractionHandler } from '../dispatcher';
 import { element } from '../panel';
 

@@ -15,7 +15,7 @@ npm run test:e2e
 | `npm test` | Node 协议、存储、配置、HTTP 和真实 WebSocket 测试 |
 | `npm run typecheck` | 所有 workspace 及 E2E 代码的 strict 类型检查 |
 | `npm run check` | 类型检查、Node 测试和生产构建 |
-| `npm run test:e2e` | Chromium 浏览器测试 |
+| `npm run test:e2e` | 生产构建后运行 Chromium 浏览器测试 |
 | `npm run check:all` | `check` 后执行浏览器测试 |
 
 GitHub Actions 对每次 push 执行 `npm run check`；`main` 通过后发布 Release 与 amd64/arm64 Docker 镜像。浏览器测试和容器在目标主机的运行验证不在该工作流中。
@@ -53,6 +53,8 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 账号浏览器用例检查注册、登录、退出、修改密码、跨设备资料与造型槽，以及同源标签页切换账号后的草稿隔离。空间用例验证同账号新连接替换旧连接、旧重连 token 失效、普通断线恢复原 session、刷新后立即重进、合成 pagehide/pageshow 缓存恢复，以及延迟 matchmaking 响应完成后的连接释放；合成事件不代表验证了各浏览器的真实缓存命中策略。[accounts.spec.ts](../apps/frontend/e2e/accounts.spec.ts) 的管理员面板与重置表单用 HTTP 响应替身检查二次确认、自我管理限制、链接展示和重置 token 的地址清理；真实管理员授权、重置令牌生命周期及 session 撤销由 Node HTTP/WebSocket 测试验证。
 
+连接浏览器用例检查三种连接状态、断线期间禁止输入与实时操作、SDK 重连耗尽后的手动重试、不自动刷新，以及保留 WebSocket 却丢弃服务端消息时的心跳检测。[connection.spec.ts](../apps/frontend/e2e/connection.spec.ts) 在 2571 端口启动独立生产后端并使用临时磁盘数据库，实际发送 SIGTERM、重启进程，再验证停服提示、离线重试失败和恢复服务后的手动重连。语音浏览器用例检查私区向公区不挂载麦克风轨、公区向私区保持接收、跨边界恢复与再次隔离，以及喇叭开关不能解除受众限制。
+
 角色帧索引及本地帧选择由 Node 测试检查；浏览器断言检查 Phaser 纹理的帧切片、脚点锚点、相机缩放与调整视口后的屏幕尺寸，并检查行走和 idle 帧选择。动作动画用例通过测试生成的八行图验证静态列 1、动画列 2–4 和移动取消；不替换产品素材。浏览器动作用例保存截图供视觉检查，不做像素快照比较。当前 `walk.png` 仍为 64×96 行走图，完整动作图集尚待提供；动作显示暂用方向 idle 帧。
 
 工具入口浏览器测试拦截 `/api/tools` 提供固定配置，以 HTML 替身模拟工具页面，并检查目标 URL、opener 和 referrer。真实 HTTP 配置响应由 Node 集成测试验证。它们不验证真实服务的编辑、绘画与播放功能。
@@ -69,6 +71,6 @@ nix-shell -p chromium --run 'PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v chromi
 
 ## 未覆盖项
 
-私密区域隔离聊天和语音，但不隔离 Schema 可见性（位置、正在输入标识）；浏览器端的私密消息标记和进出提示未自动化验证。区域形状支持不重叠矩形或简单多边形，复杂门禁拓扑与永久 ACL 未实现。
+私密区域可接收公共区域的聊天与附近语音，房外不能接收房内内容，不同私区互相隔离；Schema 可见性（位置、正在输入标识）仍公开。浏览器端的私密消息标记和进出提示未自动化验证。区域形状支持不重叠矩形或简单多边形，复杂门禁拓扑与永久 ACL 未实现。
 
 真实工具服务、跨设备工具登录与权限、YouTube/Bilibili 实际播放、绘画笔压和协作持久化需要服务级验收。浏览器自动化只覆盖 Chromium；Firefox、WebKit、移动触控和弱网络压力测试尚未提供。测试验证 iframe 容器和 external 打开行为，不验证第三方站点允许嵌入或真实服务功能。

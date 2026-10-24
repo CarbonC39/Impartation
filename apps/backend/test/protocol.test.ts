@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AVATARS, DEFAULT_APPEARANCE, joinSchema, spaceJoinSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, boardPostSchema,
   boardDeleteSchema, pomodoroActionSchema, activateActionSchema, CHARACTER_ACTION_NAMES,
-  selectVariantSchema, canHear, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema, voiceCredentialsSchema } from '@virtual-workspace/shared';
+  selectVariantSchema, canHear, canConnectVoice, voiceOfferSchema, voiceIceCandidateSchema, voiceConfigSchema, voiceCredentialsSchema } from '@impartation/shared';
 
 test('voice payloads bound signaling size and reject malformed targets and ICE configuration', () => {
   const connectionId = '550e8400-e29b-41d4-a716-446655440000';
@@ -24,7 +24,7 @@ test('voice payloads bound signaling size and reject malformed targets and ICE c
   assert.equal(voiceCredentialsSchema.safeParse({ iceServers: [{ urls: 'https://relay.example.test', username: '1:user', credential: 'mac' }], expiresAt: 1000 }).success, false);
 });
 
-test('voice eligibility requires opt-in, connection, same map, same private area and authoritative distance', () => {
+test('voice eligibility is directional for public and private audiences', () => {
   const a = { x: 0, y: 0, mapId: 'a', privateAreaId: '', connected: true, voiceEnabled: true };
   const b = { ...a, x: 159 };
   assert.equal(canHear(a, b, 160), true);
@@ -32,9 +32,13 @@ test('voice eligibility requires opt-in, connection, same map, same private area
   assert.equal(canHear(a, { ...b, mapId: 'b' }, 160), false);
   assert.equal(canHear(a, { ...b, connected: false }, 160), false);
   assert.equal(canHear(a, { ...b, voiceEnabled: false }, 160), false);
-  assert.equal(canHear(a, { ...b, privateAreaId: '30' }, 160), false);
+  const privatePlayer = { ...b, privateAreaId: '30' };
+  assert.equal(canHear(a, privatePlayer, 160), true, 'private listener hears public speaker');
+  assert.equal(canHear(privatePlayer, a, 160), false, 'public listener cannot hear private speaker');
+  assert.equal(canConnectVoice(a, privatePlayer, 160), true, 'WebRTC pair can carry the permitted direction');
   assert.equal(canHear({ ...a, privateAreaId: '30' }, { ...b, privateAreaId: '30' }, 160), true);
   assert.equal(canHear({ ...a, privateAreaId: '30' }, { ...b, privateAreaId: '31' }, 160), false);
+  assert.equal(canHear({ ...a, privateAreaId: '30' }, { ...b, mapId: 'b', privateAreaId: '' }, 160), false);
 });
 
 test('guest names are trimmed, default avatar is valid, and all available avatars are accepted', () => {

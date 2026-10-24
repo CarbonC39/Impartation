@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { before, after, test } from 'node:test';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
-import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type SpaceProtocol } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE, worldRegistryResponseSchema, type SpaceProtocol } from '@impartation/shared';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'workspace-maps-'));

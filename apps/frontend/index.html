@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
-    <title>Virtual Workspace</title>
+    <title>Impartation</title>
   </head>
   <body>
     <div id="app-shell">
       <header class="masthead" id="masthead">
-        <a class="brand" href="#" aria-label="Virtual Workspace 首页"><svg class="brand-icon" viewBox="0 0 12 12" aria-hidden="true"><path fill="var(--line)" d="M5 0h2v2h2v2h3v2h-2v2h1v3h-2v-1H7v1H5v-1H3v1H1V8h1V6H0V4h3V2h2z"/><path fill="var(--sel)" d="M5 2h2v3h3v1H8v2h1v1H7V8H5v1H3V8h1V6H2V5h3z"/><path fill="#fff7d1" d="M5 3h1v2H5zM3 5h1v1H3z"/></svg><span><b>Virtual Workspace</b><small>像素小镇 · 一起工作的地方</small></span></a>
+        <a class="brand" href="#" aria-label="Impartation 首页"><svg class="brand-icon" viewBox="0 0 12 12" aria-hidden="true"><path fill="var(--line)" d="M5 0h2v2h2v2h3v2h-2v2h1v3h-2v-1H7v1H5v-1H3v1H1V8h1V6H0V4h3V2h2z"/><path fill="var(--sel)" d="M5 2h2v3h3v1H8v2h1v1H7V8H5v1H3V8h1V6H2V5h3z"/><path fill="#fff7d1" d="M5 3h1v2H5zM3 5h1v1H3z"/></svg><span><b>Impartation</b><small>像素小镇 · 一起工作的地方</small></span></a>
         <ol class="steps" aria-label="进度"><li><span>1</span><span id="chosen-world-label">阳光大厅</span></li><li aria-current="step"><span>2</span>换装</li><li><span>3</span>进入</li></ol>
         <button id="theme-toggle" class="secondary chip-button" type="button" aria-expanded="false" aria-controls="theme-panel"><span class="theme-dots"></span>界面配色</button>
       </header>
@@ -195,6 +195,18 @@
         </section>
       </main>
     </div>
+    <aside id="connection-notice" class="connection-notice" role="alertdialog" aria-modal="true" aria-labelledby="connection-title" aria-describedby="connection-message" hidden>
+      <div class="connection-card panel">
+        <h2 id="connection-title">空间连接</h2>
+        <p id="connection-message" role="status" aria-live="assertive"></p>
+        <p class="hint">连接恢复前，移动、聊天和实时交互已暂停。断线会关闭麦克风，恢复后可手动开启。</p>
+        <div class="connection-buttons">
+          <button id="reconnect" class="primary" type="button">重新连接</button>
+          <button id="connection-refresh" class="secondary" type="button">刷新页面</button>
+          <button id="connection-back" class="secondary" type="button">返回选世界</button>
+        </div>
+      </div>
+    </aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

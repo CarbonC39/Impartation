@@ -9,7 +9,7 @@ import { WebSocketClient } from '@colyseus/ws-transport';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 import { rmSync } from 'node:fs';
 import { createRoomWorldFixture } from './world-fixture.js';
-import { CHARACTER_ACTION_NAMES, DEFAULT_APPEARANCE, type Zone } from '@virtual-workspace/shared';
+import { CHARACTER_ACTION_NAMES, DEFAULT_APPEARANCE, type Zone } from '@impartation/shared';
 
 process.env.DATABASE_PATH = ':memory:';
 const fixture = createRoomWorldFixture();
@@ -97,7 +97,7 @@ describe('space room over real WebSocket connections', { timeout: 120_000 }, () 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(await response.json(), { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      connectRadius: 160, disconnectRadius: 192, maxPeers: 1, scanIntervalMs: 1000 });
+      connectRadius: 320, disconnectRadius: 384, maxPeers: 1, scanIntervalMs: 1000 });
   });
   test('TURN credentials require an active login and are short-lived coturn REST credentials', async () => {
     const unauthenticated = await fetch(endpoint + '/api/voice-credentials');

@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { pomodoroModeSchema, type SpaceProtocol } from '@virtual-workspace/shared';
+import { pomodoroModeSchema, type SpaceProtocol } from '@impartation/shared';
 import { PanelInteraction, element } from '../panel';
 
 export class PomodoroInteraction extends PanelInteraction {

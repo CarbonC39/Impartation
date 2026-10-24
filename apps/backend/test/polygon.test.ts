@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseWorldMap, polygonArea, overlapArea, areasOverlap, contains, canStand, currentZone,
-  stepMovement, worldRegistryResponseSchema, type Point } from '@virtual-workspace/shared';
+  stepMovement, worldRegistryResponseSchema, type Point } from '@impartation/shared';
 
 const polygon = (points: number[][]) => points.map(([x, y]) => ({ x, y }));
 const triangle = polygon([[0, 0], [64, 0], [0, 64]]);

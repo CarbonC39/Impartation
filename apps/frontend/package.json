@@ -1,5 +1,5 @@
 {
-  "name": "@virtual-workspace/frontend",
+  "name": "@impartation/frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
   "dependencies": {
     "@colyseus/sdk": "~0.18.5",
     "@fontsource/pixelify-sans": "^5.3.0",
-    "@virtual-workspace/shared": "*",
+    "@impartation/shared": "*",
     "phaser": "^4.2.1"
   },
   "devDependencies": {

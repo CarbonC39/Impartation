@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, ServerError, type AuthContext } from '@colyseus/core';
 import { WebSocketClient } from '@colyseus/ws-transport';
 import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
-  TICK_MS, SPACE_REPLACED_CLOSE_CODE, sameAudience, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
+  TICK_MS, SPACE_REPLACED_CLOSE_CODE, canReceive, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
-  type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@virtual-workspace/shared';
+  type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@impartation/shared';
 import { worldRegistry, worlds as allMaps } from '../world.js';
 import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
@@ -153,7 +153,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
         privateAreaId: player.privateAreaId };
       for (const target of this.clients) {
         const listener = this.state.players.get(target.sessionId);
-        if (listener?.connected && sameAudience(player, listener)) target.send('chat', message);
+        if (listener?.connected && canReceive(player, listener)) target.send('chat', message);
       }
     }),
     typing: validate(typingSchema, async (client: SpaceClient, { typing }: { typing: boolean }) => {

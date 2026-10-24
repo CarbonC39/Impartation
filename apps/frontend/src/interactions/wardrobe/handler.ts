@@ -1,4 +1,4 @@
-import type { Zone } from '@virtual-workspace/shared';
+import type { Zone } from '@impartation/shared';
 import type { InteractionHandler } from '../dispatcher';
 import { element } from '../panel';
 

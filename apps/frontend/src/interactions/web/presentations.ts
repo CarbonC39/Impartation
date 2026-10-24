@@ -1,4 +1,4 @@
-import { InteractionRegistry, type WebTool, type PresentationMode } from '@virtual-workspace/shared';
+import { InteractionRegistry, type WebTool, type PresentationMode } from '@impartation/shared';
 
 /** `host` receives the page; `links` holds optional controls such as a manual external link. */
 export type Presentation = (tool: WebTool, host: HTMLElement, links: HTMLElement) => () => void;

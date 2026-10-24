@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { voiceConfigSchema, voiceCredentialsSchema } from '@virtual-workspace/shared';
+import { voiceConfigSchema, voiceCredentialsSchema } from '@impartation/shared';
 
 export const config = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(2567),
@@ -18,8 +18,8 @@ export const config = z.object({
   VOICE_TURN_URLS: z.string().optional(),
   VOICE_TURN_SHARED_SECRET: z.string().min(32).optional(),
   VOICE_TURN_CREDENTIAL_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
-  VOICE_CONNECT_RADIUS: z.coerce.number().positive().default(160),
-  VOICE_DISCONNECT_RADIUS: z.coerce.number().positive().default(192),
+  VOICE_CONNECT_RADIUS: z.coerce.number().positive().default(320),
+  VOICE_DISCONNECT_RADIUS: z.coerce.number().positive().default(384),
   VOICE_MAX_PEERS: z.coerce.number().int().min(1).max(32).default(6),
   VOICE_SCAN_INTERVAL_MS: z.coerce.number().int().min(250).max(5000).default(1000),
 }).parse(process.env);

@@ -1,5 +1,5 @@
 import type { Client } from '@colyseus/core';
-import type { ChatMessage, SpaceState, WorldMap, Zone, VoiceAnswer, VoiceEnd, VoiceIceCandidate, VoiceOffer, VoiceSignal } from '@virtual-workspace/shared';
+import type { ChatMessage, SpaceState, WorldMap, Zone, VoiceAnswer, VoiceEnd, VoiceIceCandidate, VoiceOffer, VoiceSignal } from '@impartation/shared';
 import type { activeProfile } from '../identity.js';
 
 export type SpaceClient = Client<{ messages: {

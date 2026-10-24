@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { InteractionRegistry, type SpaceProtocol, type WorldMap } from '@virtual-workspace/shared';
+import { InteractionRegistry, type SpaceProtocol, type WorldMap } from '@impartation/shared';
 import { InteractionDispatcher, type InteractionHandler } from './dispatcher';
 import { BoardInteraction } from './board/handler';
 import { PomodoroInteraction } from './pomodoro/handler';

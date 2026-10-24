@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
-import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
 import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { WorldObjectVisuals } from './worldObjectVisuals';
@@ -12,6 +12,7 @@ type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObje
 type ChatBubble = { text: string; expiresAt: number };
 export type ScreenPoint = { x: number; y: number };
 export type SceneHooks = {
+  connected(): boolean;
   zoneChanged(id: string): void;
   /** Screen position (canvas pixels) of the top edge of the player's current zone. */
   zoneAnchor(point: ScreenPoint | undefined): void;
@@ -141,7 +142,7 @@ export class SpaceScene extends Phaser.Scene {
     const focusCanvas = () => canvas.focus();
     canvas.addEventListener('pointerdown', focusCanvas);
     const stop = () => {
-      if (this.room.connection.isOpen) this.room.send('input', { x: 0, y: 0 });
+      if (this.hooks.connected() && this.room.connection.isOpen) this.room.send('input', { x: 0, y: 0 });
     };
     window.addEventListener('blur', stop);
     const visibility = () => { if (document.hidden) stop(); };
@@ -242,7 +243,9 @@ export class SpaceScene extends Phaser.Scene {
     this.updateZoneAnchor(zoneId);
     const activatePressed = Phaser.Input.Keyboard.JustDown(this.keys.E);
     // Never queue movement during automatic reconnection.
-    if (!ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) { this.lastInput = ''; return; }
+    if (!this.hooks.connected() || !ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) {
+      this.lastInput = ''; this.inputElapsed = 0; this.input.keyboard?.resetKeys(); return;
+    }
     const focused = document.activeElement;
     const typing = focused instanceof HTMLElement &&
       (['INPUT', 'TEXTAREA', 'SELECT'].includes(focused.tagName) || focused.isContentEditable) &&

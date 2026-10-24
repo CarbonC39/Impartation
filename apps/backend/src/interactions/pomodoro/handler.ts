@@ -1,4 +1,4 @@
-import { Pomodoro, POMODORO_DURATIONS, pomodoroActionSchema, type PomodoroActionInput, type InteractionResult } from '@virtual-workspace/shared';
+import { Pomodoro, POMODORO_DURATIONS, pomodoroActionSchema, type PomodoroActionInput, type InteractionResult } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 
 export function createPomodoroInteraction(context: InteractionContext) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseWorldMap } from '@virtual-workspace/shared';
+import { parseWorldMap } from '@impartation/shared';
 
 type TiledObject = {
   id: number; name: string; class?: string; type?: string; x: number; y: number;

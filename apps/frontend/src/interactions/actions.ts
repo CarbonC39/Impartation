@@ -1,6 +1,6 @@
 import type { Room } from '@colyseus/sdk';
 import { activateActionSchema, CHARACTER_ACTIONS, CHARACTER_ACTION_NAMES, isCharacterAction, findActionAnchor, actionFacingMatches,
-  type ActivateActionInput, type CharacterActionName, type InteractionResult, type SpaceProtocol, type WorldMap } from '@virtual-workspace/shared';
+  type ActivateActionInput, type CharacterActionName, type InteractionResult, type SpaceProtocol, type WorldMap } from '@impartation/shared';
 import { element } from './panel';
 
 /**
@@ -8,6 +8,7 @@ import { element } from './panel';
  * the client only uses the map to pick which action E triggers and to label it.
  */
 export class CharacterActions {
+  private connected = true;
   private pending = false;
   private disposed = false;
   private selected: CharacterActionName = CHARACTER_ACTION_NAMES[0];
@@ -58,7 +59,7 @@ export class CharacterActions {
 
   refresh() {
     const player = this.room.state?.players.get(this.room.sessionId);
-    const connected = Boolean(player?.connected && this.room.connection.isOpen);
+    const connected = Boolean(this.connected && player?.connected && this.room.connection.isOpen);
     const keyAction = this.keyAction();
     const world = this.world();
     for (const [action, button] of this.buttons) {
@@ -85,7 +86,7 @@ export class CharacterActions {
 
   async activateAction(input: ActivateActionInput): Promise<InteractionResult> {
     const player = this.room.state?.players.get(this.room.sessionId);
-    if (this.disposed || this.pending || !player?.connected || !this.room.connection.isOpen) {
+    if (!this.connected || this.disposed || this.pending || !player?.connected || !this.room.connection.isOpen) {
       return { ok: false, message: '角色尚未连接或已有动作请求等待中' };
     }
     const parsed = activateActionSchema.safeParse(input);
@@ -117,6 +118,7 @@ export class CharacterActions {
     for (const button of this.buttons.values()) button.disabled = true;
     this.animated.disabled = true;
   }
+  setConnected(value: boolean) { this.connected = value; this.refresh(); }
 }
 
 export function createCharacterActions(room: Room<SpaceProtocol>, world: () => WorldMap | undefined) {

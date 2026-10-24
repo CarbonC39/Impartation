@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import type { SpaceProtocol, WorldMap, Zone } from '@virtual-workspace/shared';
+import type { SpaceProtocol, WorldMap, Zone } from '@impartation/shared';
 import type { InteractionHandler } from '../dispatcher';
 import { element } from '../panel';
 

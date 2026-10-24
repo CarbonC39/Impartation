@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { Client, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@virtual-workspace/shared';
+import { Client, CloseCode, type Room } from '@colyseus/sdk';
+import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@impartation/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -26,6 +26,7 @@ import { mountPrejoin, type VoicePlan } from './prejoin';
 import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
 import { automaticCameraZoom, cameraZoomPreference, MAX_CAMERA_ZOOM, MIN_CAMERA_ZOOM, setCameraZoomPreference } from './cameraZoom';
 import { setRangeFill } from './range';
+import { leaveConnection, watchConnection, type ConnectionState } from './connection';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -61,6 +62,11 @@ mountThemePanel(element<HTMLButtonElement>('theme-toggle'), element('theme-panel
 const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.origin);
 let room: Room<SpaceProtocol> | undefined;
 let connected = false;
+let connectionState: ConnectionState = 'disconnected';
+let stopConnectionWatch: (() => void) | undefined;
+const connectionNotice = element('connection-notice');
+const connectionMessage = element('connection-message');
+const reconnectButton = element<HTMLButtonElement>('reconnect');
 let interactions: InteractionDispatcher | undefined;
 let actions: CharacterActions | undefined;
 let voice: ProximityVoice | undefined;
@@ -437,13 +443,29 @@ const identityReady = accounts.ready.then(value => { currentProfile = value; if 
 
 function setConnected(value: boolean) {
   connected = value;
+  if (!value) { touchPad.clear(); resetTyping(); }
   voice?.setConnected(value);
   send.disabled = !value;
   messageInput.disabled = !value;
   interactions?.setConnected(value);
-  actions?.refresh();
+  actions?.setConnected(value);
+}
+function setConnectionState(value: ConnectionState, message: string, notify = false) {
+  connectionState = value;
+  document.body.dataset.connectionState = value;
+  status.dataset.connectionState = value;
+  status.textContent = message;
+  setConnected(value === 'connected');
+  connectionNotice.hidden = !notify;
+  if (notify) for (const dialog of document.querySelectorAll<HTMLDialogElement>('dialog[open]')) dialog.close();
+  connectionMessage.textContent = message;
+  reconnectButton.hidden = value === 'reconnecting';
+  reconnectButton.disabled = value === 'connecting';
+  for (const id of ['map-screen', 'avatar-screen']) element(id).inert = notify;
 }
 function cleanup() {
+  stopConnectionWatch?.();
+  stopConnectionWatch = undefined;
   if (worldWardrobe) { restoreWardrobeNavigation(); showScreen('login-screen'); }
   touchPad.clear();
   layoutEditor.close();
@@ -488,8 +510,9 @@ element<HTMLFormElement>('join-form').addEventListener('submit', event => {
   }
   prejoin.open(selectedWorld);
 });
-async function enterWorld(plan: VoicePlan) {
+async function enterWorld(plan: VoicePlan, retry = false) {
   if (!currentProfile) {
+    setConnectionState('disconnected', '请先登录账号');
     element('account-feedback').textContent = '请先登录或注册账号，再进入空间。';
     showScreen('login-screen');
     plan.stream?.getTracks().forEach(track => track.stop());
@@ -498,7 +521,8 @@ async function enterWorld(plan: VoicePlan) {
   showScreen('map-screen');
   join.disabled = true;
   joinFeedback.textContent = '';
-  status.textContent = '连接中…';
+  leavingIntentionally = false;
+  setConnectionState('connecting', retry ? '正在重新连接空间…' : '连接中…', retry);
   const generation = ++joinGeneration;
   const isCurrentJoin = () => generation === joinGeneration && !pageLeaving;
   const stopPlannedStream = () => { plan.stream?.getTracks().forEach(track => track.stop()); plan.stream = undefined; };
@@ -516,13 +540,46 @@ async function enterWorld(plan: VoicePlan) {
     const pendingRoom = client.joinOrCreate<SpaceProtocol>(ROOM_NAME, roomOptions);
     let joinedRoom: Room<SpaceProtocol>;
     try { joinedRoom = await withTimeout(pendingRoom, 15_000, '连接空间超时，请检查服务是否启动后重试'); }
-    catch (error) { void pendingRoom.then(lateRoom => lateRoom.leave()).catch(() => {}); throw error; }
-    if (!isCurrentJoin()) { stopPlannedStream(); void joinedRoom.leave().catch(() => {}); return; }
+    catch (error) { void pendingRoom.then(leaveConnection).catch(() => {}); throw error; }
+    if (!isCurrentJoin()) { stopPlannedStream(); leaveConnection(joinedRoom); return; }
     room = joinedRoom;
     joinedRoom.reconnection.minUptime = 0;
+    joinedRoom.reconnection.maxEnqueuedMessages = 0;
+    // These callbacks must exist before waiting for state or loading map assets.
+    stopConnectionWatch = watchConnection(joinedRoom, {
+      dropped: () => {
+        if (room !== joinedRoom) return;
+        stopPlannedStream(); plan.enabled = false;
+        setConnectionState('reconnecting', '连接中断，正在自动重连…', true);
+      },
+      recovered: () => {
+        if (room !== joinedRoom) return;
+        setConnectionState('connected', '连接已恢复');
+      },
+      left: code => {
+        if (room !== joinedRoom) return;
+        joinedRoom.reconnection.enabled = false;
+        joinGeneration++;
+        const intentional = leavingIntentionally || pageLeaving;
+        cleanup();
+        if (intentional) {
+          setConnectionState('disconnected', '已离开，可以重新进入');
+          return;
+        }
+        const message = code === SPACE_REPLACED_CLOSE_CODE
+          ? '账号已在其他设备进入此空间，当前连接已下线'
+          : code === CloseCode.SERVER_SHUTDOWN
+            ? '与服务器的连接已断开：服务正在停止或重启。请稍后重新连接。'
+            : code === CloseCode.FAILED_TO_RECONNECT
+              ? '自动重连失败，与服务器的连接已断开。请检查网络或等待服务恢复后重新连接。'
+              : '与服务器的连接已断开，可能是网络异常、服务重启或连接被关闭。请重新连接。';
+        showScreen('map-screen');
+        setConnectionState('disconnected', message, true);
+      },
+    });
     if (!joinedRoom.state?.players) await withTimeout(new Promise<void>(resolve => joinedRoom.onStateChange.once(() => resolve())),
       10_000, '空间已连接，但没有收到地图角色数据');
-    if (!isCurrentJoin() || room !== joinedRoom) { stopPlannedStream(); void joinedRoom.leave().catch(() => {}); return; }
+    if (!isCurrentJoin() || room !== joinedRoom) { stopPlannedStream(); leaveConnection(joinedRoom); return; }
     const nativeRoom = room;
     interactions = createInteractions(room, undefined, {
       world: () => worldRegistry?.maps.find(map => map.id === nativeRoom.state.players.get(nativeRoom.sessionId)?.mapId)?.world,
@@ -544,6 +601,7 @@ async function enterWorld(plan: VoicePlan) {
       const mapId = actionRoom.state.players.get(actionRoom.sessionId)?.mapId;
       return worldRegistry?.maps.find(map => map.id === mapId)?.world;
     });
+    setConnected(connectionState === 'connected');
     messages.replaceChildren();
     const appendChat = (text: string, className?: string) => {
       const li = document.createElement('li');
@@ -569,20 +627,11 @@ async function enterWorld(plan: VoicePlan) {
       const next = own.privateAreaId ? `${own.mapId}/${own.privateAreaId}` : '';
       if (next === audience) return;
       audience = next;
-      appendChat(next ? '已进入私密房间：聊天和语音只在房间内互通。' : '已回到公共区域：聊天和语音恢复公共范围。', 'chat-system');
+      appendChat(next ? '已进入私密房间：房外看不到或听不到房内；仍可接收公共区域的聊天和附近语音。' : '已回到公共区域：聊天和语音恢复公共范围。', 'chat-system');
     });
-    room.onDrop(() => { if (room !== nativeRoom) return; setConnected(false); status.textContent = '连接中断，正在自动重连…'; });
-    room.onReconnect(() => { if (room !== nativeRoom) return; setConnected(true); status.textContent = '连接已恢复'; });
-    room.onLeave(code => {
-      if (room !== nativeRoom) return;
-      nativeRoom.reconnection.enabled = false;
-      cleanup(); status.textContent = code === SPACE_REPLACED_CLOSE_CODE
-        ? '账号已在其他设备进入此空间，当前连接已下线'
-        : '已离开，可以重新进入';
-      void accounts.refreshProfile().then(value => { if (!value) showScreen('login-screen'); })
-        .catch(error => { status.textContent = `无法刷新登录状态：${error instanceof Error ? error.message : String(error)}`; });
+    room.onError((_code, message) => {
+      if (room === nativeRoom && connectionState === 'connected') status.textContent = `房间错误：${message}`;
     });
-    room.onError((_code, message) => { if (room === nativeRoom) status.textContent = `房间错误：${message}`; });
     const activeRoom = room;
     room.onStateChange(() => {
       if (room !== activeRoom) return;
@@ -593,23 +642,32 @@ async function enterWorld(plan: VoicePlan) {
     });
     await renderWorld(room.state?.players?.get(room.sessionId)?.mapId ?? worldRegistry.initialMap, room);
     if (!isCurrentJoin() || room !== nativeRoom) { stopPlannedStream(); return; }
-    setConnected(true);
     leave.disabled = false;
     const sessionId = document.createElement('span');
     sessionId.className = 'session-id';
     sessionId.textContent = ` · ${room.sessionId}`;
-    status.replaceChildren('已进入空间', sessionId);
+    if (!nativeRoom.reconnection.isReconnecting && nativeRoom.connection.isOpen) {
+      setConnectionState('connected', '已进入空间');
+      status.append(sessionId);
+    }
     join.blur();
-    if (plan.enabled) {
+    if (plan.enabled && connected) {
       const stream = plan.stream;
       plan.stream = undefined;
       void voice.enable({ ...(stream ? { stream } : {}), muted: plan.muted });
-    }
+    } else stopPlannedStream();
   } catch (error) {
     stopPlannedStream();
     if (!isCurrentJoin()) return;
-    void room?.leave().catch(() => {});
+    const failedRoom = room;
     cleanup();
+    if (failedRoom) leaveConnection(failedRoom);
+    if (retry) {
+      showScreen('map-screen');
+      setConnectionState('disconnected', `重新连接失败：${error instanceof Error ? error.message : String(error)}`, true);
+      return;
+    }
+    setConnectionState('disconnected', '连接未建立');
     showScreen(currentProfile ? 'avatar-screen' : 'login-screen');
     joinFeedback.textContent = `进入失败：${error instanceof Error ? error.message : String(error)}`;
   }
@@ -621,14 +679,15 @@ window.addEventListener('pagehide', () => {
   const departingRoom = room;
   room = undefined;
   cleanup();
-  if (departingRoom) void departingRoom.leave().catch(() => {});
+  setConnectionState('disconnected', '已离开，可以重新进入');
+  if (departingRoom) leaveConnection(departingRoom);
 });
 window.addEventListener('pageshow', event => {
   if (!event.persisted) return;
   pageLeaving = false;
   joinGeneration++;
   cleanup();
-  status.textContent = '已离开，可以重新进入';
+  setConnectionState('disconnected', '已离开，可以重新进入');
   showScreen(currentProfile ? 'avatar-screen' : 'login-screen');
 });
 const renderMapSchema = z.object({
@@ -666,6 +725,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
         if (point) zoneAnchor.style.transform = `translate(${point.x}px, ${point.y}px)`;
       },
       activate: () => { void actions?.activate(); },
+      connected: () => connected,
       virtualInput: () => touchPad.read(),
       namesVisible: () => namesVisible,
       speaking: id => voice?.isSpeaking(id) ?? false,
@@ -681,7 +741,22 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
   } finally { if (generation === renderGeneration) renderingMap = ''; }
 }
 
-leave.addEventListener('click', () => { leavingIntentionally = true; leave.disabled = true; void room?.leave(); showScreen('login-screen'); });
+function leaveWorld() {
+  leavingIntentionally = true;
+  joinGeneration++;
+  const departingRoom = room;
+  cleanup();
+  setConnectionState('disconnected', '已离开，可以重新进入');
+  if (departingRoom) leaveConnection(departingRoom);
+  showScreen('login-screen');
+}
+leave.addEventListener('click', leaveWorld);
+element('connection-back').addEventListener('click', leaveWorld);
+reconnectButton.addEventListener('click', () => {
+  if (connectionState !== 'disconnected') return;
+  void enterWorld({ enabled: false, muted: true }, true);
+});
+element('connection-refresh').addEventListener('click', () => window.location.reload());
 // Chat focus works like a game chat line: Enter on the map opens it, Enter sends and hands the
 // keyboard back to the map, and Esc or Tab leave it without sending (the draft is kept).
 // While it has focus, every key edits text, so arrow keys move the caret as usual.

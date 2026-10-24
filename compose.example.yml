@@ -16,6 +16,8 @@ services:
       REGISTRATION_CODE: ${REGISTRATION_CODE:-}
 
       SPACE_MAX_CLIENTS: ${SPACE_MAX_CLIENTS:-32}
+      VOICE_CONNECT_RADIUS: ${VOICE_CONNECT_RADIUS:-320}
+      VOICE_DISCONNECT_RADIUS: ${VOICE_DISCONNECT_RADIUS:-384}
 
       # Want TURN for voice across restricted networks? Uncomment these and coturn.
       # VOICE_TURN_URLS: turn:${VW_HOST}:3478?transport=udp,turn:${VW_HOST}:3478?transport=tcp
@@ -50,7 +52,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # Want automatic HTTPS for VirtualWorkspace? Set VW_HOST and VW_ORIGIN in
+  # Want automatic HTTPS for Impartation? Set VW_HOST and VW_ORIGIN in
   # compose.env, then uncomment this service and its two volumes below.
   # caddy:
   #   image: caddy:2

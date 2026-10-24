@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { appearanceSchema, avatarSchema, type JoinOptions } from '@virtual-workspace/shared';
+import { appearanceSchema, avatarSchema, type JoinOptions } from '@impartation/shared';
 
 const profileSchema = z.object({
   id: z.string(),
@@ -28,6 +28,7 @@ async function request(path: string, method = 'GET', body?: unknown, bindAccount
     credentials: 'include',
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(12_000),
   });
   if (!response.ok) {
     let message = `操作失败（${response.status}）`;
@@ -46,7 +47,7 @@ export async function registrationMode(): Promise<RegistrationMode> {
 }
 
 export async function loadProfile(): Promise<Profile | undefined> {
-  const response = await fetch('/api/me', { credentials: 'include' });
+  const response = await fetch('/api/me', { credentials: 'include', signal: AbortSignal.timeout(12_000) });
   if (response.status === 401) { currentAccountId = undefined; return undefined; }
   if (!response.ok) throw new Error(`无法读取身份（${response.status}）`);
   const profile = profileSchema.parse(await response.json());

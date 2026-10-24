@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
 import { z } from 'zod';
-import { joinSchema, savedOutfitSchema } from '@virtual-workspace/shared';
+import { joinSchema, savedOutfitSchema } from '@impartation/shared';
 import { accountInputSchema, authSignUpBody, createAccount, listAccounts, moderateAccount, moderationActionSchema, registrationAllowed } from './accounts.js';
 import { auth, ensureProfile, identityFromHeaders, profile, revokeUserSessions, updateProfile, type Identity } from './identity.js';
 import { config } from './config.js';

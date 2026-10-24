@@ -2,7 +2,7 @@
 
 本文描述当前代码的组织方式、运行流程和扩展契约。启动命令见 [README](../README.md)，地图格式见 [Tiled 契约](tiled.md)，身份 API 和绑定流程见 [身份说明](account-system.md)，工具配置见 [integration 配置](integration-plan.md)。尚未实现的能力见 [待办](roadmap.md)。
 
-Virtual Workspace 由浏览器客户端和一个 Node.js 后端组成。浏览器使用 Phaser 4 渲染地图，通过 HTTP 获取账号、资料、地图和工具配置，通过 Colyseus 0.18 WebSocket 收发输入、状态和交互请求。后端拥有玩家位置、地图归属和内置 integration 状态的写入权；SQLite 保存账号资料、已保存造型、在线断开命令和留言。Tiled 文件决定世界几何与交互语义，第三方服务拥有自己的内容、账号和权限。
+Impartation 由浏览器客户端和一个 Node.js 后端组成。浏览器使用 Phaser 4 渲染地图，通过 HTTP 获取账号、资料、地图和工具配置，通过 Colyseus 0.18 WebSocket 收发输入、状态和交互请求。后端拥有玩家位置、地图归属和内置 integration 状态的写入权；SQLite 保存账号资料、已保存造型、在线断开命令和留言。Tiled 文件决定世界几何与交互语义，第三方服务拥有自己的内容、账号和权限。
 
 角色附件由独立的 `ATTACHMENTS` registry 管理，不属于 `appearance` 或已保存造型。Tiled 附件来源通过 `attachment` 交互注册，房间状态同步当前附件 ID、来源和唯一来源的占用者；服务端校验角色所在区域后才分配，清除、替换或离开时释放唯一占用。客户端在现有角色 sprite 帧上叠加透明附件图层，移动、聊天和坐下仍使用原有规则。
 
@@ -37,6 +37,7 @@ flowchart LR
 | [backend/interactions/web/config.ts](../apps/backend/src/interactions/web/config.ts) | 解析并校验公开 WebTool 配置 |
 | [backend/identity.ts](../apps/backend/src/identity.ts) / [db.ts](../apps/backend/src/db.ts) | Better Auth、项目资料、数据库初始化和迁移 |
 | [frontend/main.ts](../apps/frontend/src/main.ts) | 页面与连接生命周期、地图获取和切换、聊天、顶层清理 |
+| [frontend/connection.ts](../apps/frontend/src/connection.ts) | Colyseus drop/reconnect/leave 订阅、心跳超时检测、重连等待上限与主动离开 |
 | [frontend/SpaceScene.ts](../apps/frontend/src/SpaceScene.ts) | Tiled 瓦片渲染、角色插值、键盘输入和区域通知 |
 | [frontend/interactions/index.ts](../apps/frontend/src/interactions/index.ts) | 客户端交互组装入口；注册面板、Portal 和 WebTool handler |
 | [frontend/interactions/dispatcher.ts](../apps/frontend/src/interactions/dispatcher.ts) | 通用区域、连接和销毁事件分发 |
@@ -87,6 +88,8 @@ sequenceDiagram
 界面相关的前端模块只处理本地展示：[theme.ts](../apps/frontend/src/theme.ts) 把 6 套预设或由底色/面板/描边/按钮四色推导的自定义配色写成根元素 CSS 变量；[wardrobe.ts](../apps/frontend/src/wardrobe.ts) 管理试衣间的图层选择、单品预览、预设色与撤销；[colorPicker.ts](../apps/frontend/src/colorPicker.ts) 提供饱和度/明度面板、色相条和 RGB/HEX 输入；[outfitSlots.ts](../apps/frontend/src/outfitSlots.ts) 按账号从服务端读写 3 个命名造型。界面配色、昵称显隐和聊天背景保存在当前浏览器；造型槽位保存在 SQLite 并跨已登录设备同步。服务端按 `appearanceSchema` 校验外观。保存一个槽位使用单槽接口，避免写回其余可能已在其他设备更新的槽位。
 
 Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配对应 Space。每个 Space 同时最多一个 live room，所有 Space 共用 `SPACE_MAX_CLIENTS`（默认 32）；满员时拒绝其他账号加入，不创建额外实例；同账号可替换自己的席位。同一账号在一个 Space 只能有一个连接；服务端按验证后的账号身份和 Space 将席位转移给新连接，关闭旧连接并取消旧重连资格。普通断线重连保留原 session ID 和玩家状态，不重复占用席位；重连期间仍占用的席位可被新连接替换。账号可以同时连接不同 Space，离开或重连超时后席位释放。房间只包含该 Space 登记的地图，地图 ID 不是房间 ID。私密区域是在 Space room 中的临时区域上下文，包含成员名单和物理准入；不创建新的 Colyseus 房间。
+
+客户端分别呈现 `connected`、`reconnecting`、`disconnected`，初次加入使用 `connecting`。`onDrop` 暂停输入与所有实时交互、关闭语音并显示重连提示；`onReconnect` 恢复同一个 Room 的交互，`onLeave` 则清理连接并显示最终断开原因。正常停服的 `SERVER_SHUTDOWN` 与连接接管的专用关闭码有独立提示，不能视为主动离开。客户端每 3 秒用 SDK `room.ping()` 探测，12 秒无响应时走现有重连路径；自动重连最多等待 30 秒，超时触发 SDK 最终失败。最终失败提供手动重连、刷新和返回入口，不自动刷新。主动离开、pagehide 与旧异步加入均释放连接；pageshow 缓存恢复返回加入界面。过期 Room 的回调不能替换当前连接或提示。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
 
@@ -153,7 +156,7 @@ registry 校验要求 map ID 和 Space ID 各自唯一、每个 Space 的 initia
 
 Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符串形式的 `appearance`、权限 role、`mapId`、坐标、`connected`、`voiceEnabled`、`typing`、`zoneId`、`webToolZone`、`webToolAt`、`facing`、`motion`、动作名 `action`、`actionAnimated`、`actionTargetId` 和当前物理私密上下文 `privateAreaId`。appearance 由共享 `appearanceSchema` 校验，包含 body、face、hair、top、bottom、shoes、accessories 七层的素材 ID 和 RGB 颜色；服装层可用 `none` 隐藏。动作默认为 `none`，动画标记默认为 `false`；移动会重置这三项。地图和定制预览绘制相同的完整帧图层并逐层乘色。`avatar` 不表示个人头像或权限。`userId` 是持久身份；Colyseus `sessionId` 是连接标识；Better Auth 的 session ID 是认证会话标识。三者用途不同，消息 handler 从 Colyseus 提供的 client 和已验证身份定位操作者。
 
-消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal、activateAction、cancelAction、selectVariant 和 privateArea，这些交互请求返回 `{ ok, message }`。activateAction 只接收 shared `CHARACTER_ACTIONS` 目录中的动作名和可选动画标记，目录外的名称被校验拒绝，动作不支持动画时服务端忽略动画标记；地图与玩家位置由服务端权威读取。服务端 chat 实时投递给与发送者处于同一听众范围（shared `sameAudience`）的在线玩家，消息带发送者的 `privateAreaId`；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
+消息载荷是普通对象，Schema 只用于同步状态。前端通过 `send` 提交 input/chat，通过 `request` 调用 boardPost、boardDelete、pomodoro、portal、activateAction、cancelAction、selectVariant 和 privateArea，这些交互请求返回 `{ ok, message }`。activateAction 只接收 shared `CHARACTER_ACTIONS` 目录中的动作名和可选动画标记，目录外的名称被校验拒绝，动作不支持动画时服务端忽略动画标记；地图与玩家位置由服务端权威读取。服务端 chat 实时投递给与发送者处于可接收范围（shared `canReceive`）的在线玩家，消息带发送者的 `privateAreaId`；聊天记录不放入 Schema，也不落盘。浏览器只保留本次连接显示的最近 100 条。
 
 | 消息名 | 客户端载荷 | 服务端效果 |
 | --- | --- | --- |
@@ -173,9 +176,9 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 | `voiceOffer` / `voiceAnswer` | `{ peerId, connectionId, sdp }` | 检查双方已启用、同地图、在范围内且未超过节点数，然后转发 SDP |
 | `voiceIceCandidate` / `voiceEnd` | `{ peerId, connectionId, ... }` | 只转发已授权连接的 ICE，或关闭指定连接 |
 
-当前没有按地图或资源进行 Schema 的可见性过滤。客户端只绘制同 mapId 的玩家、只展示当前 resourceId 的留言；同房间客户端仍接收其它地图玩家和所有已同步 integration 数据。区域检查约束操作，不是读取隔离；地图转换也不隔离聊天。
+当前没有按地图或资源进行 Schema 的可见性过滤。客户端只绘制同 mapId 的玩家、只展示当前 resourceId 的留言；同房间客户端仍接收其它地图玩家和所有已同步 integration 数据。区域检查约束交互与聊天接收范围，不隔离玩家 Schema；地图转换不隔离公共聊天。
 
-近距离语音仅把 `voiceEnabled` 意愿同步到 Player Schema，不同步音频或第二套位置。浏览器需主动启用并授予麦克风权限，每 1000ms 根据现有玩家位置扫描候选节点；服务端按同地图、连接状态和权威位置审核每条信令，默认 160 像素内连接、超过 192 像素断开，每客户端最多 6 个节点。共享 `canHear` 资格函数是以后加入私有区域语音上下文的扩展点。连接/断开半径的差值用于减少边界抖动。音频通过 WebRTC 点对点传输，Colyseus 负责房间状态和信令协调，不承载媒体流；项目不运行 SFU 或 TURN 服务。麦克风 API 需要安全上下文，即 HTTPS 或 localhost。
+近距离语音仅把 `voiceEnabled` 意愿同步到 Player Schema，不同步音频或第二套位置。浏览器需主动启用并授予麦克风权限，根据现有玩家位置扫描候选节点；服务端按同地图、连接状态和权威位置审核每条信令，默认 320 像素内连接、超过 384 像素断开，每客户端最多 6 个节点。shared `canHear` 按发送者与接收者方向判断私密区域范围；同一 WebRTC peer 可只承载公共到私密区域的音频，官方客户端会在发送端禁用不允许的音轨，并在接收端静音不可听的音轨。连接/断开半径的差值用于减少边界抖动。音频通过 WebRTC 点对点传输，Colyseus 负责房间状态和信令协调，不承载媒体流；项目不运行 SFU 或 TURN 服务。麦克风 API 需要安全上下文，即 HTTPS 或 localhost。
 
 ### 4.2 权威移动
 
@@ -197,7 +200,7 @@ variantSelector 复用动作锚点的重叠候选、朝向与偏移规则。朝�
 
 privateArea 开放时进入者加入临时会话，成员权限平等；成员离开物理区域后保留重入、锁定与添加在线玩家的资格。锁定时，服务端以完整 12×8 脚底碰撞体阻止非成员进入，同时检查动作偏移和 Portal 落点；成员仍可自由离开。所有锁定/成员修改都在身份复验后的同步片段完成。默认出生点在锁区时加入/重连尝试其它命名 spawn；没有可进入 spawn 时拒绝入场。同地图 Portal 保留成员资格，跨地图清理旧地图成员资格。
 
-无成员时立即清空锁；有成员但连续 60 秒没有在线成员在物理区域内时清空会话。断线立即删除该连接在所有区域的成员资格，房间销毁也会重置。`Player.privateAreaId` 仅表示当前位置的空间上下文；授权以服务端成员表为准。聊天与语音按 shared `sameAudience(mapId, privateAreaId)` 隔离：双方都在区域外（公共频道，聊天跨地图），或在同一地图的同一区域内，才互通。语音 `canHear` 组合该规则，服务端拒绝跨边界信令，玩家越过区域边界的那一帧立即复查并结束不再合格的语音配对；WebRTC 为点对点，隔离依赖诚实一端按 voiceEnd 关闭连接。区域隔离以物理位置为准：成员离开区域后回到公共频道。Schema 可见性（位置、正在输入等）仍对整个房间公开，不提供读取隔离。
+无成员时立即清空锁；有成员但连续 60 秒没有在线成员在物理区域内时清空会话。断线立即删除该连接在所有区域的成员资格，房间销毁也会重置。`Player.privateAreaId` 仅表示当前位置的空间上下文；授权以服务端成员表为准。聊天与语音按 shared `canReceive(mapId, privateAreaId)` 判断方向：公共玩家可以向私密区域成员发送，私密区域成员会收到公共频道内容；公共玩家收不到私密区域发出的内容，不同私密区域仍隔离。公共聊天保留跨地图广播，私密区域的接收仅限同地图。语音配对只在至少一个方向可接收时建立；服务端按权威位置校验信令，客户端按方向启用发送音轨并静音不可接收的远端音轨。玩家越过区域边界时立即复查配对和媒体方向。WebRTC 为点对点，媒体隔离由官方客户端执行，不能抵御篡改客户端直接发送媒体。区域归属以服务端物理位置为准，Schema 可见性（位置、正在输入等）仍对整个房间公开，不提供读取隔离。
 
 wardrobe 是原生入口，打开已有 Wardrobe 实例及其外观编辑 UI。保存走同一个 `PATCH /api/me` 和 appearance 校验，返回地图保留原房间和连接；不另建外观状态或工具服务。
 
@@ -331,7 +334,7 @@ Better Auth 负责用户名/密码凭据、session cookie 和密码重置 token�
 
 当前部署模型为单后端实例和本地 SQLite。每 Space 单 live room、Space 内状态及 BoardStore 通知都在进程内；直接增加多个进程无法保留现有 Space 内共享语义，需要另行设计房间调度、持久化和变更通知。HTTP Basic Auth 由部署者的反向代理提供。身份 secret、公开站点 URL 和 trusted origins 的部署要求见 README 与身份说明。
 
-语音公开 ICE 配置来自 `VOICE_ICE_SERVERS` JSON 环境变量。可选的 coturn TURN REST 认证使用 `VOICE_TURN_URLS`（逗号分隔）和仅后端保存的 `VOICE_TURN_SHARED_SECRET`；两者需同时配置。coturn 需启用 `--use-auth-secret`，并设置同一个 `--static-auth-secret`，详见 [coturn turnserver 文档](https://github.com/coturn/coturn/blob/master/man/man1/turnserver.1)。已登录用户通过 no-store 的 `GET /api/voice-credentials` 获取基于 `${expiry}:${verifiedUserId}` 用户名和 HMAC-SHA1 密码的短期凭据，默认有效一小时，可由 `VOICE_TURN_CREDENTIAL_TTL_SECONDS` 设置为 60–86400 秒。浏览器在每次新建 peer 连接前检查并刷新凭据，已有连接继续使用建立时的 ICE 配置。两项 TURN 环境变量均未设置时只使用公开 ICE 列表，默认公共 STUN 行为保持不变。连接半径、断开半径、最大节点数和扫描间隔分别由 `VOICE_CONNECT_RADIUS`（默认 160）、`VOICE_DISCONNECT_RADIUS`（192）、`VOICE_MAX_PEERS`（6）和 `VOICE_SCAN_INTERVAL_MS`（1000）控制。STUN/TURN 服务由部署者提供。
+语音公开 ICE 配置来自 `VOICE_ICE_SERVERS` JSON 环境变量。可选的 coturn TURN REST 认证使用 `VOICE_TURN_URLS`（逗号分隔）和仅后端保存的 `VOICE_TURN_SHARED_SECRET`；两者需同时配置。coturn 需启用 `--use-auth-secret`，并设置同一个 `--static-auth-secret`，详见 [coturn turnserver 文档](https://github.com/coturn/coturn/blob/master/man/man1/turnserver.1)。已登录用户通过 no-store 的 `GET /api/voice-credentials` 获取基于 `${expiry}:${verifiedUserId}` 用户名和 HMAC-SHA1 密码的短期凭据，默认有效一小时，可由 `VOICE_TURN_CREDENTIAL_TTL_SECONDS` 设置为 60–86400 秒。浏览器在每次新建 peer 连接前检查并刷新凭据，已有连接继续使用建立时的 ICE 配置。两项 TURN 环境变量均未设置时只使用公开 ICE 列表，默认公共 STUN 行为保持不变。连接半径、断开半径、最大节点数和扫描间隔分别由 `VOICE_CONNECT_RADIUS`（默认 320）、`VOICE_DISCONNECT_RADIUS`（384）、`VOICE_MAX_PEERS`（6）和 `VOICE_SCAN_INTERVAL_MS`（1000）控制。STUN/TURN 服务由部署者提供。
 
 ## 8. 验证与定位问题
 

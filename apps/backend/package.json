@@ -1,5 +1,5 @@
 {
-  "name": "@virtual-workspace/backend",
+  "name": "@impartation/backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "@colyseus/core": "~0.18.18",
     "@colyseus/tools": "~0.18.7",
     "@colyseus/ws-transport": "~0.18.4",
-    "@virtual-workspace/shared": "*",
+    "@impartation/shared": "*",
     "better-auth": "^1.7.7",
     "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",

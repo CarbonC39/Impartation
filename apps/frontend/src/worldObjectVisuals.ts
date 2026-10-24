@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { MapObjectState, WorldMap } from '@virtual-workspace/shared';
+import type { MapObjectState, WorldMap } from '@impartation/shared';
 
 /** Object sprites are keyed by authored IDs. No interaction depends on tile indices. */
 export class WorldObjectVisuals {

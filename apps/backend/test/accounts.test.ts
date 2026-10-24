@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { rmSync } from 'node:fs';
-import { DEFAULT_APPEARANCE } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE } from '@impartation/shared';
 import { createRoomWorldFixture } from './world-fixture.js';
 
 process.env.DATABASE_PATH = ':memory:';

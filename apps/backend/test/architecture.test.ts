@@ -3,7 +3,7 @@ import { globSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { InteractionRegistry, type SpaceProtocol, type Zone } from '@virtual-workspace/shared';
+import { InteractionRegistry, type SpaceProtocol, type Zone } from '@impartation/shared';
 import { InteractionDispatcher, type InteractionHandler } from '../../frontend/src/interactions/dispatcher.js';
 import { PresentationRegistry } from '../../frontend/src/interactions/web/presentations.js';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
@@ -28,11 +28,11 @@ test('shared protocol agrees with the server and frontend depends only on shared
   const root = fileURLToPath(new URL('../../frontend/', import.meta.url));
   const packageJson = z.object({ dependencies: z.record(z.string(), z.string()), devDependencies: z.record(z.string(), z.string()) })
     .parse(JSON.parse(readFileSync(root + 'package.json', 'utf8')));
-  assert.equal(packageJson.dependencies['@virtual-workspace/backend'], undefined);
-  assert.equal(packageJson.devDependencies['@virtual-workspace/backend'], undefined);
+  assert.equal(packageJson.dependencies['@impartation/backend'], undefined);
+  assert.equal(packageJson.devDependencies['@impartation/backend'], undefined);
   assert.match(packageJson.dependencies.phaser, /4\./);
   for (const path of globSync('**/*.ts', { cwd: root + 'src' })) {
-    assert.doesNotMatch(readFileSync(root + 'src/' + path, 'utf8'), /@virtual-workspace\/backend/);
+    assert.doesNotMatch(readFileSync(root + 'src/' + path, 'utf8'), /@impartation\/backend/);
   }
 });
 

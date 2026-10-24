@@ -1,4 +1,4 @@
-import { savedOutfitsSchema, type SavedOutfits } from '@virtual-workspace/shared';
+import { savedOutfitsSchema, type SavedOutfits } from '@impartation/shared';
 import { db } from './db.js';
 
 const EMPTY_OUTFITS: SavedOutfits = [null, null, null];

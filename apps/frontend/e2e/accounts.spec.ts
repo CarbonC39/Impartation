@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Dialog } from '@playwright/test';
-import { DEFAULT_APPEARANCE } from '@virtual-workspace/shared';
+import { DEFAULT_APPEARANCE } from '@impartation/shared';
 
 const password = 'account-test-password';
 let sequence = 0;

@@ -1,4 +1,4 @@
-import { savedOutfitsSchema, type SavedOutfits } from '@virtual-workspace/shared';
+import { savedOutfitsSchema, type SavedOutfits } from '@impartation/shared';
 import { drawAppearancePreview } from './appearancePreview';
 import { avatarDefinition } from './characters';
 import type { Appearance } from './wardrobe';

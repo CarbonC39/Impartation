@@ -1,5 +1,5 @@
 import { activateActionSchema, findActionAnchor, actionFacingMatches, canAlignAction, currentZone, CHARACTER_ACTIONS, MapObjectState, WorldObjectState,
-  type ActivateAction, type InteractionResult, type Player, type RegisteredMap } from '@virtual-workspace/shared';
+  type ActivateAction, type InteractionResult, type Player, type RegisteredMap } from '@impartation/shared';
 import { z } from 'zod';
 import type { PrivateAreaAccess } from '../privateArea/handler.js';
 import type { InteractionContext, SpaceClient } from '../context.js';

@@ -1,4 +1,4 @@
-import { hexToHsv, hexToRgb, hsvToHex, rgbToHex, type Hsv } from '@virtual-workspace/shared';
+import { hexToHsv, hexToRgb, hsvToHex, rgbToHex, type Hsv } from '@impartation/shared';
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 type EyeDropperWindow = Window & { EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> } };

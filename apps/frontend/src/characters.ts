@@ -1,4 +1,4 @@
-import { APPEARANCE_ASSET_PATHS, APPEARANCE_LAYERS, appearanceSchema, FACINGS, type Facing, type Motion } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSET_PATHS, APPEARANCE_LAYERS, appearanceSchema, FACINGS, type Facing, type Motion } from '@impartation/shared';
 
 export const layerAssets: Record<string, string> = APPEARANCE_ASSET_PATHS;
 export const layerAssetIds = Object.keys(APPEARANCE_ASSET_PATHS);

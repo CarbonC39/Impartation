@@ -1,4 +1,4 @@
-import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, appearanceSchema, type JoinOptions } from '@virtual-workspace/shared';
+import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, appearanceSchema, type JoinOptions } from '@impartation/shared';
 import { drawAppearancePreview } from './appearancePreview';
 import { avatarDefinition } from './characters';
 import { createColorPicker } from './colorPicker';

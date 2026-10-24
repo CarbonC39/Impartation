@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Client, type Room } from '@colyseus/sdk';
 import { matchMaker } from '@colyseus/core';
-import { ATTACHMENTS, DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, attachmentSourceKey, type SpaceProtocol } from '@virtual-workspace/shared';
+import { ATTACHMENTS, DEFAULT_APPEARANCE, PRIVATE_AREA_IDLE_MS, attachmentSourceKey, type SpaceProtocol } from '@impartation/shared';
 import type { SpaceRoom } from '../src/rooms/SpaceRoom.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'workspace-interactions-'));
@@ -346,7 +346,7 @@ test('polygon private admission uses the diagonal boundary and allows retreat af
   } finally { delete definition.polygon; }
 });
 
-test('private areas isolate chat and voice from the public room', async () => {
+test('private areas receive public chat and voice but keep private content one-way', async () => {
   const alice = await connect('Alice'); const bob = await connect('Bob'); const carol = await connect('Carol');
   const clients = [alice, bob, carol];
   const room = roomFor(alice); const access = room['interactions'].access;
@@ -361,8 +361,8 @@ test('private areas isolate chat and voice from the public room', async () => {
   }
   alice.send('chat', { text: 'inside' }); carol.send('chat', { text: 'outside' });
   await until(() => clients.every(client => inbox.get(client.sessionId)!.length >= 1)); await delay(100);
-  assert.deepEqual(inbox.get(alice.sessionId), ['30:inside']);
-  assert.deepEqual(inbox.get(bob.sessionId), ['30:inside']);
+  assert.deepEqual(inbox.get(alice.sessionId)!.sort(), ['30:inside', ':outside']);
+  assert.deepEqual(inbox.get(bob.sessionId)!.sort(), ['30:inside', ':outside']);
   assert.deepEqual(inbox.get(carol.sessionId), [':outside']);
 
   for (const client of clients) assert.equal(await client.request('voiceEnabled', { enabled: true }), true);
@@ -370,10 +370,16 @@ test('private areas isolate chat and voice from the public room', async () => {
     const [from, to] = [one, two].sort((x, y) => x.sessionId < y.sessionId ? -1 : 1);
     return from!.request('voiceOffer', { peerId: to!.sessionId, connectionId: randomUUID(), sdp: 'offer' });
   };
-  assert.equal(await offer(alice, carol), false, 'voice does not cross the private-area border');
+  assert.equal(await offer(alice, carol), true, 'a pair can carry public voice into the private area');
+  assert.equal(await offer(carol, alice), false, 'duplicate pair creation is rejected');
   assert.equal(await offer(alice, bob), true);
   b.x = 130; b.y = 200; access.tick(); room['voice'].tick();
+  await delay(100);
+  assert.equal(ended.includes(alice.sessionId) || ended.includes(bob.sessionId), false,
+    'leaving the private area keeps the public-to-private audio direction alive');
+  b.x = 1000; b.y = 1000; room['voice'].tick();
   await until(() => ended.includes(alice.sessionId) && ended.includes(bob.sessionId));
+  b.x = 130; b.y = 200; room['voice'].tick();
   assert.equal(await offer(bob, carol), true, 'leaving the area rejoins the public audience');
 });
 

@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { voiceCredentialsSchema } from '@virtual-workspace/shared';
+import { voiceCredentialsSchema } from '@impartation/shared';
 import { config, voiceTurnUrls } from './config.js';
 
 /** Mint coturn TURN REST API credentials for the verified application user. */

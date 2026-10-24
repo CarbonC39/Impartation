@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { parseWorldMap } from '@virtual-workspace/shared';
+import { parseWorldMap } from '@impartation/shared';
 import { loadWebTools } from '../src/interactions/web/config.js';
 
 const world = parseWorldMap(JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8')));

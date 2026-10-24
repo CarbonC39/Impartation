@@ -4,7 +4,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { username } from 'better-auth/plugins/username';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter } from 'node:events';
-import { appearanceSchema, DEFAULT_APPEARANCE, joinSchema, type JoinOptions } from '@virtual-workspace/shared';
+import { appearanceSchema, DEFAULT_APPEARANCE, joinSchema, type JoinOptions } from '@impartation/shared';
 import { config } from './config.js';
 import { db } from './db.js';
 

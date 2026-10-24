@@ -1,4 +1,4 @@
-import { webToolsConfigSchema, type WebTool, type WorldMap } from '@virtual-workspace/shared';
+import { webToolsConfigSchema, type WebTool, type WorldMap } from '@impartation/shared';
 
 /** Public launch destinations only; tool authorization stays with the tool. */
 export function loadWebTools(raw: string, world: WorldMap | WorldMap[]): WebTool[] {

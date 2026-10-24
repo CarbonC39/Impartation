@@ -1,5 +1,5 @@
-import { canHear, type SpaceState, type VoiceAnswer, type VoiceEnd, type VoiceIceCandidate,
-  type VoiceOffer, type VoiceConfig } from '@virtual-workspace/shared';
+import { canConnectVoice, type SpaceState, type VoiceAnswer, type VoiceEnd, type VoiceIceCandidate,
+  type VoiceOffer, type VoiceConfig } from '@impartation/shared';
 import type { SpaceClient } from '../interactions/context.js';
 
 type Pair = { a: string; b: string; connectionId: string; answered: boolean; createdAt: number };
@@ -11,7 +11,7 @@ export class VoiceSignaling {
 
   private key(a: string, b: string) { return JSON.stringify([a, b].sort()); }
   private eligible(a: string, b: string, radius: number) {
-    return a !== b && canHear(this.state.players.get(a), this.state.players.get(b), radius) &&
+    return a !== b && canConnectVoice(this.state.players.get(a), this.state.players.get(b), radius) &&
       Boolean(this.clientById(a) && this.clientById(b));
   }
   private count(id: string) { return [...this.pairs.values()].filter(pair => pair.a === id || pair.b === id).length; }

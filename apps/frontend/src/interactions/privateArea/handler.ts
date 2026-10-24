@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import type { PrivateAreaOperationInput, SpaceProtocol, Zone } from '@virtual-workspace/shared';
+import type { PrivateAreaOperationInput, SpaceProtocol, Zone } from '@impartation/shared';
 import type { InteractionHandler } from '../dispatcher';
 import { element } from '../panel';
 

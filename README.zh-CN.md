@@ -1,4 +1,4 @@
-# Virtual Workspace
+# Impartation
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
@@ -6,7 +6,7 @@
 
 Tiled JSON 是地图几何与交互的源数据；服务端 registry 按顺序登记多个 Space，并允许它们复用 16×16 tile 的有限正交地图。每个 Space 定义自己的初始地图和地图列表；Portal 只能在该 Space 的地图之间切换。开始页的 Space 列表来自 `GET /api/world`；默认产品 Space 使用稳定 ID `main`。
 
-地图作者直接选择 `action`、`variantSelector`、`privateArea`、`wardrobe`、`web` 或 `Portal` 类型。选择器独占动作点并切换目标图块；私密区域支持平等成员、锁定和服务端物理准入，连续 60 秒无成员在区域内时重置；镜子入口复用现有衣橱。新类型需在 Tiled 中显式制作，见[制图示例](docs/tiled.md)。聊天和附近语音按私密区域隔离：区域内的人只与同一区域内的人互通文字和语音，区域外的人留在公共频道；不同 Space 的运行时状态彼此隔离；位置、正在输入标识等同步状态对所属 Space 内整个房间可见。
+地图作者直接选择 `action`、`variantSelector`、`privateArea`、`wardrobe`、`web` 或 `Portal` 类型。选择器独占动作点并切换目标图块；私密区域支持平等成员、锁定和服务端物理准入，连续 60 秒无成员在区域内时重置；镜子入口复用现有衣橱。新类型需在 Tiled 中显式制作，见[制图示例](docs/tiled.md)。私密区域成员可以收到公共频道的文字和附近语音，公共区域玩家收不到私密区域的文字或音频；不同私密区域仍相互隔离。不同 Space 的运行时状态彼此隔离；位置、正在输入标识等同步状态对所属 Space 内整个房间可见。
 
 地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。进入区域只在区域上方显示小提示；点击提示后才用 `external` 新标签页打开，或在居中的电视框窗口中展示 `embed` 沙盒 iframe，窗口可拖标题栏移动、拖左上角调整大小。窗口打开时背后的地图变淡，语音按钮移到左侧，聊天栏显示在窗口上层，右下角固定长度的桌子以坐姿按打开顺序坐最多四位打开了同一工具的人（先到的坐中间，之后依次右、左、最右，所有人看到的顺序一致；服务端记录每位玩家打开的 web 区域和打开时间，离开区域即清除）。人越多角色越小，新来的人滑入入座；在聊天框打字时角色头顶显示省略号，说话时角色轻轻跳动。标题栏按钮可隐藏或显示桌子；桌子可拖动和缩放，显隐和布局保存在本浏览器。点进网页后按键交给工具，点窗口标题栏即可继续行走。外置服务保留自己的账号和权限。
 
@@ -26,7 +26,9 @@ npm run dev
 
 聊天显示在可折叠的半透明面板中，同时以短暂的气泡显示在发言角色头顶；折叠时显示未读数。有人在聊天框里输入内容时，其他人会看到其角色头顶的跳动省略号；在设置中关闭“让别人看到我正在输入”即不再发送这一提示。昵称、气泡、省略号和说话麦克风与角色在同一帧绘制在地图画布上，走动时不会延迟跟随。
 
-进入世界前会显示“进入前准备”：选择是否开麦进入、使用哪个麦克风（带实时音量条）、是否先静音；不打开麦克风就不会采集，选择保存在本浏览器。地图右上角的麦克风键开麦/闭麦（首次点击开启语音，之后闭麦仍保持连接、可继续听），喇叭键开关所有收到的语音（选择保存在本浏览器）；“设置”→“附近语音”中可切换麦克风（已连接的语音会直接换成新设备，无需重连），或断开语音并释放麦克风。昵称显隐在“设置”→“显示”中切换。本浏览器听到某个角色说话时（以及自己未静音说话时），角色头顶会显示麦克风标识；是否在说话由本地音量判断，不向服务端额外发送数据。语音使用浏览器间的 WebRTC 点对点音频。浏览器扫描已有玩家状态，服务端按连接状态、权威位置和地图 ID 校验每个信令连接，并通过 `GET /api/voice-config` 提供公开 ICE 配置；默认连接半径为 160 地图像素，断开半径为 192 像素，每个客户端最多连接 6 个语音节点。连接和断开半径之间的缓冲可避免在边界反复切换。语音需要麦克风权限和安全浏览器上下文（HTTPS 或 localhost）。`VOICE_ICE_SERVERS` 中不要放长期 TURN 凭据。使用 coturn TURN REST 认证时设置 `VOICE_TURN_URLS` 和仅后端保存的 `VOICE_TURN_SHARED_SECRET`；服务端为已登录用户签发短期凭据；浏览器在新建 peer 连接前检查并按需刷新。项目不运行 SFU，也不提供 TURN 服务。
+连接提示区分 `connected`（已连接）、`reconnecting`（正在重连）和 `disconnected`（已断开）。断线后暂停移动、聊天、动作与实时交互，先由 Colyseus 尝试恢复原 session；心跳检查也能识别 WebSocket 未关闭但后端不再响应的情况。自动重连最多等待 30 秒，后端停服或重连失败时明确提示，并提供“重新连接”“刷新页面”“返回选世界”。原 session 已失效时，手动重连会重新验证账号并建立新连接；页面不会自动刷新。断线会释放麦克风，恢复后可按需手动开启。
+
+进入世界前会显示“进入前准备”：选择是否开麦进入、使用哪个麦克风（带实时音量条）、是否先静音；不打开麦克风就不会采集，选择保存在本浏览器。地图右上角的麦克风键开麦/闭麦（首次点击开启语音，之后闭麦仍保持连接、可继续听），喇叭键开关所有收到的语音（选择保存在本浏览器）；“设置”→“附近语音”中可切换麦克风（已连接的语音会直接换成新设备，无需重连），或断开语音并释放麦克风。昵称显隐在“设置”→“显示”中切换。本浏览器听到某个角色说话时（以及自己未静音说话时），角色头顶会显示麦克风标识；是否在说话由本地音量判断，不向服务端额外发送数据。语音使用浏览器间的 WebRTC 点对点音频。浏览器扫描已有玩家状态，服务端按连接状态、权威位置和地图 ID 校验每个信令连接，并通过 `GET /api/voice-config` 提供公开 ICE 配置；默认连接半径为 320 地图像素，断开半径为 384 像素，每个客户端最多连接 6 个语音节点。连接和断开半径之间的缓冲可避免在边界反复切换。语音需要麦克风权限和安全浏览器上下文（HTTPS 或 localhost）。`VOICE_ICE_SERVERS` 中不要放长期 TURN 凭据。使用 coturn TURN REST 认证时设置 `VOICE_TURN_URLS` 和仅后端保存的 `VOICE_TURN_SHARED_SECRET`；服务端为已登录用户签发短期凭据；浏览器在新建 peer 连接前检查并按需刷新。项目不运行 SFU，也不提供 TURN 服务。
 
 相机默认采用整数倍率，使地图图块尽量接近 48 像素，并限制在 1x–6x；16×16 图块会显示为 48×48（3x）。在“设置”→“地图缩放”中可选择自动或 1x–6x 的固定整数倍率，选择立即生效并保存在本浏览器。动作锚点定义角色位置、动作和可选朝向，不绘制家具；地图作者可在 Tiled 视觉层独立摆放家具。`assets/characters/body/walk.png` 目前只有行走帧，因此动作暂时显示对应方向的 idle 帧，等待动作帧图集。帧尺寸和帧内脚点单独配置；替换图集时要同步检查角色定义中的帧尺寸和 `groundAnchor`。
 
@@ -61,13 +63,13 @@ npm run dev
 
 生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。单独托管前端时，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket；下方 Docker 镜像则在同一端口提供前后端。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
 
-[GitHub Actions 工作流](.github/workflows/build-release.yml)在每次 push 后执行 `npm run check`。`main` 分支检查通过后，以该提交创建并标记为 **Latest** 的 Release，附带 `virtual-workspace.tar.gz`；同时发布 `ghcr.io/carbonc39/virtualworkspace:latest` 和 `sha-<提交哈希>` 镜像，支持 `linux/amd64` 与 `linux/arm64`。压缩包包含编译后的代码与资源；解压后执行 `npm ci --omit=dev`，配置生产环境变量，将 `FRONTEND_DIST_PATH` 指向解压目录下的 `apps/frontend/dist`，再执行 `npm start`。仓库 Actions 需要 Release 和 GHCR 的写入权限；若镜像包为私有，部署主机还需拉取权限。
+[GitHub Actions 工作流](.github/workflows/build-release.yml)在每次 push 后执行 `npm run check`。`main` 分支检查通过后，以该提交创建并标记为 **Latest** 的 Release，附带 `impartation.tar.gz`；同时发布 `ghcr.io/carbonc39/virtualworkspace:latest` 和 `sha-<提交哈希>` 镜像，支持 `linux/amd64` 与 `linux/arm64`。压缩包包含编译后的代码与资源；解压后执行 `npm ci --omit=dev`，配置生产环境变量，将 `FRONTEND_DIST_PATH` 指向解压目录下的 `apps/frontend/dist`，再执行 `npm start`。仓库 Actions 需要 Release 和 GHCR 的写入权限；若镜像包为私有，部署主机还需拉取权限。
 
 Docker 镜像在 `2567` 端口同时提供前端、API 和 WebSocket。配置自己的 HTTPS 反向代理后，可用持久化 SQLite 卷运行：
 
 ```sh
-docker run -d --name virtual-workspace --restart unless-stopped \
-  -p 127.0.0.1:2567:2567 -v virtual-workspace-data:/app/data \
+docker run -d --name impartation --restart unless-stopped \
+  -p 127.0.0.1:2567:2567 -v impartation-data:/app/data \
   --env-file .env.production \
   ghcr.io/carbonc39/virtualworkspace:latest
 ```
@@ -78,7 +80,7 @@ SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，�
 
 用 `EXTERNAL_TOOLS` 将地图 `resourceId` 关联到 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`。URL 必填，mode 默认 `external`。embed 在点击后挂载，离开区域时移除；`manualExternalOpen: true` 在已打开的 iframe 旁提供手动外链，不检测加载失败。`allowSameOrigin` 默认 false，仅供可信自托管工具启用；旧 `fallback: "external"` 仍作为手动外链别名接受。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
 
-近距离语音配置见 `.env.example`：`VOICE_ICE_SERVERS` 是公开 WebRTC ICE 配置（默认包含一个公共 STUN 服务）；`VOICE_CONNECT_RADIUS` 默认 `160`，`VOICE_DISCONNECT_RADIUS` 默认 `192`，`VOICE_MAX_PEERS` 默认 `6`，`VOICE_SCAN_INTERVAL_MS` 默认 `1000`。后端通过 `GET /api/voice-config` 发布公开 ICE 配置。使用 coturn TURN REST 认证时，同时设置逗号分隔的 `VOICE_TURN_URLS` 与仅后端保存的 `VOICE_TURN_SHARED_SECRET`，并在 coturn 配置 `--use-auth-secret` 和相同的 `--static-auth-secret`。需要登录的 `GET /api/voice-credentials` 返回按用户生成的 HMAC-SHA1 短期凭据；`VOICE_TURN_CREDENTIAL_TTL_SECONDS` 默认一小时，可设为 60–86400 秒。共享密钥不会发给浏览器。两项 TURN 设置都不填时保持默认公共 STUN 配置。修改后需重启后端。项目不运行 SFU，也不提供 TURN 服务。
+近距离语音配置见 `.env.example`：`VOICE_ICE_SERVERS` 是公开 WebRTC ICE 配置（默认包含一个公共 STUN 服务）；`VOICE_CONNECT_RADIUS` 默认 `320`，`VOICE_DISCONNECT_RADIUS` 默认 `384`，`VOICE_MAX_PEERS` 默认 `6`，`VOICE_SCAN_INTERVAL_MS` 默认 `1000`。后端通过 `GET /api/voice-config` 发布公开 ICE 配置。使用 coturn TURN REST 认证时，同时设置逗号分隔的 `VOICE_TURN_URLS` 与仅后端保存的 `VOICE_TURN_SHARED_SECRET`，并在 coturn 配置 `--use-auth-secret` 和相同的 `--static-auth-secret`。需要登录的 `GET /api/voice-credentials` 返回按用户生成的 HMAC-SHA1 短期凭据；`VOICE_TURN_CREDENTIAL_TTL_SECONDS` 默认一小时，可设为 60–86400 秒。共享密钥不会发给浏览器。两项 TURN 设置都不填时保持默认公共 STUN 配置。修改后需重启后端。项目不运行 SFU，也不提供 TURN 服务。
 
 如果在 `http://127.0.0.1:5173/` 仍提示浏览器 API 不可用，可在该页面的开发者工具 Console 运行 `({ secure: isSecureContext, mic: !!navigator.mediaDevices?.getUserMedia, rtc: !!window.RTCPeerConnection })`。三项都应为 `true`；若有 API 缺失，检查浏览器或内嵌预览的设置。其它设备访问需要 HTTPS。
 

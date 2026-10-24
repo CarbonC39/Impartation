@@ -56,7 +56,7 @@ Space 隔离不会自动创建第三方白板、文档或观看房间。`EXTERNA
 
 ## Compose 站点示例
 
-仓库根目录的 `compose.example.yml` 默认只启动单实例 VirtualWorkspace，绑定宿主机 `127.0.0.1:2567`。Caddy、coturn、Etherpad/PostgreSQL、WBO 和 Neko 都以注释形式提供。Compose 使用自己的 `compose.env.example`；根目录 `.env.example` 用于本地 Node/Vite 开发。先复制并修改部署变量，再校验配置和启动：
+仓库根目录的 `compose.example.yml` 默认只启动单实例 Impartation，绑定宿主机 `127.0.0.1:2567`。Caddy、coturn、Etherpad/PostgreSQL、WBO 和 Neko 都以注释形式提供。Compose 使用自己的 `compose.env.example`；根目录 `.env.example` 用于本地 Node/Vite 开发。先复制并修改部署变量，再校验配置和启动：
 
 ```sh
 cp compose.env.example compose.env
@@ -71,7 +71,7 @@ docker compose --env-file compose.env -f compose.example.yml up -d
 
 | 想要的功能 | 需要启用的内容 |
 | --- | --- |
-| TURN 语音中继 | `coturn`、VirtualWorkspace 的三项 `VOICE_TURN_*`、`compose.env` 中的 `PUBLIC_IP` 和 `TURN_SHARED_SECRET`。需开放 TCP/UDP 3478 和 UDP 49160–49200；NAT 部署需转发这些端口。共享密钥只供后端和 coturn 使用。 |
+| TURN 语音中继 | `coturn`、Impartation 的三项 `VOICE_TURN_*`、`compose.env` 中的 `PUBLIC_IP` 和 `TURN_SHARED_SECRET`。需开放 TCP/UDP 3478 和 UDP 49160–49200；NAT 部署需转发这些端口。共享密钥只供后端和 coturn 使用。 |
 | 协作文档 | `etherpad`、`etherpad-db`、三个数据卷、Caddyfile 的 `/pad` 路由、两个 Etherpad 密码，以及 `EXTERNAL_TOOLS` 的 `shared-document`。如未用示例 Caddy，自行提供相应代理路由。 |
 | 白板 | `wbo`、`wbo_data` 卷、Caddyfile 的 `/board` 路由，以及 `EXTERNAL_TOOLS` 的 `shared-canvas`。如未用示例 Caddy，自行提供相应代理路由。 |
 | 共享浏览器 | `neko`、Caddyfile 的 Neko 路由、Compose 中 Caddy 的 `BROWSER_HOST`、`compose.env` 中的 `BROWSER_HOST`、`PUBLIC_IP` 和两个 Neko 密码。需开放 UDP 52000–52100；NAT 部署需转发。 |
@@ -123,9 +123,9 @@ cp assets/maps/tiles.png hosting/covers/main.png
 按 README 配置 `.env.production` 的私密 `IDENTITY_SECRET`、公开 HTTPS `IDENTITY_BASE_URL` 和 `IDENTITY_TRUSTED_ORIGINS`。在同一目录运行下面的容器示例；若已有同名容器，按下文更新步骤停掉并替换它，保留数据卷：
 
 ```sh
-docker run -d --name virtual-workspace --restart unless-stopped \
+docker run -d --name impartation --restart unless-stopped \
   -p 127.0.0.1:2567:2567 \
-  -v virtual-workspace-data:/app/data \
+  -v impartation-data:/app/data \
   --mount "type=bind,src=${PWD}/hosting/world,dst=/app/world,readonly" \
   --mount "type=bind,src=${PWD}/hosting/covers,dst=/app/apps/frontend/dist/space-covers,readonly" \
   --env-file .env.production \
@@ -158,7 +158,7 @@ Docker 环境文件中的 JSON 值直接写为 `EXTERNAL_TOOLS={}` 或 `VOICE_IC
 在部署主机检查后端 API 和封面；下面的地图 ID、封面路径对应上面的示例：
 
 ```sh
-docker logs --tail 100 virtual-workspace
+docker logs --tail 100 impartation
 curl -fsS http://127.0.0.1:2567/health
 curl -fsS http://127.0.0.1:2567/api/world
 curl -fsS http://127.0.0.1:2567/api/maps/lobby/map.json

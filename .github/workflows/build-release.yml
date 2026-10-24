@@ -28,7 +28,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with:
           name: compiled-application
-          path: release/virtual-workspace.tar.gz
+          path: release/impartation.tar.gz
           if-no-files-found: error
 
   publish:
@@ -86,7 +86,7 @@ jobs:
 
           The attached archive contains the compiled frontend and backend, map assets, and npm manifests. Install production dependencies with npm ci --omit=dev after extraction.
           EOF
-            gh release create "$tag" release/virtual-workspace.tar.gz \
+            gh release create "$tag" release/impartation.tar.gz \
               --target "$GITHUB_SHA" \
               --title "Build ${GITHUB_SHA:0:12}" \
               --notes-file release-notes.md \

@@ -1,4 +1,4 @@
-import type { MovementInput } from '@virtual-workspace/shared';
+import type { MovementInput } from '@impartation/shared';
 import { FloatingPosition } from './floatingPosition';
 import { readPreference, writePreference } from './preferences';
 

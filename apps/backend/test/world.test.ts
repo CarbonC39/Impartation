@@ -4,8 +4,8 @@ import { test } from 'node:test';
 import { z } from 'zod';
 import { createTestMap } from '../../../packages/shared/test-fixtures/world.js';
 import { parseWorldMap, stepMovement, canStand, contains, PLAYER_FOOTPRINT, PLAYER_SPEED, TICK_MS,
-  InteractionRegistry, validateMapRegistry, validateWorldRegistry, spaceDefinitionSchema, type InteractionDefinition } from '@virtual-workspace/shared';
-import { standsOnAction, findActionAnchor, actionFacingMatches, canAlignAction, movementFacing } from '@virtual-workspace/shared';
+  InteractionRegistry, validateMapRegistry, validateWorldRegistry, spaceDefinitionSchema, type InteractionDefinition } from '@impartation/shared';
+import { standsOnAction, findActionAnchor, actionFacingMatches, canAlignAction, movementFacing } from '@impartation/shared';
 
 const raw: unknown = createTestMap();
 const authoredRaw: unknown = JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8'));

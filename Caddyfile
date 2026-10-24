@@ -15,7 +15,7 @@
 	# 	reverse_proxy wbo:80
 	# }
 
-	# Everything else belongs to VirtualWorkspace.
+	# Everything else belongs to Impartation.
 	handle {
 		reverse_proxy virtualworkspace:2567
 	}

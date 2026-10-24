@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { boardPostSchema, type SpaceProtocol, type Zone } from '@virtual-workspace/shared';
+import { boardPostSchema, type SpaceProtocol, type Zone } from '@impartation/shared';
 import { PanelInteraction, element } from '../panel';
 
 // Trash icon: pixelarticons (MIT, © 2019 Gerrit Halfmann), https://github.com/halfmage/pixelarticons

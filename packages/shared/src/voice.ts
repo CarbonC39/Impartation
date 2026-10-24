@@ -46,16 +46,20 @@ export const voiceCredentialsSchema = z.object({
 export type VoiceCredentials = z.infer<typeof voiceCredentialsSchema>;
 
 export type AudienceContext = { mapId: string; privateAreaId: string };
-/**
- * Private areas are closed rooms: chat and voice pass only between players inside the same area,
- * or between players who are both outside every area. Area IDs are unique per map only.
- */
-export function sameAudience(a: AudienceContext, b: AudienceContext): boolean {
-  return a.privateAreaId === b.privateAreaId && (!a.privateAreaId || a.mapId === b.mapId);
+/** Private areas receive public chat/voice; public players never receive private-area content. */
+export function canReceive(from: AudienceContext, to: AudienceContext): boolean {
+  if (!from.privateAreaId && !to.privateAreaId) return true;
+  return from.mapId === to.mapId && (from.privateAreaId === to.privateAreaId ||
+    (!from.privateAreaId && Boolean(to.privateAreaId)));
 }
 
 export type VoicePosition = AudienceContext & { x: number; y: number; connected: boolean; voiceEnabled: boolean };
-export function canHear(a: VoicePosition | undefined, b: VoicePosition | undefined, radius: number): boolean {
-  return Boolean(a?.connected && b?.connected && a.voiceEnabled && b.voiceEnabled && a.mapId === b.mapId &&
-    sameAudience(a, b) && Math.hypot(a.x - b.x, a.y - b.y) <= radius);
+/** Whether the speaker is audible to the listener at this radius. */
+export function canHear(from: VoicePosition | undefined, to: VoicePosition | undefined, radius: number): boolean {
+  return Boolean(from?.connected && to?.connected && from.voiceEnabled && to.voiceEnabled &&
+    from.mapId === to.mapId && canReceive(from, to) && Math.hypot(from.x - to.x, from.y - to.y) <= radius);
+}
+/** A WebRTC pair is needed if either participant may hear the other's audio. */
+export function canConnectVoice(a: VoicePosition | undefined, b: VoicePosition | undefined, radius: number): boolean {
+  return canHear(a, b, radius) || canHear(b, a, radius);
 }

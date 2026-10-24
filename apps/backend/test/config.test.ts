@@ -18,6 +18,17 @@ function loadMaxClients(value?: string, expected?: number) {
   return result;
 }
 
+function loadVoiceRadius(values: Partial<Record<'VOICE_CONNECT_RADIUS' | 'VOICE_DISCONNECT_RADIUS', string>>) {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.VOICE_CONNECT_RADIUS;
+  delete env.VOICE_DISCONNECT_RADIUS;
+  Object.assign(env, values);
+  return spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e',
+    "const { voiceConfig } = await import('./apps/backend/src/config.ts'); console.log(`${voiceConfig.connectRadius},${voiceConfig.disconnectRadius}`);"],
+  { cwd, env, encoding: 'utf8' });
+}
+
 function loadRegistration(mode: string | undefined, requiredCode: string | undefined, suppliedCode: string | undefined) {
   const env: NodeJS.ProcessEnv = { ...process.env };
   env.DATABASE_PATH = ':memory:';
@@ -60,6 +71,16 @@ test('SPACE_MAX_CLIENTS rejects zero, negative, fractional and non-numeric value
     const result = loadMaxClients(value);
     assert.equal(result.status, 1, `Expected ${JSON.stringify(value)} to be rejected; stdout=${result.stdout} stderr=${result.stderr}`);
   }
+});
+
+test('voice radii default wider and accept environment overrides', () => {
+  const defaults = loadVoiceRadius({});
+  assert.equal(defaults.status, 0, defaults.stderr);
+  assert.match(defaults.stdout, /320,384/);
+  const override = loadVoiceRadius({ VOICE_CONNECT_RADIUS: '512', VOICE_DISCONNECT_RADIUS: '640' });
+  assert.equal(override.status, 0, override.stderr);
+  assert.match(override.stdout, /512,640/);
+  assert.notEqual(loadVoiceRadius({ VOICE_CONNECT_RADIUS: '400', VOICE_DISCONNECT_RADIUS: '300' }).status, 0);
 });
 
 test('registration mode defaults to open and admin mode disables public registration', () => {

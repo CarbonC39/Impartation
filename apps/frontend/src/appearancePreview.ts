@@ -1,4 +1,4 @@
-import { APPEARANCE_LAYERS, type JoinOptions } from '@virtual-workspace/shared';
+import { APPEARANCE_LAYERS, type JoinOptions } from '@impartation/shared';
 import { avatarDefinition, layerAssetIds, layerAssets } from './characters';
 
 const images = new Map<string, HTMLImageElement>();

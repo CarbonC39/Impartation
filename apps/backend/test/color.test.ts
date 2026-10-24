@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SOFT_COLOR_ZONE, clampSoftColor, hexToHsv, hsvToHex, isSoftColor } from '@virtual-workspace/shared';
+import { SOFT_COLOR_ZONE, clampSoftColor, hexToHsv, hsvToHex, isSoftColor } from '@impartation/shared';
 
 test('hex and HSV conversions round-trip six-digit colors', () => {
   for (const hex of ['#000000', '#ffffff', '#ff0000', '#a3827a', '#c3dcf5', '#7d6a83']) assert.equal(hsvToHex(hexToHsv(hex)), hex);

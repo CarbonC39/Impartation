@@ -1,4 +1,4 @@
-import { hexToRgb, rgbToHex } from '@virtual-workspace/shared';
+import { hexToRgb, rgbToHex } from '@impartation/shared';
 import { createColorPicker } from './colorPicker';
 import { readJsonPreference, readPreference, writePreference } from './preferences';
 

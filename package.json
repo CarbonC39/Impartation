@@ -1,5 +1,5 @@
 {
-  "name": "virtual-workspace",
+  "name": "impartation",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,15 +11,15 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "npm run build -w @virtual-workspace/shared && concurrently -k -n shared,server,client \"npm run dev -w @virtual-workspace/shared\" \"npm run dev -w @virtual-workspace/backend\" \"npm run dev -w @virtual-workspace/frontend\"",
-    "build": "npm run build -w @virtual-workspace/shared && npm run build -w @virtual-workspace/backend && npm run build -w @virtual-workspace/frontend",
-    "start": "npm start -w @virtual-workspace/backend",
-    "typecheck": "npm run build -w @virtual-workspace/shared && npm run typecheck --workspaces --if-present && tsc -p tsconfig.e2e.json",
-    "test": "npm run build -w @virtual-workspace/shared && npm test -w @virtual-workspace/backend",
+    "dev": "npm run build -w @impartation/shared && concurrently -k -n shared,server,client \"npm run dev -w @impartation/shared\" \"npm run dev -w @impartation/backend\" \"npm run dev -w @impartation/frontend\"",
+    "build": "npm run build -w @impartation/shared && npm run build -w @impartation/backend && npm run build -w @impartation/frontend",
+    "start": "npm start -w @impartation/backend",
+    "typecheck": "npm run build -w @impartation/shared && npm run typecheck --workspaces --if-present && tsc -p tsconfig.e2e.json",
+    "test": "npm run build -w @impartation/shared && npm test -w @impartation/backend",
     "check": "npm run typecheck && npm test && npm run build",
-    "test:e2e": "npm run build -w @virtual-workspace/shared && playwright test",
+    "test:e2e": "npm run build && playwright test",
     "check:all": "npm run check && npm run test:e2e",
-    "identity": "npm run identity -w @virtual-workspace/backend --"
+    "identity": "npm run identity -w @impartation/backend --"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

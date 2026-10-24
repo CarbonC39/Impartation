@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { FACINGS } from '@virtual-workspace/shared';
+import { FACINGS } from '@impartation/shared';
 import { avatars, avatarDefinition, characterFrame } from '../../frontend/src/characters.js';
 
 test('configured character frames fit the supplied sheet and are independent from map tiles', () => {

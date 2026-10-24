@@ -1,4 +1,4 @@
-import { InteractionRegistry } from '@virtual-workspace/shared';
+import { InteractionRegistry } from '@impartation/shared';
 import type { ServerInteraction } from './context.js';
 
 type UnionToIntersection<U> = (U extends unknown ? (value: U) => void : never) extends (value: infer I) => void ? I : never;

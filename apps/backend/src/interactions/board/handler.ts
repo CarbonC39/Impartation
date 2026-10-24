@@ -1,4 +1,4 @@
-import { BoardNote, boardPostSchema, boardDeleteSchema, type BoardPostInput, type BoardDeleteInput, type InteractionResult } from '@virtual-workspace/shared';
+import { BoardNote, boardPostSchema, boardDeleteSchema, type BoardPostInput, type BoardDeleteInput, type InteractionResult } from '@impartation/shared';
 import { BoardStore } from './store.js';
 import { db } from '../../db.js';
 import type { InteractionContext, SpaceClient } from '../context.js';

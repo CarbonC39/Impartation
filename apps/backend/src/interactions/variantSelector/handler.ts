@@ -1,4 +1,4 @@
-import { selectVariantSchema, actionFacingMatches, type SelectVariantInput, type InteractionResult, type RegisteredMap } from '@virtual-workspace/shared';
+import { selectVariantSchema, actionFacingMatches, type SelectVariantInput, type InteractionResult, type RegisteredMap } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 import { cancelAction, releaseActionClaim } from '../action/handler.js';
 
