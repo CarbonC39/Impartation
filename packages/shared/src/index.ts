@@ -140,4 +140,5 @@ export * from './attachments.js';
 export * from './accounts.js';
 export * from './color.js';
 export * from './voice.js';
+export * from './navigation.js';
 export type { SpaceProtocol } from './protocol.js';

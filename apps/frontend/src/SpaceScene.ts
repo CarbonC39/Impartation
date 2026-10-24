@@ -164,6 +164,11 @@ export class SpaceScene extends Phaser.Scene {
     for (const sprite of this.sprites.values()) sprite.status.setZoom(zoom);
     this.lastAnchor = '';
   }
+  stopInput() {
+    this.input?.keyboard?.resetKeys();
+    this.lastInput = '';
+    this.inputElapsed = 0;
+  }
   update(time: number, delta: number) {
     this.animationElapsed += delta;
     for (const { tile, gid, tileset } of this.canvasTiles) tile.index = tileset.getAnimatedTileId(gid, this.animationElapsed) ?? gid;

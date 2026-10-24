@@ -45,14 +45,15 @@ export class PrivateAreaInteraction implements InteractionHandler {
   private render() {
     const player = this.room.state.players.get(this.room.sessionId);
     const areas = player && this.room.state.privateAreas.get(player.mapId)?.areas;
-    const memberships = [...(areas?.entries() ?? [])].filter(([, area]) => area.members.has(this.room.sessionId));
+    const memberships = [...(areas?.entries() ?? [])].filter(([, area]) => area.members.get(this.room.sessionId) === true);
     this.panel.hidden = !memberships.length;
     if (!memberships.length) { this.selected = ''; return; }
     if (!memberships.some(([id]) => id === this.selected)) this.selected = player?.privateAreaId || memberships[0]![0];
     setOptions(this.areas, memberships.map(([id, area]) => [id, `区域 ${id}${area.locked ? ' · 已锁定' : ' · 开放'}`]));
     if (this.areas.value !== this.selected) this.areas.value = this.selected;
     const state = areas!.get(this.selected)!;
-    const members = `成员：${[...state.members.keys()].map(id => this.room.state.players.get(id)?.name ?? id).join('、')}`;
+    const members = `成员：${[...state.members].map(([id, entered]) =>
+      `${this.room.state.players.get(id)?.name ?? id}${entered ? '' : '（待入场）'}`).join('、')}`;
     if (this.members.textContent !== members) this.members.textContent = members;
     setOptions(this.players, [...this.room.state.players.entries()]
       .filter(([id, other]) => other.connected && !state.members.has(id)).map(([id, other]) => [id, other.name]));

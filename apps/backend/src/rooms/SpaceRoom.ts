@@ -4,7 +4,7 @@ import { WebSocketClient } from '@colyseus/ws-transport';
 import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
   TICK_MS, SPACE_REPLACED_CLOSE_CODE, canReceive, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
-  type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@impartation/shared';
+  type Occupancy, type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@impartation/shared';
 import { worldRegistry, worlds as allMaps } from '../world.js';
 import { createInteractions } from '../interactions/index.js';
 import type { SpaceClient } from '../interactions/context.js';
@@ -44,6 +44,12 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     state: this.state, maps: this.maps, worlds: this.worldMaps,
     authorize: client => this.authorize(client), check: (client, kind, resource) => this.checkInteraction(client, kind, resource),
     resetMovement: client => this.movementInputs.delete(client.sessionId),
+    onMapChanged: client => {
+      this.setTyping(client.sessionId, false);
+      const player = this.state.players.get(client.sessionId);
+      if (player) this.setWebTool(player, '');
+      this.voice.tick();
+    },
     throttle: client => this.throttleInteraction(client),
   });
 
@@ -87,6 +93,21 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
   static isAvailable(spaceId: string) {
     const room = SpaceRoom.instances.get(spaceId);
     return !room || !room.hasReachedMaxClients();
+  }
+
+  static occupancy(): Occupancy {
+    return { spaces: worldRegistry.spaces.map(space => {
+      const room = SpaceRoom.instances.get(space.id);
+      const counts = new Map(space.maps.map(id => [id, 0]));
+      let online = 0;
+      for (const player of room?.state.players.values() ?? []) {
+        if (!player.connected || !counts.has(player.mapId)) continue;
+        online++;
+        counts.set(player.mapId, counts.get(player.mapId)! + 1);
+      }
+      return { id: space.id, online, capacity: room?.maxClients ?? config.SPACE_MAX_CLIENTS,
+        maps: space.maps.map(id => ({ id, online: counts.get(id)! })) };
+    }) };
   }
 
   static ownsSeat(spaceId: string, userId: string) {

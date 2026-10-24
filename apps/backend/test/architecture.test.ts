@@ -14,12 +14,12 @@ type Result<T> = T extends { handler: (...args: never[]) => infer R } ? Awaited<
 type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 const protocolMatches: { [K in keyof SpaceProtocol['messages']]: Same<Payload<SpaceProtocol['messages'][K]>, Payload<SpaceRoom['messages'][K]>> } = {
   selectVariant: true, privateArea: true, cancelAction: true, input: true, chat: true, typing: true, webTool: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
-  takeAttachment: true, clearAttachment: true,
+  takeAttachment: true, clearAttachment: true, quickTravel: true,
   voiceEnabled: true, voiceOffer: true, voiceAnswer: true, voiceIceCandidate: true, voiceEnd: true,
 };
-const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'activateAction' | 'selectVariant' | 'privateArea' | 'cancelAction' | 'takeAttachment' | 'clearAttachment']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
+const responseMatches: { [K in 'boardPost' | 'boardDelete' | 'pomodoro' | 'portal' | 'quickTravel' | 'activateAction' | 'selectVariant' | 'privateArea' | 'cancelAction' | 'takeAttachment' | 'clearAttachment']: Same<Result<SpaceProtocol['messages'][K]>, Result<SpaceRoom['messages'][K]>> } = {
   selectVariant: true, privateArea: true, cancelAction: true, boardPost: true, boardDelete: true, pomodoro: true, portal: true, activateAction: true,
-  takeAttachment: true, clearAttachment: true,
+  takeAttachment: true, clearAttachment: true, quickTravel: true,
 };
 
 test('shared protocol agrees with the server and frontend depends only on shared contracts', () => {

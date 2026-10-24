@@ -6,6 +6,7 @@ import type {
   InteractionResult,
   TakeAttachmentInput,
   SpaceJoinOptions,
+  QuickTravelInput,
   MovementInput,
   PomodoroActionInput,
   SpaceState,
@@ -35,6 +36,7 @@ export type SpaceProtocol = {
     boardDelete: (client: unknown, input: BoardDeleteInput) => InteractionResult;
     pomodoro: (client: unknown, input: PomodoroActionInput) => InteractionResult;
     portal: (client: unknown, input: { zoneId: string }) => InteractionResult;
+    quickTravel: (client: unknown, input: QuickTravelInput) => InteractionResult;
     selectVariant: (client: unknown, input: SelectVariantInput) => InteractionResult;
     privateArea: (client: unknown, input: PrivateAreaOperationInput) => InteractionResult;
     cancelAction: (client: unknown, input: Record<string, never>) => InteractionResult;

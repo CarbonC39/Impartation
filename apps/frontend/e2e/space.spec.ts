@@ -1975,6 +1975,77 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
   }
 });
 
+test('Space occupancy is shown in the list and quick travel follows live map occupancy', async ({ page }) => {
+  test.setTimeout(45_000);
+  await signInFresh(page, 'MapNavigation');
+  await expect(page.locator('#world-list [data-world="main"] .world-online')).toContainText(/在线人数\s+\d+\s+\/\s+\d+/);
+  await openAvatarScreen(page);
+  await page.locator('#name').fill('MapNavigation');
+  await page.locator('#join').click();
+  await page.locator('#prejoin-enter').click();
+  await expect(page.locator('#status')).toContainText('已进入空间');
+  const sessionId = await sessionOf(page);
+  const observer = await observe();
+  try {
+    await page.locator('#map-navigation-toggle').click();
+    const home = page.locator('#map-navigation-list [data-quick-travel="workspace"]');
+    const studio = page.locator('#map-navigation-list [data-quick-travel="studio"]');
+    await expect(page.locator('#map-navigation-position')).toHaveText('当前位置：workspace');
+    await expect(home).toBeDisabled();
+    await expect(home).toContainText('2 人在线');
+    await expect(studio).toContainText('0 人在线');
+    expect((await observer.request('quickTravel', { mapId: 'studio' })).ok).toBe(true);
+    await expect(studio).toContainText('1 人在线');
+    await studio.click();
+    await expect(page.locator('#map-navigation-position')).toHaveText('当前位置：studio');
+    await expect(studio).toBeDisabled();
+    await expect(studio).toContainText('2 人在线');
+    await expect(home).toContainText('0 人在线');
+    await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'studio');
+    expect(await sessionOf(page)).toBe(sessionId);
+    await page.context().setOffline(true);
+    await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'reconnecting');
+    await expect(home).toBeDisabled();
+    await page.context().setOffline(false);
+    await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
+    await expect(home).toBeEnabled();
+  } finally { await page.context().setOffline(false); if (observer.connection.isOpen) await observer.leave(); }
+});
+
+test('quick travel stays clickable above an embedded tool and closes its map context', async ({ page, context }) => {
+  test.setTimeout(30_000);
+  await page.route('**/api/tools', route => route.fulfill({ json: [{ ...toolDirectory[1], mode: 'embed' }] }));
+  await context.route('https://tools.example/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Travel fixture</p>' }));
+  await enter(page, 'TravelFromTool');
+  const sessionId = await sessionOf(page); const observer = await observe();
+  try {
+    await walkToTool(page, observer, toolCases[1]);
+    await page.locator('#tool-open').click();
+    await expect(page.locator('#tool-window iframe')).toBeVisible();
+    await page.locator('#map-navigation-toggle').click();
+    await page.locator('#map-navigation-list [data-quick-travel="studio"]').click();
+    await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'studio');
+    await expect(page.locator('#tool-window iframe')).toHaveCount(0);
+    await expect.poll(() => observer.state.players.get(sessionId)?.webToolZone).toBe('');
+    expect(await sessionOf(page)).toBe(sessionId);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
+test('unavailable occupancy does not pretend the Space is empty', async ({ page }) => {
+  await page.route('**/api/occupancy', route => route.fulfill({ status: 503 }));
+  await page.goto('/');
+  await expect(page.locator('#world-list [data-world="main"] .world-online')).toHaveText('人数暂不可用');
+});
+
+test('a single-Space deployment uses a direct entry label', async ({ page }) => {
+  const response = await page.request.get('/api/world');
+  const registry = worldRegistryResponseSchema.parse(await response.json());
+  await page.route('**/api/world', route => route.fulfill({ json: { ...registry, spaces: [registry.spaces[0]] } }));
+  await page.goto('/');
+  await expect(page.locator('#world-title')).toHaveText('进入空间');
+  await expect(page.locator('#world-list [data-world]')).toHaveCount(1);
+});
+
 async function preserveBrowserWebSocketValidation(page: Page) {
   // SDK 0.18 probes the Node WebSocket constructor first. Playwright's routed socket
   // accepts that options object, while a native browser throws and lets the SDK fall back.

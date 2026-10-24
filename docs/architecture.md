@@ -91,6 +91,10 @@ Colyseus 使用公共 `space` 房间类型；客户端以必填 `spaceId` 匹配
 
 排队接口为 `POST /api/space-queue`（JSON `{spaceId}`）、`GET /api/space-queue/:spaceId/:ticket` 和 `DELETE /api/space-queue/:spaceId/:ticket`。POST/DELETE 校验来源，全部接口验证 Better Auth session；返回的 `ahead` 是当前队列中排在前面的账号数。轮到用户时 `ready=true`，客户端把 `ticket` 作为 `spaceJoinSchema.queueTicket` 提交。服务端按账号与登录 session 验证凭证；一个 Space 同时只发放一个待入场凭证，20 秒未入场则轮到下一人。等待中的资格需要轮询续期，30 秒未轮询会过期；关闭排队弹窗（含 Esc）主动 DELETE 并返回 Space 选择页。排队状态保存在单进程内，重启后需重新排队。
 
+`GET /api/occupancy` 返回 `{spaces: [{id, online, capacity, maps: [{id, online}]}]}`，Space 与 Map 顺序分别来自 registry 的 `spaces` 和对应 `space.maps`。每次请求遍历现有 live room 的权威 Player 状态，只统计 `connected=true`；未创建 room 的 Space 及无人地图为 0。重连保留的席位占容量但不计在线数，没有独立 presence 服务或持久化计数。大厅可见时每 5 秒获取快照，失败显示人数不可用；进入后 Map 菜单从当前 room Schema 统计实时人数。
+
+地图菜单发送 `quickTravel` 请求 `{mapId}`，返回 `InteractionResult`。只允许当前 Space 注册的另一张地图，目标使用该 Map 的 `defaultSpawn`，不接受坐标、spawn 或玩家身份字段；目标 spawn 在锁区且无准入资格时拒绝。Portal 保留地图作者指定的目标及命名 spawn。两者共用服务端地图转换逻辑，清理旧动作/占位、私区成员、移动输入、typing、网页工具和不再合格的语音配对，再按权威 `mapId` 让前端渲染目标地图。正常加入仍只按 Space 的 `initialMap` 入场；快捷切换不创建新房间或 session。
+
 客户端分别呈现 `connected`、`reconnecting`、`disconnected`，初次加入使用 `connecting`。`onDrop` 暂停输入与所有实时交互、关闭语音并显示重连提示；`onReconnect` 恢复同一个 Room 的交互，`onLeave` 则清理连接并显示最终断开原因。正常停服的 `SERVER_SHUTDOWN` 与连接接管的专用关闭码有独立提示，不能视为主动离开。客户端每 3 秒用 SDK `room.ping()` 探测，12 秒无响应时走现有重连路径；自动重连最多等待 30 秒，超时触发 SDK 最终失败。最终失败提供手动重连、刷新和返回入口，不自动刷新。主动离开、pagehide 与旧异步加入均释放连接；pageshow 缓存恢复返回加入界面。过期 Room 的回调不能替换当前连接或提示。
 
 ## 3. 世界数据：Tiled 到权威状态与画面
@@ -200,9 +204,9 @@ Player 包含 `userId`、昵称、地图角色原型 ID `avatar`、JSON 字符�
 
 variantSelector 复用动作锚点的重叠候选、朝向与偏移规则。朝向不符时玩家仍原地执行动作，释放已有认领并复原其目标，不打开选择器或应用新变体；朝向相符才进行对齐和认领。一次身份复验后的同步处理完成空闲检查和认领，任何交错请求最多一人成功；只有该玩家保持所需动作、朝向和锚点位置时可选择。`selectVariant` 接受声明的名称或 `null`；`null` 清除目标并设置 `variantCleared`，保留当前动作与认领，不需要额外 authored 空选项。名称选择将其设回 false。移动、取消、断线、跨地图或认领失效时释放占用并重置目标显示，恢复 Tiled 基础图块（无基础 GID 时透明）；动画切换保持同一认领时保留当前选择或清除状态，单选项不会重复自动应用。周期巡检仅在过期认领仍属于原 session 时重置目标，避免覆盖新占用者。每个选择器拥有独立目标，沙发多个座位分别制作。
 
-privateArea 开放时进入者加入临时会话，成员权限平等；成员离开物理区域后保留重入、锁定与添加在线玩家的资格。锁定时，服务端以完整 12×8 脚底碰撞体阻止非成员进入，同时检查动作偏移和 Portal 落点；成员仍可自由离开。所有锁定/成员修改都在身份复验后的同步片段完成。默认出生点在锁区时加入/重连尝试其它命名 spawn；没有可进入 spawn 时拒绝入场。同地图 Portal 保留成员资格，跨地图清理旧地图成员资格。
+privateArea 开放时进入者加入临时会话，成员权限平等；成员走出物理区域立即移除成员及管理资格，锁区重入需重新邀请。`members` 中 `true` 表示已入场成员、`false` 表示尚未入场邀请；邀请只授予准入，进入后才有管理权。锁定时，服务端以完整 12×8 脚底碰撞体阻止非成员进入，同时检查动作偏移和 Portal、quick travel 落点；成员仍可自由离开。所有锁定/成员修改都在身份复验后的同步片段完成。默认出生点在锁区时加入/重连尝试其它命名 spawn；没有可进入 spawn 时拒绝入场。同地图 Portal 送出区域也移除资格，跨地图清理旧地图成员资格。
 
-无成员时立即清空锁；有成员但连续 60 秒没有在线成员在物理区域内时清空会话。断线立即删除该连接在所有区域的成员资格，房间销毁也会重置。`Player.privateAreaId` 仅表示当前位置的空间上下文；授权以服务端成员表为准。聊天与语音按 shared `canReceive(mapId, privateAreaId)` 判断方向：公共玩家可以向私密区域成员发送，私密区域成员会收到公共频道内容；公共玩家收不到私密区域发出的内容，不同私密区域仍隔离。公共聊天保留跨地图广播，私密区域的接收仅限同地图。语音配对只在至少一个方向可接收时建立；服务端按权威位置校验信令，客户端按方向启用发送音轨并静音不可接收的远端音轨。玩家越过区域边界时立即复查配对和媒体方向。WebRTC 为点对点，媒体隔离由官方客户端执行，不能抵御篡改客户端直接发送媒体。区域归属以服务端物理位置为准，Schema 可见性（位置、正在输入等）仍对整个房间公开，不提供读取隔离。
+成员和待入场邀请均为空时立即清空锁；仍有待入场邀请但连续 60 秒没有在线成员在物理区域内时清空会话。断线立即删除该连接在所有区域的成员资格，房间销毁也会重置。`Player.privateAreaId` 仅表示当前位置的空间上下文；授权以服务端成员表为准。聊天与语音按 shared `canReceive(mapId, privateAreaId)` 判断方向：公共玩家可以向私密区域成员发送，私密区域成员会收到公共频道内容；公共玩家收不到私密区域发出的内容，不同私密区域仍隔离。公共聊天保留跨地图广播，私密区域的接收仅限同地图。语音配对只在至少一个方向可接收时建立；服务端按权威位置校验信令，客户端按方向启用发送音轨并静音不可接收的远端音轨。玩家越过区域边界时立即复查配对和媒体方向。WebRTC 为点对点，媒体隔离由官方客户端执行，不能抵御篡改客户端直接发送媒体。区域归属以服务端物理位置为准，Schema 可见性（位置、正在输入等）仍对整个房间公开，不提供读取隔离。
 
 wardrobe 是原生入口，打开已有 Wardrobe 实例及其外观编辑 UI。保存走同一个 `PATCH /api/me` 和 appearance 校验，返回地图保留原房间和连接；不另建外观状态或工具服务。
 
@@ -316,6 +320,7 @@ Better Auth 负责用户名/密码凭据、session cookie 和密码重置 token�
 | 接口 | 访问与用途 |
 | --- | --- |
 | `GET /api/world` | 公开规范化地图目录及按 registry 顺序排列的 Space 元数据 |
+| `GET /api/occupancy` | 从权威 room/player state 即时派生各 Space 在线人数、容量及其各 Map 在线人数；未运行的 Space/Map 返回 0 |
 | `GET /api/maps/:id/map.json` | 公开规范化 Tiled JSON；未知地图返回 404 |
 | `GET /api/maps/:id/assets/:asset` | 已登记图片资源；未知资源返回 404 |
 | `GET /api/tools` | 公开工具 resourceId、URL 和可选展示配置；不能放凭据 |

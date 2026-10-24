@@ -30,8 +30,16 @@ export function createPrivateAreaInteraction(context: Context) {
     player.privateAreaId = '';
     if (!player.connected) return;
     for (const area of areas(player.mapId)) {
-      if (!contains(area, player.x, player.y)) continue;
       const state = stateFor(player.mapId, area.id)!;
+      const inside = contains(area, player.x, player.y);
+      if (!inside) {
+        // `false` records an invitation; only an occupant (`true`) loses membership on exit.
+        if (state.members.get(sessionId) === true) {
+          state.members.delete(sessionId);
+          if (!state.members.size) reset(state);
+        }
+        continue;
+      }
       if (!state.locked || state.members.has(sessionId)) {
         state.members.set(sessionId, true);
         state.resetAt = 0;
@@ -84,14 +92,14 @@ export function createPrivateAreaInteraction(context: Context) {
           tick();
           const player = context.state.players.get(client.sessionId);
           const state = player && stateFor(player.mapId, input.areaId);
-          if (!player?.connected || !state?.members.has(client.sessionId)) return { ok: false, message: '只有当前私密会话成员可以操作' };
+          if (!player?.connected || state?.members.get(client.sessionId) !== true) return { ok: false, message: '只有当前私密会话成员可以操作' };
           const error = context.throttle(client);
           if (error) return { ok: false, message: error };
           // No await between permission checks and mutations: requests serialize on the room event loop.
           if (input.operation === 'lock') state.locked = input.locked;
           else {
             if (!context.state.players.get(input.playerId)?.connected) return { ok: false, message: '请选择在线玩家' };
-            state.members.set(input.playerId, true);
+            if (!state.members.has(input.playerId)) state.members.set(input.playerId, false);
           }
           return { ok: true, message: input.operation === 'lock' ? (input.locked ? '区域已锁定' : '区域已解锁') : '已添加成员' };
         },

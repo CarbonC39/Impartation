@@ -7,6 +7,7 @@ import type { InteractionContext, SpaceClient } from '../context.js';
 export type ActionContext = InteractionContext & {
   maps: ReadonlyMap<string, RegisteredMap>;
   resetMovement(client: SpaceClient): void;
+  onMapChanged?(client: SpaceClient): void;
   throttle(client: SpaceClient): string | undefined;
 };
 

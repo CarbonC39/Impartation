@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Client, CloseCode, type Room } from '@colyseus/sdk';
-import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions } from '@impartation/shared';
+import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions, type Occupancy, type InteractionResult } from '@impartation/shared';
 import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/700.css';
 import { SpaceScene } from './SpaceScene';
@@ -29,6 +29,7 @@ import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } fro
 import { automaticCameraZoom, cameraZoomPreference, MAX_CAMERA_ZOOM, MIN_CAMERA_ZOOM, setCameraZoomPreference } from './cameraZoom';
 import { setRangeFill } from './range';
 import { leaveConnection, watchConnection, type ConnectionState } from './connection';
+import { OccupancyPoller } from './occupancy';
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -98,6 +99,8 @@ voiceDevice.addEventListener('change', () => {
 navigator.mediaDevices?.addEventListener?.('devicechange', refreshVoiceDevices);
 let worldRegistry: MapCollection | undefined;
 let spaceDirectory: WorldRegistry | undefined;
+let occupancy: Occupancy | undefined;
+let occupancyLoaded = false;
 let selectedSpaceId = '';
 let renderedMap = '';
 let renderingMap = '';
@@ -105,6 +108,8 @@ let renderGeneration = 0;
 let joinGeneration = 0;
 let queueAttempt: SpaceQueueClient | undefined;
 let pendingJoinStream: MediaStream | undefined;
+let travelPending = false;
+const occupancyPoller = new OccupancyPoller(value => { occupancy = value; occupancyLoaded = true; renderWorldTiles(); }, () => !pageLeaving && !element('login-screen').hidden);
 const queuePanel = element<HTMLDialogElement>('space-queue-panel');
 const queueStatus = element('space-queue-status');
 function closeQueueAndReturn() {
@@ -250,6 +255,7 @@ function showScreen(id: string) {
   if (id === 'map-screen') { touchPad.refresh(); layoutEditor.refresh(); chatLayout.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
   if (id === 'login-screen') renderWelcome();
   if (id === 'avatar-screen') labelSaveAppearance();
+  occupancyPoller.start();
 }
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -315,8 +321,9 @@ async function loadSpaces() {
       const cover = document.createElement('img');
       cover.className = 'world-art'; cover.src = space.cover; cover.alt = '';
       const name = document.createElement('span'); name.className = 'world-title'; name.textContent = space.name;
+      const online = document.createElement('span'); online.className = 'world-online'; online.dataset.spaceOnline = space.id;
       const action = document.createElement('span'); action.className = 'world-join';
-      tile.append(cover, name);
+      tile.append(cover, name, online);
       if (space.description) {
         const description = document.createElement('span'); description.className = 'world-description'; description.textContent = space.description;
         tile.append(description);
@@ -328,10 +335,17 @@ async function loadSpaces() {
   } catch (error) { list.textContent = `空间目录加载失败：${String(error)}`; }
 }
 function renderWorldTiles() {
-  element('world-subtitle').textContent = currentProfile ? '选好世界后进入试衣间' : '先登录，再选一个世界';
+  const singleSpace = (spaceDirectory?.spaces.length ?? 0) <= 1;
+  element('world-title').textContent = singleSpace ? '进入空间' : '去哪儿？';
+  element('world-subtitle').textContent = currentProfile ? '选择空间后进入试衣间' : '先登录，再选择空间';
   for (const action of document.querySelectorAll('#world-list .world-join')) action.textContent = currentProfile ? '去换装' : '登录后进入';
+  for (const count of document.querySelectorAll<HTMLElement>('#world-list .world-online')) {
+    const item = occupancy?.spaces.find(space => space.id === count.dataset.spaceOnline);
+    count.textContent = item ? `在线人数 ${item.online} / ${item.capacity}` : occupancyLoaded ? '人数暂不可用' : '正在读取人数…';
+  }
 }
 void loadSpaces();
+occupancyPoller.start();
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
   button.addEventListener('click', () => {
     const target = button.dataset.back ?? 'login-screen';
@@ -361,7 +375,7 @@ function restoreWardrobeNavigation() {
   const label = document.createElement('span'); label.id = 'join-world-name'; label.textContent = selectedWorld;
   join.replaceChildren('进入', label);
   const back = document.querySelector<HTMLButtonElement>('#avatar-screen [data-back]')!;
-  back.dataset.back = 'login-screen'; back.textContent = '返回选世界';
+  back.dataset.back = 'login-screen'; back.textContent = '返回空间列表';
 }
 function renderWelcome() {
   element('welcome-name').textContent = nameInput.value.trim() || '小访客';
@@ -466,7 +480,66 @@ function setConnected(value: boolean) {
   messageInput.disabled = !value;
   interactions?.setConnected(value);
   actions?.setConnected(value);
+  renderMapNavigation();
 }
+function renderMapNavigation() {
+  const list = element('map-navigation-list');
+  const activeRoom = room;
+  const own = activeRoom?.state.players.get(activeRoom.sessionId);
+  const mapId = own?.mapId ?? '';
+  const current = worldRegistry?.maps.find(map => map.id === mapId);
+  element('map-navigation-position').textContent = current ? `当前位置：${current.id}` : '当前位置：等待地图数据…';
+  const counts = new Map<string, number>();
+  if (activeRoom) for (const player of activeRoom.state.players.values()) {
+    if (player.connected) counts.set(player.mapId, (counts.get(player.mapId) ?? 0) + 1);
+  }
+  const maps = worldRegistry?.maps ?? [];
+  const buttons = new Map(Array.from(list.querySelectorAll<HTMLButtonElement>('button[data-quick-travel]'))
+    .map(button => [button.dataset.quickTravel!, button] as const));
+  for (const [index, map] of maps.entries()) {
+    const button = buttons.get(map.id) ?? document.createElement('button');
+    button.type = 'button'; button.dataset.quickTravel = map.id;
+    button.textContent = `${map.id} · ${counts.get(map.id) ?? 0} 人在线`;
+    button.disabled = !connected || !activeRoom || travelPending || map.id === mapId;
+    if (!buttons.has(map.id)) button.addEventListener('click', () => { const destination = button.dataset.quickTravel; if (destination) void quickTravel(destination); });
+    if (list.children[index] !== button) list.insertBefore(button, list.children[index] ?? null);
+  }
+  for (const [id, button] of buttons) if (!maps.some(map => map.id === id)) button.remove();
+}
+async function quickTravel(mapId: string) {
+  const activeRoom = room;
+  if (!connected || !activeRoom || !worldRegistry?.maps.some(map => map.id === mapId) || travelPending) return;
+  travelPending = true;
+  element('map-navigation-feedback').textContent = `正在前往 ${mapId}…`;
+  activeRoom.send('input', { x: 0, y: 0 });
+  touchPad.clear();
+  scene?.stopInput();
+  renderMapNavigation();
+  try {
+    const result: InteractionResult = await activeRoom.request('quickTravel', { mapId });
+    if (room !== activeRoom) return;
+    element('map-navigation-feedback').textContent = result.ok ? result.message : `前往失败：${result.message}`;
+  } catch (error) {
+    if (room === activeRoom) element('map-navigation-feedback').textContent = `前往失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    if (room === activeRoom) {
+      travelPending = false;
+      renderMapNavigation();
+    }
+  }
+}
+const mapNavigationToggle = element<HTMLButtonElement>('map-navigation-toggle');
+const mapNavigationPanel = element('map-navigation-panel');
+mapNavigationToggle.addEventListener('click', () => {
+  mapNavigationPanel.hidden = !mapNavigationPanel.hidden;
+  mapNavigationToggle.setAttribute('aria-expanded', String(!mapNavigationPanel.hidden));
+  if (!mapNavigationPanel.hidden) {
+    element('settings-panel').hidden = true;
+    settingsToggle.setAttribute('aria-expanded', 'false');
+    renderMapNavigation();
+  }
+  mapNavigationToggle.blur();
+});
 function setConnectionState(value: ConnectionState, message: string, notify = false) {
   connectionState = value;
   document.body.dataset.connectionState = value;
@@ -494,6 +567,11 @@ function cleanup() {
   resetTyping();
   renderGeneration++;
   worldRegistry = undefined; renderedMap = ''; renderingMap = '';
+  travelPending = false;
+  mapNavigationPanel.hidden = true;
+  mapNavigationToggle.setAttribute('aria-expanded', 'false');
+  element('map-navigation-feedback').textContent = '';
+  renderMapNavigation();
   interactions?.dispose();
   voice?.dispose();
   voice = undefined;
@@ -561,7 +639,7 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     const options = joinSchema.parse({ name: nameInput.value, avatar: currentAvatar, appearance: wardrobe.value });
     const space = spaceDirectory?.spaces.find(entry => entry.id === selectedSpaceId);
     if (!space || !spaceDirectory) throw new Error('请先选择空间');
-    worldRegistry = { initialMap: space.initialMap, maps: spaceDirectory.maps.filter(map => space.maps.includes(map.id)) };
+    worldRegistry = { initialMap: space.initialMap, maps: space.maps.map(id => spaceDirectory!.maps.find(map => map.id === id)!) };
     const roomOptions = spaceJoinSchema.parse({ ...options, spaceId: space.id });
     joinFeedback.textContent = '正在检查空间人数…';
     const attempt = new SpaceQueueClient(space.id, ahead => {
@@ -678,6 +756,7 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     const activeRoom = room;
     room.onStateChange(() => {
       if (room !== activeRoom) return;
+      renderMapNavigation();
       const mapId = activeRoom.state.players.get(activeRoom.sessionId)?.mapId;
       if (mapId && renderedMap !== mapId && renderingMap !== mapId) {
         void renderWorld(mapId, activeRoom).catch(error => { status.textContent = `地图加载失败：${String(error)}`; });
@@ -719,6 +798,7 @@ async function enterWorld(plan: VoicePlan, retry = false) {
 
 window.addEventListener('pagehide', () => {
   pageLeaving = true;
+  occupancyPoller.stop();
   joinGeneration++;
   const departingRoom = room;
   room = undefined;
@@ -769,7 +849,7 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
         if (point) zoneAnchor.style.transform = `translate(${point.x}px, ${point.y}px)`;
       },
       activate: () => { void actions?.activate(); },
-      connected: () => connected,
+      connected: () => connected && !travelPending && !renderingMap && renderedMap === activeRoom.state.players.get(activeRoom.sessionId)?.mapId,
       virtualInput: () => touchPad.read(),
       namesVisible: () => namesVisible,
       speaking: id => voice?.isSpeaking(id) ?? false,
