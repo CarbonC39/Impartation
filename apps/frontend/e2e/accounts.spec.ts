@@ -36,7 +36,7 @@ test('account holder changes password, is signed out, and can sign in with the n
   await page.locator('#password-form [name="confirmPassword"]').fill('account-test-password-updated');
   await page.locator('#password-form button[type="submit"]').click();
   await expect(page.locator('#password-feedback')).toContainText('所有会话已退出');
-  await expect(page.locator('#account-status')).toHaveText('请登录或注册账号后进入空间。', { timeout: 5000 });
+  await expect(page.locator('#account-status')).toBeHidden({ timeout: 5000 });
   await page.goto('/login');
   await page.locator('#sign-in-form [name="username"]').fill(account.username);
   await page.locator('#sign-in-form [name="password"]').fill(password);
@@ -58,7 +58,7 @@ test('reset fragment is removed immediately and resetting another account keeps 
   await expect(page.locator('#reset-password-panel')).toBeVisible();
   await expect(page).toHaveURL(/\/login$/);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('');
-  await expect(page.locator('#account-status')).toContainText(`@${account.username}`);
+  await expect(page.locator('#account-status')).toBeHidden();
   await page.locator('#reset-password-form [name="newPassword"]').fill('reset-password-updated');
   await page.locator('#reset-password-form [name="confirmPassword"]').fill('reset-password-updated');
   await page.locator('#reset-password-form button[type="submit"]').click();

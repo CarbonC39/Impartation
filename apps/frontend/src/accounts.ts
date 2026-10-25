@@ -35,20 +35,20 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     renderStatus();
   };
   function renderStatus() {
+    status.hidden = !profile || Boolean(resetToken);
     status.textContent = profile
       ? `已登录：${profile.displayName ?? profile.name}（@${profile.username ?? '匿名'} · ${profile.role === 'admin' ? '管理员' : '成员'}）`
-      : '请登录或注册账号后进入空间。';
+      : '';
     signInForm.hidden = Boolean(profile) || mode !== 'sign-in' || Boolean(resetToken);
     registerForm.hidden = Boolean(profile) || mode !== 'register' || Boolean(resetToken);
     accountActions.hidden = !profile;
     const loginRoute = document.body.classList.contains('login-route');
+    required<HTMLElement>('account-page').hidden = Boolean(profile) || !loginRoute || Boolean(resetToken);
     required<HTMLElement>('auth-forms').hidden = Boolean(profile) || !loginRoute || Boolean(resetToken);
     required<HTMLElement>('reset-password-panel').hidden = !resetToken || !loginRoute;
-    required<HTMLElement>('welcome-grid').hidden = Boolean(resetToken);
-    required<HTMLElement>('key-hints').hidden = Boolean(resetToken);
+    required<HTMLElement>('welcome-grid').hidden = !profile || Boolean(resetToken);
+    required<HTMLElement>('key-hints').hidden = !profile || Boolean(resetToken);
     required<HTMLButtonElement>('open-admin').hidden = profile?.role !== 'admin';
-    required<HTMLElement>('signed-out-note').hidden = Boolean(profile) || loginRoute;
-    required<HTMLAnchorElement>('open-login-page').hidden = Boolean(profile) || loginRoute;
     // The outfit preview belongs to an account; signed out it would only show the default look.
     required<HTMLElement>('welcome-outfit').hidden = !profile;
   }
@@ -58,9 +58,6 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     const registerButton = required<HTMLButtonElement>('show-register');
     registerButton.hidden = value === 'admin';
     required<HTMLElement>('registration-code-field').hidden = value !== 'code';
-    required<HTMLElement>('registration-note').textContent = value === 'open'
-      ? '现在可以自行创建账号。'
-      : value === 'code' ? '注册时需要管理员提供的注册码。' : '当前仅管理员可以创建账号。';
   }
   function showMode(next: 'sign-in' | 'register') {
     mode = next;
@@ -228,10 +225,9 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     document.body.dataset.resetActive = 'true';
     history.replaceState(null, '', `/login${location.search}`);
     document.body.classList.add('login-route');
-    window.dispatchEvent(new Event('login-route-change'));
     renderStatus();
   }
-  void registrationMode().then(updateRegistrationMode).catch(error => { required<HTMLElement>('registration-note').textContent = errorText(error); });
+  void registrationMode().then(updateRegistrationMode).catch(error => { feedback.textContent = errorText(error); });
   const ready = loadProfile().then(value => { acceptProfile(value); return value; }).catch(error => {
     feedback.textContent = errorText(error);
     throw error;

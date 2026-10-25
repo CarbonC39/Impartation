@@ -6,7 +6,7 @@
     <link rel="icon" href="data:," />
     <title>Impartation</title>
   </head>
-  <body>
+  <body class="login-route">
     <div id="app-shell">
       <header class="masthead" id="masthead">
         <a class="brand" href="#" aria-label="Impartation 首页"><svg class="brand-icon" viewBox="0 0 12 12" aria-hidden="true"><path fill="var(--line)" d="M5 0h2v2h2v2h3v2h-2v2h1v3h-2v-1H7v1H5v-1H3v1H1V8h1V6H0V4h3V2h2z"/><path fill="var(--sel)" d="M5 2h2v3h3v1H8v2h1v1H7V8H5v1H3V8h1V6H2V5h3z"/><path fill="#fff7d1" d="M5 3h1v2H5zM3 5h1v1H3z"/></svg><span><b>Impartation</b><small>像素小镇 · 一起工作的地方</small></span></a>
@@ -16,19 +16,12 @@
       <section id="theme-panel" class="panel theme-panel" aria-label="界面配色" hidden></section>
 
       <main>
-        <section class="flow-screen active" id="login-screen" aria-labelledby="welcome-title">
-          <div class="welcome-grid" id="welcome-grid">
-            <section class="panel welcome-card" aria-labelledby="welcome-title">
-              <h1 id="welcome-title">欢迎来到像素小镇</h1>
-              <p class="lead">使用账号登录或注册后进入空间。用户名用于登录，显示名称可以与其他人相同。</p>
-              <div class="last-outfit" id="welcome-outfit">
-                <span class="last-outfit-stage"><canvas id="welcome-canvas" width="16" height="24" aria-hidden="true"></canvas></span>
-                <span class="last-outfit-text"><small>当前造型</small><strong id="welcome-name">小访客</strong><small>选一个世界后可以换装</small></span>
-              </div>
-              <section class="account-panel" id="account-panel" aria-label="账号">
-                <p id="account-status" role="status">正在读取账号…</p>
+        <section class="flow-screen active" id="login-screen" aria-label="账号">
+          <p id="account-status" class="account-status" role="status" hidden></p>
+          <p id="account-feedback" class="account-feedback" role="status" aria-live="polite"></p>
+          <section class="account-page" id="account-page" aria-label="账号">
+            <section class="panel account-panel" id="account-panel" aria-label="账号">
                 <div id="auth-forms">
-                  <p id="registration-note" class="hint"></p>
                   <form id="sign-in-form" class="account-form">
                     <label>用户名<input name="username" autocomplete="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.]{3,30}" title="3–30 位，只能使用英文字母、数字、下划线或点；不区分大小写" /></label>
                     <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
@@ -43,11 +36,16 @@
                     <div class="account-buttons"><button class="primary" type="submit">注册并登录</button><button id="show-sign-in" class="secondary" type="button">返回登录</button></div>
                   </form>
                 </div>
-                <p id="signed-out-note" class="hint">世界列表可浏览；进入空间需要先登录。</p>
-                <a id="open-login-page" class="primary login-page-link" href="/login">登录或创建账号</a>
-                <div id="account-actions" class="account-buttons" hidden><button id="open-password" class="secondary" type="button">修改密码</button><button id="open-admin" class="secondary" type="button" hidden>账号管理</button><button id="sign-out" class="secondary" type="button">退出登录</button></div>
-                <p id="account-feedback" class="account-feedback" role="status" aria-live="polite"></p>
-              </section>
+            </section>
+          </section>
+          <div class="welcome-grid" id="welcome-grid" hidden>
+            <section class="panel welcome-card" aria-labelledby="welcome-title">
+              <h1 id="welcome-title">选择空间</h1>
+              <div class="last-outfit" id="welcome-outfit">
+                <span class="last-outfit-stage"><canvas id="welcome-canvas" width="16" height="24" aria-hidden="true"></canvas></span>
+                <span class="last-outfit-text"><small>当前造型</small><strong id="welcome-name">小访客</strong></span>
+              </div>
+              <div id="account-actions" class="account-buttons" hidden><button id="open-password" class="secondary" type="button">修改密码</button><button id="open-admin" class="secondary" type="button" hidden>账号管理</button><button id="sign-out" class="secondary" type="button">退出登录</button></div>
             </section>
             <section class="panel worlds-card" aria-labelledby="world-title">
               <div class="section-heading"><h2 id="world-title">进入空间</h2><span id="world-subtitle">选择空间后进入试衣间</span></div>
@@ -64,7 +62,7 @@
             <form id="admin-create-form" class="admin-create"><h3>创建账号</h3><label>用户名<input name="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.]{3,30}" title="3–30 位，只能使用英文字母、数字、下划线或点；不区分大小写" /></label><label>显示名称<input name="displayName" required maxlength="24" /></label><label>初始密码<input name="password" type="password" required minlength="8" autocomplete="new-password" /></label><button class="primary" type="submit">创建成员账号</button></form>
             <p id="admin-feedback" role="status" aria-live="polite"></p><div id="admin-users" class="admin-users" aria-live="polite"></div>
           </dialog>
-          <section id="reset-password-panel" class="panel account-reset" aria-labelledby="reset-password-title" hidden><h2 id="reset-password-title">设置新密码</h2><p class="lead">请设置新密码以恢复账号访问。</p><form id="reset-password-form" class="account-form"><label>新密码<input name="newPassword" type="password" required minlength="8" autocomplete="new-password" /></label><label>再次输入新密码<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password" /></label><button class="primary" type="submit">重置密码</button><p id="reset-password-feedback" role="status" aria-live="polite"></p></form></section>
+          <section id="reset-password-panel" class="panel account-reset" aria-labelledby="reset-password-title" hidden><h2 id="reset-password-title">重置密码</h2><form id="reset-password-form" class="account-form"><label>新密码<input name="newPassword" type="password" required minlength="8" autocomplete="new-password" /></label><label>再次输入新密码<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password" /></label><button class="primary" type="submit">重置密码</button><p id="reset-password-feedback" role="status" aria-live="polite"></p></form></section>
         </section>
 
         <section class="flow-screen" id="avatar-screen" aria-labelledby="mirror-title" hidden>

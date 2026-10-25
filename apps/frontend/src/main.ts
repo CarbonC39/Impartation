@@ -131,12 +131,13 @@ function setLoginRoute(enabled: boolean, push = false) {
   document.body.classList.toggle('login-route', enabled);
   window.dispatchEvent(new Event('login-route-change'));
 }
-setLoginRoute(location.pathname === '/login');
-window.addEventListener('popstate', () => setLoginRoute(location.pathname === '/login'));
-element<HTMLAnchorElement>('open-login-page').addEventListener('click', event => {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-  event.preventDefault();
-  setLoginRoute(true, true);
+setLoginRoute(location.pathname === '/login' || location.pathname === '/');
+window.addEventListener('popstate', () => {
+  if (location.pathname === '/login' && currentProfile && !document.body.dataset.resetActive) {
+    setLoginRoute(false, true);
+    return;
+  }
+  setLoginRoute(location.pathname === '/login' || !currentProfile);
 });
 
 function mergeAppearanceDraft(draft: JoinOptions['appearance'], previous: Profile, latest: Profile): JoinOptions['appearance'] {
@@ -266,9 +267,12 @@ function showScreen(id: string) {
   document.body.classList.toggle('map-open', id === 'map-screen');
   document.body.classList.toggle('avatar-open', id === 'avatar-screen');
   if (id === 'map-screen') { touchPad.refresh(); layoutEditor.refresh(); chatLayout.refresh(); element('theme-panel').hidden = true; element('theme-toggle').setAttribute('aria-expanded', 'false'); }
-  if (id === 'login-screen') renderWelcome();
+  if (id === 'login-screen') {
+    renderWelcome();
+    if (currentProfile && !document.body.dataset.resetActive) loadLobbyData();
+  }
   if (id === 'avatar-screen') labelSaveAppearance();
-  occupancyPoller.start();
+  if (currentProfile && !document.body.dataset.resetActive) occupancyPoller.start();
 }
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -358,8 +362,13 @@ function renderWorldTiles() {
     count.textContent = item ? `在线人数 ${item.online} / ${item.capacity}` : occupancyLoaded ? '人数暂不可用' : '正在读取人数…';
   }
 }
-void loadSpaces();
-occupancyPoller.start();
+let lobbyDataStarted = false;
+function loadLobbyData() {
+  if (lobbyDataStarted || !currentProfile) return;
+  lobbyDataStarted = true;
+  void loadSpaces();
+  occupancyPoller.start();
+}
 document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(button => {
   button.addEventListener('click', () => {
     const target = button.dataset.back ?? 'login-screen';
@@ -461,7 +470,9 @@ element<HTMLButtonElement>('layout-edit').addEventListener('click', () => {
 let syncAccountProfile: (value: Profile | undefined) => void = () => {};
 function showIdentity(value: Profile) {
   currentProfile = value;
-  if (location.pathname === '/login' && !document.body.dataset.resetActive) setLoginRoute(false, true);
+  if (document.body.classList.contains('login-route') && !document.body.dataset.resetActive)
+    setLoginRoute(false, location.pathname !== '/');
+  if (!document.body.dataset.resetActive) loadLobbyData();
   nameInput.value = value.displayName ?? value.name;
   currentAvatar = value.avatar;
   wardrobe.replace(appearanceSchema.parse(value.currentAppearance ?? value.appearance), false);
@@ -471,6 +482,9 @@ function showIdentity(value: Profile) {
 }
 function clearIdentity() {
   currentProfile = undefined;
+  occupancyPoller.stop();
+  setLoginRoute(true, location.pathname !== '/login');
+  showScreen('login-screen');
   nameInput.value = '小访客';
   currentAvatar = 'mint';
   wardrobe.replace(appearanceSchema.parse(DEFAULT_APPEARANCE), false);

@@ -48,8 +48,21 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
 }
 
 test('registration and sign-in create a session and clear credential fields after success', async ({ page }) => {
+  let delayFirstProfile = true;
+  await page.route('**/api/me', async route => {
+    if (delayFirstProfile) {
+      delayFirstProfile = false;
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    await route.continue();
+  });
   await page.goto('/');
-  await page.locator('#open-login-page').click();
+  await expect(page.locator('#account-page')).toBeVisible();
+  await expect(page.locator('#welcome-grid')).toBeHidden();
+  await expect(page.locator('#world-list')).toBeHidden();
+  await expect(page.locator('#account-status')).toBeHidden();
+  await expect(page.locator('#sign-in-form')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
   const username = nextUsername();
   const password = E2E_PASSWORD;
   await page.locator('#show-register').click();
@@ -59,12 +72,14 @@ test('registration and sign-in create a session and clear credential fields afte
   await page.locator('#register-form [name="confirmPassword"]').fill(password);
   await page.locator('#register-form button[type="submit"]').click();
   await expect(page.locator('#account-status')).toContainText(`@${username}`);
+  await expect(page.locator('#welcome-grid')).toBeVisible();
+  await expect(page.locator('#world-list .world-tile')).toHaveCount(2);
   await expect(page.locator('#register-form [name="password"]')).toHaveValue('');
   await page.locator('#sign-out').click();
-  await expect(page.locator('#account-status')).toHaveText('请登录或注册账号后进入空间。');
+  await expect(page.locator('#account-status')).toBeHidden();
   await expect(page.locator('#welcome-name')).toHaveText('小访客');
-  await page.locator('#open-login-page').click();
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.locator('#sign-in-form')).toBeVisible();
   await page.locator('#sign-in-form [name="username"]').fill(username);
   await page.locator('#sign-in-form [name="password"]').fill(password);
   await page.locator('#sign-in-form button[type="submit"]').click();

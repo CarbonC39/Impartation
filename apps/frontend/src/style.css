@@ -107,16 +107,17 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 
 /* Start screen */
 .welcome-grid { display: flex; flex-wrap: wrap; gap: 32px; align-items: stretch; }
-.login-route #app-shell { max-width: 720px; }
-.login-route .masthead { justify-content: center; }
-.login-route .masthead .steps, .login-route #theme-toggle, .login-route .worlds-card { display: none; }
-.login-route .welcome-grid { justify-content: center; }
-.login-route .welcome-card { flex: 1 1 420px; max-width: 520px; }
-.login-route .welcome-card > .lead, .login-route .last-outfit { display: none; }
-.login-route #welcome-title { text-align: center; }
-.login-route .account-panel { border-top: 0; padding-top: 0; }
-.login-page-link { align-self: flex-start; padding: 10px 18px; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: var(--px-sm); }
-.login-route .login-page-link { display: none; }
+body.login-route { min-height: 100dvh; display: grid; place-items: center; }
+body.login-route #app-shell { width: min(100%, 520px); max-width: 520px; margin: auto; padding: 24px 20px; }
+body.login-route .masthead { justify-content: center; margin-bottom: 20px; }
+body.login-route .brand-icon, body.login-route .brand small, body.login-route .steps, body.login-route #theme-toggle,
+body.login-route #theme-panel, body.login-route #welcome-grid { display: none !important; }
+.account-page { width: min(100%, 420px); margin: 0 auto; }
+.account-status { margin: 0 auto 12px; text-align: center; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.account-status:empty, .account-status[hidden] { display: none; }
+.login-route .account-feedback:not(:empty) { width: min(100%, 420px); margin: 0 auto 12px; text-align: center; }
+.account-page .account-panel { gap: 18px; padding: 24px; border-top: 0; }
+body.login-route .account-page { display: block; }
 .welcome-card { flex: 1 1 340px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .welcome-card h1 { font-size: 32px; line-height: 1.25; }
 .last-outfit { display: flex; align-items: center; gap: 20px; padding: 18px; background: var(--soft); box-shadow: var(--px-sm); }
@@ -125,7 +126,6 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .last-outfit-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .last-outfit-text strong { font-size: 18px; overflow-wrap: anywhere; }
 .account-panel { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 2px dashed var(--soft); }
-.account-panel > #account-status { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
 .account-form { display: flex; flex-direction: column; gap: 12px; }
 .account-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
 .account-feedback { min-height: 1.4em; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
