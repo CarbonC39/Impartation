@@ -8,7 +8,6 @@ import { drawAppearancePreview } from './appearancePreview';
 import { createInteractions } from './interactions';
 import type { InteractionDispatcher } from './interactions/dispatcher';
 import { z } from 'zod';
-import { zoneLabels } from './interactions/labels';
 import { loadProfile, saveProfile, type Profile } from './identity';
 import { mountAccounts } from './accounts';
 import './style.css';
@@ -43,7 +42,6 @@ const leave = element<HTMLButtonElement>('leave');
 const send = element<HTMLButtonElement>('send');
 const messageInput = element<HTMLInputElement>('message');
 const messages = element<HTMLOListElement>('messages');
-const zone = element('zone');
 let game: Phaser.Game | undefined;
 let scene: SpaceScene | undefined;
 let gameDestruction: Promise<void> = Promise.resolve();
@@ -614,7 +612,6 @@ function cleanup() {
   setConnected(false);
   join.disabled = false;
   leave.disabled = true;
-  zone.textContent = '当前区域：无';
 }
 const prejoin = mountPrejoin({
   dialog: element<HTMLDialogElement>('prejoin-dialog'), worldLabels: [element('prejoin-world'), element('prejoin-enter-world')],
@@ -868,8 +865,6 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
       zoneChanged: id => {
         if (generation !== renderGeneration || room !== activeRoom) return;
         const current = entry.world.zones.find(item => item.id === id);
-        const text = current ? `当前区域：${zoneLabels[current.kind] ?? current.kind}` : '当前区域：无';
-        if (zone.textContent !== text) zone.textContent = text;
         interactions?.setZone(current);
       },
       zoneAnchor: point => {

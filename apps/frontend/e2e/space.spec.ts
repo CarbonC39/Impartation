@@ -768,7 +768,13 @@ test('in-place static and animated sit use distinct action columns and movement 
   try {
     await expect.poll(() => player()?.name).toBe('E2EActions');
     const position = { x: player().x, y: player().y };
-    await page.locator('#action-list [data-action="sit"]').click();
+    await page.locator('#facing-controls [data-facing="up"]').click();
+    await expect.poll(() => player().facing).toBe('up');
+    expect({ x: player().x, y: player().y }).toEqual(position);
+    await page.locator('#facing-controls [data-facing="down"]').click();
+    await expect.poll(() => player().facing).toBe('down');
+    expect({ x: player().x, y: player().y }).toEqual(position);
+    await page.locator('#action-list [data-action="sit"][data-animated="false"]').click();
     await expect.poll(() => player().action).toBe('sit');
     expect(player().actionAnimated).toBe(false);
     expect(player().actionTargetId).toBe('');
@@ -777,10 +783,8 @@ test('in-place static and animated sit use distinct action columns and movement 
     await expect.poll(frame).toBe(16);
     await page.waitForTimeout(550); // A static pose stays fixed beyond a full animation cycle and the request cooldown.
     expect(await frame()).toBe(16);
-    await page.locator('#action-animated').check();
-    await page.keyboard.down('e');
-    try { await expect.poll(() => player().actionAnimated).toBe(true); }
-    finally { await page.keyboard.up('e'); }
+    await page.locator('#action-list [data-action="sit"][data-animated="true"]').click();
+    await expect.poll(() => player().actionAnimated).toBe(true);
     await expect.poll(frame, { intervals: [10] }).toBe(17);
     const frames = new Set<number>();
     await expect.poll(async () => {
@@ -1019,7 +1023,7 @@ test('mobile seat activation renders the character and releases occupancy when w
   await enter(page, 'E2ESeat');
   await spriteResponse;
   const observer = await observe();
-  const button = page.locator('#action-list [data-action="sit"]');
+  const button = page.locator('#action-list [data-action="sit"][data-animated="false"]');
   const canvas = page.locator('#game canvas');
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
   const player = () => observer.state.players.get(sessionId)!;
@@ -1403,7 +1407,7 @@ test.describe('touch device', () => {
     expect(larger.width).toBeGreaterThan(before.width * 1.4);
 
     // While editing, the action bar drags instead of acting, and the pad drags from any key.
-    const sit = page.locator('#action-list [data-action="sit"]');
+    const sit = page.locator('#action-list [data-action="sit"][data-animated="false"]');
     const barBox = (await bar.boundingBox())!;
     await page.mouse.move(barBox.x + 10, barBox.y + 10);
     await page.mouse.down();
@@ -1814,7 +1818,7 @@ test('scene selectors render chosen tiles, private members control locks, and a 
   try {
     await expect.poll(() => player()?.name).toBe('SceneTypes');
     await move('s', () => player().y >= 449);
-    await page.locator('#action-list [data-action="sit"]').click();
+    await page.locator('#action-list [data-action="sit"][data-animated="false"]').click();
     await expect(page.locator('#variant-selector-panel')).toBeVisible();
     await expect.poll(() => player().actionTargetId).toBe('20');
     await page.waitForTimeout(550);

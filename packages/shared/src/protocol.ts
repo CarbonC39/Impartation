@@ -8,6 +8,7 @@ import type {
   SpaceJoinOptions,
   QuickTravelInput,
   MovementInput,
+  Facing,
   PomodoroActionInput,
   SpaceState,
   VoiceAnswer, VoiceEnd, VoiceIceCandidate, VoiceOffer, VoiceSignal,
@@ -29,6 +30,7 @@ export type SpaceProtocol = {
   };
   messages: {
     input: (client: unknown, input: MovementInput) => void;
+    face: (client: unknown, facing: Facing) => void;
     chat: (client: unknown, input: { text: string }) => void;
     typing: (client: unknown, input: { typing: boolean }) => void;
     webTool: (client: unknown, input: { open: boolean }) => void;

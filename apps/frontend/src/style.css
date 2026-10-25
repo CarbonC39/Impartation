@@ -269,13 +269,17 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .map-topbar { position: absolute; z-index: 5; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
 .map-topbar > * { pointer-events: auto; }
 .map-topbar strong { font-size: 18px; font-weight: 900; }
+.map-indicators, .map-state-group, .map-state-choices { display: inline-flex; align-items: center; gap: 6px; }
+.map-indicators:empty { display: none; }
+.map-state-icon { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 4px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--panel) 76%, transparent); box-shadow: var(--px-sm); font-size: 18px; line-height: 1; }
+.map-state-icon[hidden], .map-state-group[hidden] { display: none; }
+.map-state-icon img { width: 24px; height: 24px; image-rendering: pixelated; }
+.map-state-icon[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 #status { color: var(--ink2); overflow-wrap: anywhere; }
 #voice-status { color: var(--ink2); overflow-wrap: anywhere; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .session-id { display: none; } /* Kept in #status text for diagnostics only. */
-.zone-chip { position: absolute; z-index: 4; top: 76px; left: 16px; font-weight: 700; background: #e3f4ec; color: #3f5449; }
-.attachment-chip { position: absolute; z-index: 4; top: 122px; left: 16px; }
-.attachment-chip button { padding: 4px 8px; font-size: 12px; }
 .settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; max-height: calc(100% - 92px); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .map-navigation-panel { position: absolute; z-index: 24; top: 76px; right: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100% - 92px); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .map-navigation-panel h2 { font-size: 18px; }
@@ -326,15 +330,22 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .compose input { min-height: 40px; padding: 8px 10px; font-size: 14px; background: color-mix(in srgb, var(--field) 75%, transparent); text-shadow: none; }
 .compose button { min-height: 40px; padding: 0 14px; text-shadow: none; }
 
-/* Character actions: a rail on the right edge, out of the way of the map centre and the voice dock. */
-.positional-controls { position: absolute; z-index: 5; right: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
-.action-list { display: flex; flex-direction: column; gap: 12px; }
-.action-list button { position: relative; min-width: 64px; min-height: 56px; padding: 14px 12px 6px; background: var(--panel); }
+/* A translucent action list stays at the lower right and can collapse to its heading. */
+.positional-controls { position: fixed; z-index: 5; right: 16px; bottom: 16px; width: min(250px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 6px; padding: 8px; background: color-mix(in srgb, var(--panel) 78%, transparent); box-shadow: var(--px-sm); }
+.action-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.action-heading strong { font-size: 13px; }
+.action-panel-body { display: flex; align-items: center; gap: 8px; }
+.action-panel-body[hidden] { display: none; }
+.action-list { display: flex; flex: 1; flex-wrap: wrap; gap: 6px; }
+.action-list button { position: relative; min-width: 74px; min-height: 60px; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: color-mix(in srgb, var(--panel) 80%, transparent); font-size: 11px; }
 .action-list button[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); }
+.action-preview { width: 32px; height: 48px; image-rendering: pixelated; }
+.facing-controls { display: grid; flex: none; grid-template-columns: repeat(2, 34px); gap: 4px; }
+.facing-controls button { min-width: 34px; min-height: 34px; padding: 0; background: color-mix(in srgb, var(--panel) 80%, transparent); }
+.facing-controls button[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); }
 button[data-key]::before { content: attr(data-key); position: absolute; left: 4px; top: 2px; font-family: var(--pixel); font-size: 11px; font-weight: 500; color: var(--ink2); }
-.animated-toggle { flex-direction: row; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 10px; background: var(--panel); box-shadow: var(--px-sm); font-size: 13px; cursor: pointer; }
-.animated-toggle input { width: 16px; min-height: 16px; height: 16px; box-shadow: none; }
-#object-feedback { position: absolute; top: 50%; right: calc(100% + 14px); transform: translateY(-50%); white-space: nowrap; color: #fff; font-size: 12px; font-weight: 700; text-shadow: 0 1px 3px #14202dcc; }
+#object-feedback { position: absolute; right: 100%; bottom: 0; margin-right: 10px; white-space: nowrap; color: #fff; font-size: 12px; font-weight: 700; text-shadow: 0 1px 3px #14202dcc; }
+#object-feedback:empty { display: none; }
 /* On-screen direction pad: one pointer steers the whole pad; the centre grip drags it. */
 .touch-controls { --key: calc(52px * var(--pad-scale, 1)); position: fixed; z-index: 5; display: none; grid-template-columns: repeat(3, var(--key)); grid-template-rows: repeat(3, var(--key)); gap: 4px;
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -375,8 +386,9 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .zone-hint span:empty { display: none; }
 
 /* Interaction panels */
-#interaction-panels { position: absolute; z-index: 6; top: 130px; left: 16px; display: grid; gap: 12px; pointer-events: none; }
+#interaction-panels { position: absolute; z-index: 6; inset: 0; display: grid; place-items: center; align-content: center; gap: 12px; pointer-events: none; }
 .feature-panel { position: relative; width: var(--panel-width, min(340px, calc(100vw - 32px))); height: var(--panel-height, auto); max-height: var(--panel-height, 50vh); display: flex; flex-direction: column; padding: 12px 16px 16px; background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); pointer-events: auto; }
+.feature-panel[hidden] { display: none; }
 /* Dragged panels leave the default stack; viewport coordinates come from PanelLayout. */
 .feature-panel.floating { position: fixed; }
 .feature-panel.collapsed { width: auto; height: auto; max-height: none; padding-bottom: 12px; }
@@ -394,12 +406,8 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .feature-panel form, .timer-controls { display: flex; flex-direction: column; gap: 10px; }
 .timer-controls { flex-flow: row wrap; align-items: end; }
 /* Desk item picker shown while seated. */
-.variant-choices { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
-.variant-choices button { min-height: 48px; padding: 8px 12px; }
-.variant-choices button[aria-pressed="true"]:disabled { opacity: 1; }
-.variant-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 2px dashed var(--line); }
-.variant-footer p { flex: 1; margin: 0; color: var(--ink2); }
-.variant-footer button { flex: none; }
+.map-state-choices { gap: 4px; }
+.map-state-choices button[aria-pressed="true"]:disabled { opacity: 1; }
 
 /* Message board notes: own/admin notes get a trash button centred on the right. */
 /* The note list takes the space a resized panel gives it; the form stays in view. */
@@ -644,17 +652,13 @@ body.tool-open .map-dock { z-index: 22; left: 16px; top: 50%; bottom: auto; tran
   .map-topbar { top: 10px; left: 10px; right: 10px; flex-direction: column; }
   .map-topbar > .hud-chip { max-width: calc(100vw - 20px); flex-wrap: wrap; gap: 6px 10px; }
   .hud-buttons { justify-content: flex-start; }
-  .zone-chip { top: 118px; left: 10px; }
-  .attachment-chip { top: 164px; left: 10px; }
   .settings-panel { top: 118px; right: 10px; }
-  #interaction-panels { top: 168px; left: 10px; }
   .chat-card { left: auto; right: 10px; bottom: 10px; width: var(--chat-width, min(240px, 60vw)); }
   #messages { height: var(--chat-height, min(20vh, 150px)); }
   .map-dock { left: auto; right: 10px; bottom: auto; top: 118px; transform: none; gap: 8px; padding: 6px; }
   .map-dock .icon-button { width: 44px; min-height: 44px; }
-  .positional-controls { right: 10px; top: 188px; transform: none; align-items: flex-end; }
-  .action-list { gap: 8px; }
-  #object-feedback { position: static; transform: none; white-space: normal; max-width: 40vw; text-align: right; }
+  .positional-controls { right: 10px; bottom: calc(20px + min(24vh, 190px)); width: min(250px, calc(100vw - 20px)); }
+  #object-feedback { max-width: 40vw; white-space: normal; text-align: right; }
   .compose input { font-size: 16px; } /* iOS zooms into inputs below 16px on focus. */
   .tv-window { width: calc(100vw - 16px); } .tv-resize { display: none; } body.tool-open .map-dock { left: auto; top: 118px; transform: none; } .tool-stage { --stage-width: 200px; right: 12px; bottom: 12px; } .tv-bezel { padding: 8px; } .tv-knobs { display: none; } .tv-screen { height: min(60vh, calc(100vh - 140px)); }
 }

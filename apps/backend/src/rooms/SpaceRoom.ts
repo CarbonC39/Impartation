@@ -175,6 +175,11 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       if (!input.x && !input.y) player.motion = 'idle';
       this.movementInputs.set(client.sessionId, { ...input, receivedAt: Date.now() });
     }),
+    face: validate(facingSchema, async (client: SpaceClient, facing) => {
+      if (!await this.authorize(client)) return;
+      const player = this.state.players.get(client.sessionId);
+      if (player?.connected) player.facing = facing;
+    }),
     chat: validate(chatSchema, async (client: SpaceClient, { text }: { text: string }) => {
       if (!await this.authorize(client)) return;
       const player = this.state.players.get(client.sessionId);

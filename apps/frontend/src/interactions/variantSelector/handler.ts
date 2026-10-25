@@ -5,6 +5,7 @@ import { element } from '../panel';
 
 // Display names for Tiled variant IDs; unknown IDs fall back to the raw name.
 const variantLabels: Record<string, string> = { computer: '电脑', book: '书本', 'drawing-board': '画板' };
+const variantIcons: Record<string, string> = { computer: '⌘', book: '▤', 'drawing-board': '▧' };
 
 /** Claims come from the server action state; being near the anchor never opens choices. */
 export class VariantSelectorInteraction implements InteractionHandler {
@@ -44,7 +45,10 @@ export class VariantSelectorInteraction implements InteractionHandler {
       this.choices.replaceChildren();
       for (const variant of selector?.variants ?? []) {
         const button = document.createElement('button');
-        button.type = 'button'; button.className = 'secondary'; button.dataset.variant = variant; button.textContent = variantLabels[variant] ?? variant;
+        const label = variantLabels[variant] ?? variant;
+        button.type = 'button'; button.className = 'map-state-icon'; button.dataset.variant = variant;
+        button.textContent = variantIcons[variant] ?? label.slice(0, 1);
+        button.title = label; button.setAttribute('aria-label', label);
         this.choices.append(button);
       }
     }

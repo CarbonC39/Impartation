@@ -7,7 +7,7 @@ export class AttachmentInteraction implements InteractionHandler {
   private panel = element('attachment-panel');
   private take = element<HTMLButtonElement>('attachment-take');
   private clear = element<HTMLButtonElement>('attachment-clear');
-  private current = element('attachment-current');
+  private current = element<HTMLButtonElement>('attachment-clear');
   private availability = element('attachment-availability');
   private feedback = element('attachment-feedback');
   private zone?: Zone;
@@ -26,7 +26,13 @@ export class AttachmentInteraction implements InteractionHandler {
   private render() {
     const player = this.room.state.players.get(this.room.sessionId);
     const asset = ATTACHMENTS[player?.attachmentId as AttachmentId];
-    this.current.textContent = `当前附着：${asset?.name ?? '无'}`;
+    this.current.hidden = !asset;
+    this.current.replaceChildren();
+    if (asset) {
+      const icon = document.createElement('img'); icon.src = asset.path; icon.alt = '';
+      this.current.append(icon); this.current.title = `当前附着：${asset.name}；清除`;
+      this.current.setAttribute('aria-label', `当前附着：${asset.name}；清除`);
+    }
     this.clear.disabled = !this.connected || this.pending || !player?.connected || !asset;
     this.panel.hidden = !this.zone;
     if (!this.zone || !player) return;
