@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
 import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
-import { zoneLabels } from './interactions/labels';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
@@ -25,6 +24,7 @@ export type SceneHooks = {
 };
 const BUBBLE_MS = 5000;
 const BUBBLE_CHARS = 60;
+let privateAreaMaskSequence = 0;
 
 export class SpaceScene extends Phaser.Scene {
   private sprites = new Map<string, PlayerVisual>();
@@ -37,7 +37,9 @@ export class SpaceScene extends Phaser.Scene {
   private lastAnchor = '';
   private tileWidth = 16;
   private tileHeight = 16;
-  private zoneTexts: Phaser.GameObjects.Text[] = [];
+  private privateAreaMask?: Phaser.GameObjects.Image;
+  private privateAreaMaskTexture = '';
+  private displayedPrivateArea = '';
   private animationElapsed = 0;
   private canvasTiles: { tile: Phaser.Tilemaps.Tile; gid: number; tileset: Phaser.Tilemaps.Tileset }[] = [];
 
@@ -123,16 +125,7 @@ export class SpaceScene extends Phaser.Scene {
       trackCanvasAnimations(visual);
       this.attachmentSourceLayers.set(zone.id, visual);
     }
-    for (const zone of this.mapEntry.world.zones) {
-      if (zone.polygon) {
-        const points = zone.polygon.map(p => new Phaser.Math.Vector2(p.x, p.y));
-        this.add.graphics().fillStyle(0xd5d080, 0.15).lineStyle(1, 0xd5d080, 0.6)
-          .fillPoints(points, true).strokePoints(points, true);
-      } else this.add.rectangle(zone.x, zone.y, zone.width, zone.height, 0xd5d080, 0.15)
-        .setOrigin(0).setStrokeStyle(1, 0xd5d080, 0.6);
-      this.zoneTexts.push(this.add.text(zone.x + 8, zone.y + 8, zoneLabels[zone.kind] ?? zone.kind,
-        { fontSize: '14px', color: '#eeefd9' }).setScale(1 / zoom));
-    }
+    this.privateAreaMaskTexture = `private-area-mask:${this.mapEntry.id}:${++privateAreaMaskSequence}`;
     this.objectVisuals = new WorldObjectVisuals(this, this.mapEntry.world, tiles);
     this.cameras.main.setBounds(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT,E', false) as Record<string, Phaser.Input.Keyboard.Key>;
@@ -149,6 +142,8 @@ export class SpaceScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', visibility);
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
+      this.privateAreaMask?.destroy();
+      if (this.privateAreaMaskTexture && this.textures.exists(this.privateAreaMaskTexture)) this.textures.remove(this.privateAreaMaskTexture);
       this.attachmentSourceLayers.clear();
       this.canvasTiles = [];
       this.hooks.zoneAnchor(undefined);
@@ -160,7 +155,6 @@ export class SpaceScene extends Phaser.Scene {
   refreshCameraZoom() {
     const zoom = cameraZoom(this.tileWidth, this.tileHeight);
     this.cameras.main.setZoom(zoom);
-    for (const label of this.zoneTexts) label.setScale(1 / zoom);
     for (const sprite of this.sprites.values()) sprite.status.setZoom(zoom);
     this.lastAnchor = '';
   }
@@ -246,6 +240,7 @@ export class SpaceScene extends Phaser.Scene {
     const zoneId = ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.zoneId : '';
     this.hooks.zoneChanged(zoneId);
     this.updateZoneAnchor(zoneId);
+    this.updatePrivateAreaMask(ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.privateAreaId : '');
     const activatePressed = Phaser.Input.Keyboard.JustDown(this.keys.E);
     // Never queue movement during automatic reconnection.
     if (!this.hooks.connected() || !ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) {
@@ -283,5 +278,30 @@ export class SpaceScene extends Phaser.Scene {
     if (key === this.lastAnchor) return;
     this.lastAnchor = key;
     this.hooks.zoneAnchor(point);
+  }
+  private updatePrivateAreaMask(privateAreaId: string) {
+    if (privateAreaId === this.displayedPrivateArea) return;
+    this.displayedPrivateArea = privateAreaId;
+    this.privateAreaMask?.destroy();
+    this.privateAreaMask = undefined;
+    if (!privateAreaId) return;
+    const area = this.mapEntry.world.zones.find(zone => zone.kind === 'privateArea' && zone.id === privateAreaId);
+    if (!area) return;
+    const texture = this.textures.createCanvas(this.privateAreaMaskTexture, this.mapEntry.world.width, this.mapEntry.world.height);
+    if (!texture) return;
+    const context = texture.getContext();
+    context.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    context.beginPath();
+    context.rect(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
+    if (area.polygon) {
+      context.moveTo(area.polygon[0]!.x, area.polygon[0]!.y);
+      for (const point of area.polygon.slice(1)) context.lineTo(point.x, point.y);
+      context.closePath();
+    } else {
+      context.rect(area.x, area.y, area.width, area.height);
+    }
+    context.fill('evenodd');
+    texture.refresh();
+    this.privateAreaMask = this.add.image(0, 0, this.privateAreaMaskTexture).setOrigin(0).setDepth(Number.MAX_SAFE_INTEGER);
   }
 }

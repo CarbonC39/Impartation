@@ -126,6 +126,13 @@ let selectedWorld = '阳光大厅';
 let leavingIntentionally = false;
 let currentProfile: Profile | undefined;
 
+function setLoginRoute(enabled: boolean, push = false) {
+  if (push) history.pushState(null, '', enabled ? '/login' : '/');
+  document.body.classList.toggle('login-route', enabled);
+}
+setLoginRoute(location.pathname === '/login');
+window.addEventListener('popstate', () => setLoginRoute(location.pathname === '/login'));
+
 function mergeAppearanceDraft(draft: JoinOptions['appearance'], previous: Profile, latest: Profile): JoinOptions['appearance'] {
   if (previous.id !== latest.id) return latest.currentAppearance ?? latest.appearance;
   const before = previous.currentAppearance ?? previous.appearance;
@@ -267,6 +274,7 @@ async function chooseWorld(spaceId: string) {
   const space = spaceDirectory?.spaces.find(entry => entry.id === spaceId);
   if (!space) return;
   if (!currentProfile) {
+    setLoginRoute(true, true);
     element('account-feedback').textContent = '请先登录或注册账号，再进入空间。';
     element('sign-in-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
@@ -447,6 +455,7 @@ element<HTMLButtonElement>('layout-edit').addEventListener('click', () => {
 let syncAccountProfile: (value: Profile | undefined) => void = () => {};
 function showIdentity(value: Profile) {
   currentProfile = value;
+  if (location.pathname === '/login') setLoginRoute(false, true);
   nameInput.value = value.displayName ?? value.name;
   currentAvatar = value.avatar;
   wardrobe.replace(appearanceSchema.parse(value.currentAppearance ?? value.appearance), false);

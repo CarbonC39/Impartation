@@ -107,6 +107,14 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 
 /* Start screen */
 .welcome-grid { display: flex; flex-wrap: wrap; gap: 32px; align-items: stretch; }
+.login-route #app-shell { max-width: 720px; }
+.login-route .masthead { justify-content: center; }
+.login-route .masthead .steps, .login-route #theme-toggle, .login-route .worlds-card { display: none; }
+.login-route .welcome-grid { justify-content: center; }
+.login-route .welcome-card { flex: 1 1 420px; max-width: 520px; }
+.login-route .welcome-card > .lead, .login-route .last-outfit { display: none; }
+.login-route #welcome-title { text-align: center; }
+.login-route .account-panel { border-top: 0; padding-top: 0; }
 .welcome-card { flex: 1 1 340px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .welcome-card h1 { font-size: 32px; line-height: 1.25; }
 .last-outfit { display: flex; align-items: center; gap: 20px; padding: 18px; background: var(--soft); box-shadow: var(--px-sm); }
