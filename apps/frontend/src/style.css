@@ -115,6 +115,8 @@ label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-w
 .login-route .welcome-card > .lead, .login-route .last-outfit { display: none; }
 .login-route #welcome-title { text-align: center; }
 .login-route .account-panel { border-top: 0; padding-top: 0; }
+.login-page-link { align-self: flex-start; padding: 10px 18px; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: var(--px-sm); }
+.login-route .login-page-link { display: none; }
 .welcome-card { flex: 1 1 340px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .welcome-card h1 { font-size: 32px; line-height: 1.25; }
 .last-outfit { display: flex; align-items: center; gap: 20px; padding: 18px; background: var(--soft); box-shadow: var(--px-sm); }

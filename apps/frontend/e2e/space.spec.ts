@@ -49,6 +49,7 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
 
 test('registration and sign-in create a session and clear credential fields after success', async ({ page }) => {
   await page.goto('/');
+  await page.locator('#open-login-page').click();
   const username = nextUsername();
   const password = E2E_PASSWORD;
   await page.locator('#show-register').click();
@@ -62,10 +63,13 @@ test('registration and sign-in create a session and clear credential fields afte
   await page.locator('#sign-out').click();
   await expect(page.locator('#account-status')).toHaveText('请登录或注册账号后进入空间。');
   await expect(page.locator('#welcome-name')).toHaveText('小访客');
+  await page.locator('#open-login-page').click();
+  await expect(page).toHaveURL(/\/login$/);
   await page.locator('#sign-in-form [name="username"]').fill(username);
   await page.locator('#sign-in-form [name="password"]').fill(password);
   await page.locator('#sign-in-form button[type="submit"]').click();
   await expect(page.locator('#account-status')).toContainText(`@${username}`);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.locator('#sign-in-form [name="password"]')).toHaveValue('');
 });
 
@@ -73,7 +77,7 @@ test('choosing a world refreshes remote appearance while preserving only edited 
   const account = await signInFresh(page, 'E2EAppearanceSync');
   const secondDevice = await browser.newPage();
   try {
-    await secondDevice.goto('/');
+    await secondDevice.goto('/login');
     await secondDevice.locator('#sign-in-form [name="username"]').fill(account.username);
     await secondDevice.locator('#sign-in-form [name="password"]').fill(account.password);
     await secondDevice.locator('#sign-in-form button[type="submit"]').click();
@@ -311,6 +315,7 @@ test('private listeners receive public chat and audio while their microphone tra
   try {
     await move('s', () => observer.state.players.get(sessionId)!.y >= 450);
     await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('30');
+    await expect.poll(() => privateAreaMaskCount(page)).toBe(1);
     await page.locator('#message').fill('房内消息'); await page.locator('#send').click();
     await bob.locator('#message').fill('公共消息'); await bob.locator('#send').click();
     await expect(page.locator('#messages')).toContainText('房内消息');
@@ -327,9 +332,13 @@ test('private listeners receive public chat and audio while their microphone tra
     await expect.poll(() => page.locator('audio[data-voice-peer]').evaluateAll(nodes => nodes.some(node =>
       (node as HTMLAudioElement).srcObject instanceof MediaStream))).toBe(true);
     await move('w', () => observer.state.players.get(sessionId)!.y < 425);
+    await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('');
+    await expect.poll(() => privateAreaMaskCount(page)).toBe(0);
     await expect.poll(() => transmitting(page)).toBe(true);
     await expect.poll(() => muted(bob)).toBe(false);
     await move('s', () => observer.state.players.get(sessionId)!.y >= 450);
+    await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('30');
+    await expect.poll(() => privateAreaMaskCount(page)).toBe(1);
     await expect.poll(() => transmitting(page)).toBe(false);
     await expect.poll(() => muted(bob)).toBe(true);
     await bob.locator('#sound-toggle').click(); await bob.locator('#sound-toggle').click();
@@ -370,6 +379,9 @@ async function captureRenderedScene(page: Page) {
       (window as RenderingWindow).sceneUnderTest = this;
     };
   }, '/src/SpaceScene.ts');
+}
+function privateAreaMaskCount(page: Page) {
+  return page.evaluate(() => Number(Boolean((window as RenderingWindow).sceneUnderTest?.children.getByName('private-area-mask'))));
 }
 
 test('pre-join check opens the microphone once, enters muted, and shows a mic over the speaking character', async ({ page }) => {
@@ -1456,7 +1468,7 @@ test('logging into a second browser restores the same account, profile, outfits 
     await expect(page.locator('#feature-status')).toContainText('留言已发布');
     await page.locator('#leave').click();
     await expect(page.locator('#status')).toContainText('已离开');
-    await target.goto('/');
+    await target.goto('/login');
     await target.locator('#sign-in-form [name="username"]').fill(account.username);
     await target.locator('#sign-in-form [name="password"]').fill(account.password);
     await target.locator('#sign-in-form button[type="submit"]').click();

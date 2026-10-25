@@ -37,6 +37,7 @@ test('account holder changes password, is signed out, and can sign in with the n
   await page.locator('#password-form button[type="submit"]').click();
   await expect(page.locator('#password-feedback')).toContainText('所有会话已退出');
   await expect(page.locator('#account-status')).toHaveText('请登录或注册账号后进入空间。', { timeout: 5000 });
+  await page.goto('/login');
   await page.locator('#sign-in-form [name="username"]').fill(account.username);
   await page.locator('#sign-in-form [name="password"]').fill(password);
   await page.locator('#sign-in-form button[type="submit"]').click();
@@ -55,6 +56,7 @@ test('reset fragment is removed immediately and resetting another account keeps 
   });
   await page.goto('/#reset-password=one-time-secret');
   await expect(page.locator('#reset-password-panel')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('');
   await expect(page.locator('#account-status')).toContainText(`@${account.username}`);
   await page.locator('#reset-password-form [name="newPassword"]').fill('reset-password-updated');
@@ -87,7 +89,7 @@ test('admin panel confirms moderation, protects the current account, and display
     const url = new URL(route.request().url());
     const action = url.pathname.split('/').at(-1);
     if (action === 'reset-password') {
-      await route.fulfill({ json: { url: `${url.origin}/#reset-password=temporary-token` } });
+      await route.fulfill({ json: { url: `${url.origin}/login#reset-password=temporary-token` } });
     } else if (action === 'kick' || action === 'delete') {
       await route.fulfill({ json: { ok: true } });
     } else {
@@ -109,7 +111,7 @@ test('admin panel confirms moderation, protects the current account, and display
   prompt = await acceptNextConfirmation(page, () => memberRow.getByRole('button', { name: '生成重置链接' }).click());
   expect(prompt).toContain('生成链接不会退出其当前会话');
   expect(prompt).toContain('完成密码重置后才会撤销全部会话');
-  await expect(page.locator('#admin-feedback a')).toHaveAttribute('href', /#reset-password=temporary-token/);
+  await expect(page.locator('#admin-feedback a')).toHaveAttribute('href', /\/login#reset-password=temporary-token/);
   const selfRow = page.locator('#admin-users .admin-user').filter({ hasText: `@${account.username}` });
   await expect(selfRow.getByRole('button', { name: '删除' })).toHaveCount(0);
   await expect(selfRow.getByRole('button', { name: '冻结' })).toHaveCount(0);

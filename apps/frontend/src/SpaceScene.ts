@@ -284,6 +284,7 @@ export class SpaceScene extends Phaser.Scene {
     this.displayedPrivateArea = privateAreaId;
     this.privateAreaMask?.destroy();
     this.privateAreaMask = undefined;
+    if (this.privateAreaMaskTexture && this.textures.exists(this.privateAreaMaskTexture)) this.textures.remove(this.privateAreaMaskTexture);
     if (!privateAreaId) return;
     const area = this.mapEntry.world.zones.find(zone => zone.kind === 'privateArea' && zone.id === privateAreaId);
     if (!area) return;
@@ -302,6 +303,7 @@ export class SpaceScene extends Phaser.Scene {
     }
     context.fill('evenodd');
     texture.refresh();
-    this.privateAreaMask = this.add.image(0, 0, this.privateAreaMaskTexture).setOrigin(0).setDepth(Number.MAX_SAFE_INTEGER);
+    this.privateAreaMask = this.add.image(0, 0, this.privateAreaMaskTexture).setName('private-area-mask')
+      .setOrigin(0).setDepth(Number.MAX_SAFE_INTEGER);
   }
 }

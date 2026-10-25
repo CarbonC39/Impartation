@@ -129,9 +129,15 @@ let currentProfile: Profile | undefined;
 function setLoginRoute(enabled: boolean, push = false) {
   if (push) history.pushState(null, '', enabled ? '/login' : '/');
   document.body.classList.toggle('login-route', enabled);
+  window.dispatchEvent(new Event('login-route-change'));
 }
 setLoginRoute(location.pathname === '/login');
 window.addEventListener('popstate', () => setLoginRoute(location.pathname === '/login'));
+element<HTMLAnchorElement>('open-login-page').addEventListener('click', event => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  setLoginRoute(true, true);
+});
 
 function mergeAppearanceDraft(draft: JoinOptions['appearance'], previous: Profile, latest: Profile): JoinOptions['appearance'] {
   if (previous.id !== latest.id) return latest.currentAppearance ?? latest.appearance;
@@ -455,7 +461,7 @@ element<HTMLButtonElement>('layout-edit').addEventListener('click', () => {
 let syncAccountProfile: (value: Profile | undefined) => void = () => {};
 function showIdentity(value: Profile) {
   currentProfile = value;
-  if (location.pathname === '/login') setLoginRoute(false, true);
+  if (location.pathname === '/login' && !document.body.dataset.resetActive) setLoginRoute(false, true);
   nameInput.value = value.displayName ?? value.name;
   currentAvatar = value.avatar;
   wardrobe.replace(appearanceSchema.parse(value.currentAppearance ?? value.appearance), false);

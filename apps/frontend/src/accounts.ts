@@ -41,15 +41,18 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     signInForm.hidden = Boolean(profile) || mode !== 'sign-in' || Boolean(resetToken);
     registerForm.hidden = Boolean(profile) || mode !== 'register' || Boolean(resetToken);
     accountActions.hidden = !profile;
-    required<HTMLElement>('auth-forms').hidden = Boolean(profile) || Boolean(resetToken);
-    required<HTMLElement>('reset-password-panel').hidden = !resetToken;
+    const loginRoute = document.body.classList.contains('login-route');
+    required<HTMLElement>('auth-forms').hidden = Boolean(profile) || !loginRoute || Boolean(resetToken);
+    required<HTMLElement>('reset-password-panel').hidden = !resetToken || !loginRoute;
     required<HTMLElement>('welcome-grid').hidden = Boolean(resetToken);
     required<HTMLElement>('key-hints').hidden = Boolean(resetToken);
     required<HTMLButtonElement>('open-admin').hidden = profile?.role !== 'admin';
-    required<HTMLElement>('signed-out-note').hidden = Boolean(profile);
+    required<HTMLElement>('signed-out-note').hidden = Boolean(profile) || loginRoute;
+    required<HTMLAnchorElement>('open-login-page').hidden = Boolean(profile) || loginRoute;
     // The outfit preview belongs to an account; signed out it would only show the default look.
     required<HTMLElement>('welcome-outfit').hidden = !profile;
   }
+  window.addEventListener('login-route-change', renderStatus);
   const usernameOf = (form: HTMLFormElement) => String(new FormData(form).get('username') ?? '').trim();
   function updateRegistrationMode(value: 'open' | 'code' | 'admin') {
     const registerButton = required<HTMLButtonElement>('show-register');
@@ -138,6 +141,7 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     if (submit) submit.disabled = true;
     void resetPassword(resetToken, password).then(() => {
       resetToken = undefined;
+      delete document.body.dataset.resetActive;
       resetForm.reset();
       output.textContent = '密码已重置，请登录。';
       showMode('sign-in');
@@ -221,7 +225,10 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
   if (fragmentMatch?.[1]) {
     try { resetToken = decodeURIComponent(fragmentMatch[1]); }
     catch { resetToken = fragmentMatch[1]; }
-    history.replaceState(null, '', `${location.pathname}${location.search}`);
+    document.body.dataset.resetActive = 'true';
+    history.replaceState(null, '', `/login${location.search}`);
+    document.body.classList.add('login-route');
+    window.dispatchEvent(new Event('login-route-change'));
     renderStatus();
   }
   void registrationMode().then(updateRegistrationMode).catch(error => { required<HTMLElement>('registration-note').textContent = errorText(error); });

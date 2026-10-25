@@ -30,7 +30,7 @@ const identityOptions = {
     sendResetPassword: async ({ token }) => {
       const delivery = resetDelivery.getStore();
       if (!delivery) throw new Error('Password reset delivery requires an administrator');
-      delivery.url = `${config.IDENTITY_BASE_URL.replace(/\/$/, '')}/#reset-password=${encodeURIComponent(token)}`;
+      delivery.url = `${config.IDENTITY_BASE_URL.replace(/\/$/, '')}/login#reset-password=${encodeURIComponent(token)}`;
     },
     onPasswordReset: async ({ user }) => { identityEvents.emit('disconnect', user.id); },
   },
