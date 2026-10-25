@@ -266,14 +266,13 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 #game:has(canvas) .empty-room { display: none; }
 .empty-room { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
 .hud-chip { display: inline-flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); color: var(--ink); box-shadow: var(--px-sm); font-size: 13px; }
-.map-topbar { position: absolute; z-index: 5; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+.map-topbar { position: absolute; z-index: 5; top: 16px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; pointer-events: none; }
 .map-topbar > * { pointer-events: auto; }
-.map-topbar-left { display: flex; align-items: flex-start; gap: 10px; min-width: 0; max-width: calc(100% - 220px); }
 .map-topbar strong { font-size: 18px; font-weight: 900; }
-.map-info { flex: none; flex-wrap: wrap; max-width: 100%; }
-.map-indicators { display: none; align-items: center; align-content: flex-start; flex-wrap: wrap; gap: 6px; padding: 8px; background: color-mix(in srgb, var(--panel) 76%, transparent); box-shadow: var(--px-sm); }
-.map-indicators:has(.zone-entries:not(:empty), .map-action-status:not(:empty), .map-state-icon:not([hidden]), .map-state-group:not([hidden])) { display: flex; }
-.zone-entries, .map-state-group, .map-state-choices { display: inline-flex; align-items: center; gap: 6px; }
+.map-info { flex: none; flex-wrap: wrap; max-width: calc(100% - 220px); }
+.map-indicators { display: none; flex: none; align-items: center; align-content: flex-start; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 280px); }
+.map-indicators:has(> .zone-entries:not(:empty), > #attachment-clear:not([hidden]), > #variant-selector-panel:not([hidden])) { display: flex; }
+.zone-entries, .map-state-group, .map-state-choices { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .zone-entries:empty { display: none; }
 .map-state-icon { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 4px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--panel) 76%, transparent); box-shadow: var(--px-sm); font-size: 18px; line-height: 1; }
 .map-state-icon[hidden], .map-state-group[hidden] { display: none; }
@@ -281,6 +280,8 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .map-state-icon img { width: 24px; height: 24px; image-rendering: pixelated; }
 .map-state-icon[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.map-topbar .hud-buttons { margin-left: auto; flex: none; }
+#feature-status:empty, #tool-status:empty { display: none; }
 #status { color: var(--ink2); overflow-wrap: anywhere; }
 #voice-status { color: var(--ink2); overflow-wrap: anywhere; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
@@ -648,11 +649,10 @@ body.tool-open .map-dock { z-index: 22; left: 16px; top: 50%; bottom: auto; tran
   .appearance-actions { grid-template-columns: 1fr 1fr; }
   .theme-custom-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .avatar-actions .big { flex: 1; }
-  .map-topbar { top: 10px; left: 10px; right: 10px; flex-direction: column; }
-  .map-topbar-left { width: 100%; max-width: 100%; flex-wrap: wrap; gap: 8px; }
-  .map-topbar-left > .hud-chip { max-width: calc(100vw - 20px); flex-wrap: wrap; gap: 6px 10px; }
-  .map-indicators { max-width: calc(100vw - 20px); }
-  .hud-buttons { justify-content: flex-start; }
+  .map-topbar { top: 10px; left: 10px; right: 10px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .map-info { max-width: calc(100vw - 20px); flex-wrap: wrap; gap: 6px 10px; }
+  .map-indicators { max-width: calc(100vw - 20px); margin-left: 0; }
+  .map-topbar .hud-buttons { justify-content: flex-start; margin-left: 0; }
   .settings-panel { top: 118px; right: 10px; }
   .chat-card { left: auto; right: 10px; bottom: 10px; width: var(--chat-width, min(240px, 60vw)); }
   #messages { height: var(--chat-height, min(20vh, 150px)); }

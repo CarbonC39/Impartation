@@ -56,6 +56,7 @@ export class WebToolInteraction {
   setZone(zone: Zone | undefined) {
     if (this.current?.id === zone?.id) return;
     this.closePresentation();
+    this.status.textContent = '';
     this.current = zone;
     this.render();
   }
@@ -107,12 +108,6 @@ export class WebToolInteraction {
 
   private render() {
     if (this.disposed) return;
-    this.status.textContent = '';
-    const zone = this.current;
-    if (!this.connected || zone?.kind !== 'web') { this.entriesChanged(); return; }
-    if (this.state === 'loading') this.status.textContent = '正在加载工具入口…';
-    else if (this.state === 'failed') this.status.textContent = '工具入口加载失败，请重新进入空间重试';
-    else if (!this.tools.some(item => item.resourceId === zone.resourceId)) this.status.textContent = '此区域尚未配置工具地址';
     this.entriesChanged();
   }
 }

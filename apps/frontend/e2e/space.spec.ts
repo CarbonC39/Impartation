@@ -874,6 +874,7 @@ const toolDirectory: WebTool[] = toolCases.map(({ resourceId }) => ({
 async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typeof toolCases[number]) {
   const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
   await expect.poll(() => observer.state.players.has(sessionId)).toBe(true);
+  await expect(page.locator('#map-indicators')).toBeHidden();
   await page.bringToFront();
   await page.locator('#game canvas').scrollIntoViewIfNeeded();
   await page.locator('#game canvas').focus();
@@ -887,6 +888,7 @@ async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typ
     await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(target.resourceId);
   } finally { await page.keyboard.up('w'); }
   await expect(zoneEntry(page, '网页工具')).toBeVisible();
+  await expect(page.locator('#map-indicators')).toBeVisible();
 }
 
 for (const target of toolCases) {
@@ -934,6 +936,8 @@ for (const scenario of [
       await walkToTool(page, observer, toolCases[1]);
       await zoneEntry(page, '网页工具').click();
       await expect(page.locator('#tool-status')).toContainText(scenario.message);
+      await expect(page.locator('#map-indicators #tool-status')).toHaveCount(0);
+      await expect(page.locator('#map-indicators')).not.toContainText(scenario.message);
       await expect(zoneEntry(page, '网页工具')).toBeVisible();
       await expect(page.locator('#status')).toContainText('已进入空间');
       await page.locator('#leave').click();
