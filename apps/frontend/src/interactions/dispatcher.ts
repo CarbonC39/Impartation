@@ -16,10 +16,9 @@ export class InteractionDispatcher implements InteractionHandler {
   private zone?: Zone;
   private connected = true;
   private zoneSuspended = false;
-  private entries = document.getElementById('zone-entries');
   private buttons = new Map<string, { button: HTMLButtonElement; handler: InteractionHandler }>();
 
-  constructor(private registry: InteractionRegistry<InteractionHandler>) {
+  constructor(private registry: InteractionRegistry<InteractionHandler>, private entries?: HTMLElement) {
     for (const handler of new Set(registry.values())) handler.onZoneEntriesChanged?.(this.renderEntries);
     this.renderEntries();
   }
@@ -35,7 +34,7 @@ export class InteractionDispatcher implements InteractionHandler {
     for (const [id, { entry, handler }] of available) {
       let record = this.buttons.get(id);
       if (!record) {
-        const button = document.createElement('button');
+        const button = this.entries.ownerDocument.createElement('button');
         button.type = 'button'; button.className = 'map-state-icon'; button.dataset.zoneEntry = id;
         button.addEventListener('click', () => {
           this.buttons.get(id)?.handler.activateZoneEntry?.(id);

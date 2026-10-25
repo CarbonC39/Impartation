@@ -9,6 +9,7 @@ import { VariantSelectorInteraction } from './variantSelector/handler';
 import { PrivateAreaInteraction } from './privateArea/handler';
 import { WardrobeInteraction } from './wardrobe/handler';
 import { AttachmentInteraction } from './attachment/handler';
+import { element } from './panel';
 import type { PresentationRegistry } from './web/presentations';
 
 /** Composition root: register concrete interactions with the generic dispatcher. */
@@ -22,7 +23,7 @@ export function createInteractions(room: Room<SpaceProtocol>, presentations?: Pr
   if (native) registry
     .register('privateArea', new PrivateAreaInteraction(room))
     .register('wardrobe', new WardrobeInteraction(native.openWardrobe));
-  const dispatcher = new InteractionDispatcher(registry);
+  const dispatcher = new InteractionDispatcher(registry, element('zone-entries'));
   if (native) registry.register('variantSelector', new VariantSelectorInteraction(room, native.world, claimed => dispatcher.setZoneSuspended(claimed)));
   return dispatcher;
 }
