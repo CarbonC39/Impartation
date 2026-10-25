@@ -2,15 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Choose a character, move around, interact with others, use tools, and chat. The character editor previews and saves layered sprite sheets (body, face, hair, top, bottom, shoes, accessories), each with a validated asset ID and editable RGB color. All layers share one animation frame and foot anchor in the map.
-
-Tiled JSON is the source of map geometry and interaction semantics. The server registry defines ordered Spaces and reuses finite orthogonal maps with 16×16 tiles across them. Each Space has its own initial map and map list; Portals can move players only between maps in that Space. The start screen lists Spaces from `GET /api/world`; the default product Space has the stable ID `main`.
-
-Map authors choose explicit `action`, `variantSelector`, `privateArea`, `wardrobe`, `web`, or `Portal` types. Selectors exclusively claim an action point and switch an authored target tile; temporary private areas support peer membership, locking and server-enforced physical admission. Leaving a private area immediately revokes membership and management rights; locked re-entry requires a fresh invitation. Invitations remain valid until entry or the area's idle reset. Mirrors can open the existing Wardrobe. These types are opt-in Tiled data; see [authoring examples](docs/tiled.md). Private-area members receive public chat and nearby voice, while public players cannot receive private-area chat or audio; different private areas remain isolated. Positions, typing dots and other replicated state remain visible to everyone in the room.
-
-The entry list displays online players and capacity (for example, `12 / 32`), refreshed every five seconds while visible. The in-world **Maps** menu lists maps in the current Space and their live online counts, and lets you travel directly to another map's configured default spawn. Normal entry always starts at `initialMap`; physical Portals remain available. The server validates map membership and private-area admission for both travel methods. Online counts come from connected players in authoritative room state; seats retained for reconnection still consume capacity but are excluded from online counts. A single-Space deployment uses a simple entry label.
-
-External tools use the `web` interaction type. Their `resourceId` selects a page configured in `EXTERNAL_TOOLS`; entering a web zone shows a small hint above the zone, and clicking it launches a new tab (`external`) or opens a sandboxed iframe in a centered TV-style window (`embed`) that can be dragged by its title bar and resized from its top-left corner. While it is open, the map behind it is washed out, the chat stays above the window, the voice buttons move to the left edge, and a fixed-length desk in the bottom-right corner seats up to four people, drawn in the seated pose, who have the same tool open, in the order they opened it (first in the middle, then right, left, far right — the same for everyone; the server records each player's open web zone and opening time and clears them when the player leaves the zone). Characters shrink as the desk fills, newcomers slide in, and seated characters show typing dots while composing chat and bounce while speaking. The title bar's button hides or shows the desk; the desk can be dragged and scaled, and its visibility and layout are stored per browser. Clicking inside the page sends keys to the tool; click the window's title bar to walk again. External services keep their own accounts and permissions.
+A 2D multiplayer space built with Phaser 4, Colyseus, and Tiled. Create a character, explore maps with others, chat, use built-in interactions, and open external collaboration tools. The server manages accounts, world state, and map access.
 
 ## Run locally
 
@@ -22,80 +14,35 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>, register or sign in with a username and password, choose a Space listed by the server, dress the character in the wardrobe, then enter. Registration is open by default; set `REGISTRATION_MODE=code` with `REGISTRATION_CODE`, or `REGISTRATION_MODE=admin` to limit account creation to administrators. Every wardrobe item is previewed on your current outfit; each layer offers preset candy colors plus a free color picker. The mirror can turn the character and preview the sitting pose; outfits can be randomized from the presets, undone, and saved into three named account slots that are available on other signed-in devices. The interface theme (six presets or a custom theme built from four colors) is chosen from the top-right button on the start and wardrobe screens and stored per browser. Put PNG assets in `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/`; the shared build generates category IDs and paths from these folders. Tops, bottoms, shoes, and accessories support a `none` choice.
-
-Move with WASD, the arrow keys, or the on-screen direction pad, which appears only on touch-screen devices (a narrow desktop window keeps keyboard movement). On touch screens, hold or slide a finger across the pad (diagonals included); drag its centre grip to move the pad. Tap or hold the grip for a hint; double-tap it (or use Settings → Adjust control layout) to open the layout editor, where you can resize the pad and drag the pad and the action buttons anywhere, or reset them. Layout is stored per browser. Nicknames are drawn under the characters' feet and stay unchanged while sitting; Settings can hide nicknames and set the chat background opacity with a slider (any value from 0% to 100%, snapping to its 0/50/100 marks; 50% by default). These display choices are stored per browser. The action list shows the character actions defined in the shared catalog (`CHARACTER_ACTIONS`, currently **Sit**); the server rejects any other action name. Click an action to perform it, or press E to perform the action of the anchor under the character (otherwise the last chosen action); the animation option applies to actions with animated frames. Movement cancels the current action. Press Enter on the map to open the chat line; while it has focus every key edits text (arrow keys move the caret). Enter sends and returns the keyboard to the map so you can keep walking; Esc or Tab leaves without sending and keeps the draft. Other text fields also pause keyboard movement. The chat box can be dragged by its heading and resized from its top-right corner; double-click the heading or use settings to reset it. The server validates action requests and resolves anchors from the player's authoritative position.
-
-Chat messages appear in a translucent, collapsible panel and as short-lived speech bubbles above the speaker. While the panel is collapsed, an unread count is shown. While someone has text in the chat box, others see animated typing dots over their character; turn off Settings → "Let others see I'm typing" to stop sending this hint. Nicknames, bubbles, typing dots and the speaking microphone are drawn on the map canvas in the same frame as the characters, so they never lag behind while walking.
-
-The connection indicator distinguishes `connected`, `reconnecting`, and `disconnected`. A dropped connection pauses movement, chat, actions and real-time interactions while Colyseus tries to restore the existing session. A heartbeat also detects a server that stops responding without closing its socket. Reconnection attempts stop after 30 seconds; a server shutdown or exhausted reconnect shows a clear message with **Reconnect**, **Refresh**, and **Return to worlds** controls. Reconnect starts a fresh authenticated connection if the previous session is gone. Pages never refresh automatically. Disconnecting releases the microphone; turn it on again after recovery if needed.
-
-Before entering a world, a pre-join check lets you choose whether to join with the microphone on, which microphone to use (with a live level meter), and whether to start muted; nothing is captured unless you turn the microphone on, and the choices are stored per browser. In the map, the microphone button at the top right turns your mic on or off (the first click starts proximity voice; turning the mic off keeps you connected so you can still listen), and the speaker button silences or restores all incoming voice (stored per browser). Settings → Nearby voice switches microphones (live peers get the new track without reconnecting) or disconnects voice and releases the microphone. A small microphone badge appears over a character while this browser hears them talking (and over your own character while you talk unmuted); speaking is detected locally from the audio levels, so nothing extra is sent to the server. It uses peer-to-peer WebRTC audio. The browser scans the existing player state, while the server authorizes signaling pairs against connected players, authoritative positions, and map IDs. The server supplies public ICE settings through `GET /api/voice-config`; the default connect radius is 320 map pixels, disconnect radius is 384 pixels, and each client is limited to 6 peers. The gap between radii prevents repeated connect/disconnect at the boundary. Voice requires microphone permission and a secure browser context (HTTPS, or localhost). Keep `VOICE_ICE_SERVERS` free of long-lived TURN credentials. For coturn TURN REST authentication, configure `VOICE_TURN_URLS` and the backend-only `VOICE_TURN_SHARED_SECRET`; the server issues short-lived credentials to signed-in users, and browsers check and refresh them as needed before new peer connections. The project does not run an SFU or provide TURN service.
-
-Camera zoom defaults to the integer nearest 48 pixels per map tile, clamped to 1x–6x; a 16×16 tile appears at 48×48 pixels (3x). Settings → Map zoom lets each browser choose automatic zoom or a fixed integer from 1x to 6x, saved locally and applied immediately. Action anchors define character position, action, and optional facing; they do not draw furniture. Map authors can place furniture separately on Tiled visual layers. Character sheets use 16×24 frames in four columns and eight rows. The first four rows are down/left/right/up walking poses; the next four are action poses. The first column is static and columns 2–4 animate. Every layer must keep the same layout and foot anchor; asset IDs in `appearance` are resolved by the frontend character asset manifest.
-
-The backend health check is at <http://localhost:2567/health>. The development server proxies `/api`, `/health`, Colyseus matchmaking, and WebSocket traffic.
+Open <http://localhost:5173>. Registration is open by default; configure `REGISTRATION_MODE=code` with `REGISTRATION_CODE`, or use `REGISTRATION_MODE=admin` to disable public registration. See [account and permission guide](docs/account-system.en.md) for production identity setup.
 
 ## Common commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | Strict type checking, Node tests, and production builds |
-| `npm run test:e2e` | Chromium browser tests; starts development services automatically |
+| `npm run check` | Type checks, Node tests, and production builds |
+| `npm run test:e2e` | Chromium browser tests |
 | `npm run check:all` | Runs both checks above |
-| `npm run build` | Builds shared, backend, and frontend workspaces |
-| `npm start` | Starts the built backend; host the frontend separately |
-| `npm run identity -- create USERNAME 'Display Name' --password-stdin` | Creates an account; reads its password from stdin |
-| `npm run identity -- list` | Lists local account profiles |
-| `npm run identity -- role USER_ID admin --yes` | Grants project administrator role after confirmation |
-| `npm run identity -- role USER_ID member --yes` | Removes project administrator role after confirmation |
-| `npm run identity -- suspend USER_ID --yes` | Revokes sessions and freezes an account |
-| `npm run identity -- reset-password USER_ID --yes` | Prints a one-time reset URL |
-| `npm run identity -- unsuspend USER_ID --yes` / `kick USER_ID --yes` / `delete USER_ID --yes` | Re-enable, disconnect online sessions, or delete an account |
+| `npm run build` | Builds all workspaces |
+| `npm start` | Starts the built backend |
 
-Before the first browser test run, install Chromium with `npx playwright install chromium`. See [testing](docs/testing.md) for coverage, isolation, and NixOS setup.
+Install Chromium before the first browser test run with `npx playwright install chromium`. See [testing](docs/testing.en.md) for test coverage and environment details.
 
 ## Configuration and deployment
 
-For custom Spaces and maps, see the [hosting guide (简体中文)](docs/hosting.md): registry setup, Docker map and cover mounts, updates, rollback, and deployment checks.
+Copy `.env.example` for local development. For deployment, set a random `IDENTITY_SECRET` of at least 32 characters, `IDENTITY_BASE_URL`, and `IDENTITY_TRUSTED_ORIGINS`. The project currently uses one backend instance and SQLite; persist and back up `data/world.sqlite`.
 
-The root [`.env.example`](.env.example) contains configuration examples. The backend and Vite both read the root `.env`; restart services after changing it. `REGISTRATION_MODE` is `open` by default, `code` requires `REGISTRATION_CODE`, and `admin` disables public registration. `MAP_REGISTRY_PATH` defaults to `assets/maps/registry.json`, and map files are resolved relative to the registry. `SPACE_MAX_CLIENTS` sets the shared per-Space room capacity and defaults to `32`; a full Space queues new accounts in arrival order and shows how many people are ahead. Closing the queue dialog returns to Space selection and releases the place; a lost browser heartbeat expires after 30 seconds. Each account may hold one connection per Space; a new join replaces the previous connection, including its pending reconnection, while different Spaces may be joined concurrently. Ordinary network reconnection restores the existing session and seat. In map settings, message sound and browser notifications can be enabled separately; they alert only for other people's chat while the tab is hidden or the browser window is unfocused. Browser notifications require permission and do not use a service worker. Tiled support includes project Custom Classes, typed and object-reference properties, JSON Object Templates, atlas tile animation, and simple polygon areas/collisions. See [Tiled maps](docs/tiled.md) for the map contract and rendering limits.
+See the [hosting guide](docs/hosting.en.md) for Spaces, maps, Docker mounts, deployment, and rollback. The repository also includes a [Docker Compose example](compose.example.yml) and a [Docker image](https://github.com/carbonc39/impartation/pkgs/container/virtualworkspace).
 
-The full-site Docker Compose example uses a separate [`compose.env.example`](compose.env.example), [`compose.example.yml`](compose.example.yml), and [`Caddyfile`](Caddyfile). See the [hosting guide](docs/hosting.md#compose-站点示例) for commands, network ports, and external tool boundaries. Local `npm run dev` still uses the root `.env.example`.
-
-In production, set a random `IDENTITY_SECRET` of at least 32 characters, the public site URL in `IDENTITY_BASE_URL`, and the deployed frontend origins in `IDENTITY_TRUSTED_ORIGINS`. For a separate frontend host, use a same-origin reverse proxy for `/api`, `/matchmake`, and the Colyseus WebSocket. The Docker image below serves both frontend and backend on one port. `VITE_SERVER_URL` only controls the Colyseus connection; identity, map, and tool configuration APIs always use same-origin `/api`.
-
-The [GitHub Actions workflow](.github/workflows/build-release.yml) runs `npm run check` on every push. Successful pushes to `main` create a commit-tagged GitHub Release marked **Latest** with `impartation.tar.gz`, and publish `ghcr.io/carbonc39/virtualworkspace:latest` plus a `sha-<commit>` tag for `linux/amd64` and `linux/arm64`. The archive contains compiled code and assets; extract it, run `npm ci --omit=dev`, configure production environment variables, set `FRONTEND_DIST_PATH` to the extracted `apps/frontend/dist`, then run `npm start`. GitHub Actions needs repository permissions to write releases and GHCR packages; a private package also needs pull access on the deployment host.
-
-The Docker image serves the frontend, API, and WebSocket on port `2567`. For example, after configuring HTTPS on your own reverse proxy, run it with a persistent SQLite volume:
-
-```sh
-docker run -d --name impartation --restart unless-stopped \
-  -p 127.0.0.1:2567:2567 -v impartation-data:/app/data \
-  --env-file .env.production \
-  ghcr.io/carbonc39/virtualworkspace:latest
-```
-
-Create `.env.production` with `IDENTITY_SECRET`, `IDENTITY_BASE_URL`, and `IDENTITY_TRUSTED_ORIGINS` as described above. Use the actual public HTTPS origin for both URL variables and keep the secret stable across container replacements. The image includes the repository maps and sprites; external tools still run as separate services.
-
-Deploy SQLite with a single backend instance. The default database is `data/world.sqlite`; persist and back it up. HTTP Basic Auth, if needed, is provided by the deployer's proxy.
-
-Use `EXTERNAL_TOOLS` to map Tiled `resourceId` values to `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`. `url` is required; `mode` defaults to `external`. An embed opens only after a click and closes on zone exit. `manualExternalOpen: true` adds a separate manual link beside an open iframe; it does not detect load failures. `allowSameOrigin` defaults to false and should be enabled only for trusted self-hosted tools. Legacy `fallback: "external"` remains accepted as a manual-link alias. The project does not start Docker containers, so deploy and validate tool services separately. `GET /api/world` publishes the map directory; the server also provides normalized Tiled JSON and explicitly referenced map assets.
-
-Proximity voice settings are in `.env.example`: `VOICE_ICE_SERVERS` is the public WebRTC ICE server list (by default one STUN server), `VOICE_CONNECT_RADIUS` defaults to `320`, `VOICE_DISCONNECT_RADIUS` to `384`, `VOICE_MAX_PEERS` to `6`, and `VOICE_SCAN_INTERVAL_MS` to `1000`. The backend publishes public ICE settings through `GET /api/voice-config`. For coturn TURN REST authentication, configure both `VOICE_TURN_URLS` (comma-separated) and `VOICE_TURN_SHARED_SECRET` on the backend, and configure coturn with `--use-auth-secret` and the same `--static-auth-secret`. The signed-in-only `GET /api/voice-credentials` endpoint returns per-user HMAC-SHA1 credentials; `VOICE_TURN_CREDENTIAL_TTL_SECONDS` defaults to one hour and accepts 60–86400 seconds. The shared secret is never returned to browsers. Leave both TURN settings unset to retain the default public-STUN-only setup. Restart the backend after changing these values. The project does not run an SFU or provide TURN service.
-
-If voice reports a missing browser API on `http://127.0.0.1:5173/`, run `({ secure: isSecureContext, mic: !!navigator.mediaDevices?.getUserMedia, rtc: !!window.RTCPeerConnection })` in that page's browser console. All three values should be `true`; a missing API needs a browser or embedded-preview setting change. Use HTTPS when opening the site from another device.
+Tiled JSON defines map geometry and interactions. See [map authoring](docs/tiled.en.md). The [interaction guide](docs/integrations.en.md) explains built-in features and external service boundaries; see [external tool configuration](docs/external-tools.en.md) to configure `EXTERNAL_TOOLS`.
 
 ## Documentation
 
 | Document | Contents |
 | --- | --- |
-| [Hosting guide (简体中文)](docs/hosting.md) | Space setup, map files and cover paths, Docker mounts, updates, and troubleshooting |
-| [Architecture](docs/architecture.md) | Modules, state ownership, and feature boundaries |
-| [Accounts and permissions](docs/account-system.md) | Registration, sessions, saved outfits, administrator actions, CLI, and migrations |
-| [Tiled maps](docs/tiled.md) | Map authoring, collisions, interaction zones, and validation |
-| [External tool configuration](docs/integration-plan.md) | URL configuration, public APIs, and launch behavior |
-| [Integrations](docs/integrations.md) | Built-in tools, external services, and permissions |
-| [Testing](docs/testing.md) | Commands, coverage, and known gaps |
-| [Roadmap](docs/roadmap.md) | Features not implemented yet |
-| [Contributor instructions](AGENTS.md) | Implementation, verification, and commit conventions |
+| [Hosting guide](docs/hosting.en.md) | Space setup, map deployment, Docker, updates, and troubleshooting |
+| [Architecture](docs/architecture.en.md) | Modules, state ownership, and feature boundaries |
+| [Accounts](docs/account-system.en.md) | Registration, sessions, saved outfits, and administrator actions |
+| [Tiled maps](docs/tiled.en.md) | Map authoring and validation contract |
+| [Integrations](docs/integrations.en.md) | Built-in interactions and external service boundaries |
+| [Testing](docs/testing.en.md) | Commands, coverage, and known gaps |

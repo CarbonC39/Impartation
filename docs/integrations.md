@@ -1,49 +1,44 @@
-# Integrations：内置与外置接入
+# 互动功能与外部服务
 
-地图交互区域连接内置功能与外置页面。Tiled `class`/`type` 由共享 `InteractionRegistry<T>` 关联语义定义；前端和服务端分别组装各自的 interaction handlers。服务端负责身份、地图位置和操作权限。所有外置页面使用 Tiled 类型 `web`，以 `resourceId` 查找 WebTool 配置；`embed` 或 `external` 决定呈现方式。
+地图中的互动分为两类：项目内置互动由 Impartation 管理状态和规则；`web` 互动只负责打开外部网页，工具本身由对应服务管理。本文说明两类功能的职责与数据范围。地图对象怎么制作见[Tiled 地图说明](tiled.md)，外部页面地址怎么配置见[外部工具入口配置](external-tools.md)。
 
-边界按业务域划分：项目内置交互负责位置、距离、角色动作、地图世界状态和项目内访问控制；协作文档、面向绘师的共同作画、同步媒体等完整业务域由独立外置服务负责。`action`、`variantSelector` 与 `privateArea` 属于地图角色和世界状态交互；衣柜复用项目原生角色外观编辑界面。Portal 继续由服务器验证并执行地图转换，留言板和番茄钟继续作为内置功能。外置服务的账号、协作状态和业务规则仍由服务自身管理。
+## 项目内置互动
 
-## 内置接入
+下表列出地图中的主要互动及其职责。留言板和番茄钟维护共享互动状态；衣柜保存到账号资料，其余状态用于当前地图或 Space 房间。
 
-| 功能 | 地图类型 | 默认 resourceId | 数据范围 |
+| 互动 | 地图类型 | 用途 | 状态范围 |
 | --- | --- | --- | --- |
-| 留言板 | `board` | `message-wall` | SQLite 按 Space 与资源保存；同一 Space 内跨地图共享 |
-| 共享番茄钟 | `pomodoro` | `focus-corner` | 每个 Space 的唯一 live room 按资源维护，不持久化 |
+| 留言板 | `board` | 在地图区域内发布和删除留言 | 按 Space 与 `resourceId` 保存；同一 Space 的地图可共用 |
+| 共享番茄钟 | `pomodoro` | 共享 25 分钟专注和 5 分钟休息计时 | 按 Space 与 `resourceId` 共享；Space 房间重建后重置 |
+| 传送入口 | `Portal` | 在同一 Space 的地图间移动 | 由服务器检查目标地图、出生点和私密区域准入 |
+| 私密区域 | `privateArea` | 临时邀请成员并锁定空间入口 | 当前 Space 房间内临时有效；不是账号级 ACL |
+| 衣柜入口 | `wardrobe` | 打开角色造型编辑界面 | 角色造型保存在账号资料中 |
+| 动作点与家具选择 | `action`、`variantSelector` | 在地图上执行角色动作，或切换关联家具图块 | 当前动作和家具选择属于房间内地图状态 |
+| 附件来源 | `attachment` | 让角色取用地图中的附件 | 角色当前附件及唯一来源占用属于房间状态 |
 
-在 Tiled 的 `interactions` 对象层添加矩形，填写类型和需要的属性即可使用；地图制作见[地图说明](tiled.md)。两种工具都要求有效身份、当前连接且位于对应地图的对应区域，每连接操作间隔至少 500ms。身份来源见[账号与权限](account-system.md)。
+留言板每个资源最多保存 100 条留言，每条 1–500 个字符。作者可以删除自己的留言；管理员可以删除任意留言。留言使用账号身份确定作者，不允许客户端指定作者信息。
 
-### 留言板
+番茄钟由区域内已登录成员共同控制，支持开始、暂停、继续和重置。完成一轮后需手动开始下一轮。相同 Space 内引用同一资源 ID 的区域共用一个计时器，不同 Space 彼此独立；房间销毁或服务重启后计时器重置。
 
-每个资源最多 100 条留言，每条 1–500 个字符。服务端生成作者、留言 ID 和时间，客户端不能指定作者身份或管理员角色。
+留言板和番茄钟的操作要求有效账号连接并位于对应互动区域。服务器校验身份、当前位置和资源 ID，并限制连续操作频率。其他类型分别按其地图位置和成员规则校验；账号权限规则见[账号说明](account-system.md)。
 
-作者可删除自己的留言；项目 `admin` 还可删除其他作者和无法关联作者的历史留言。管理员不绕过区域、身份有效性或速率限制。作者归属使用持久 user id，换设备或重新入房不改变归属。
+## 外部服务
 
-数据库 v3 增加 `board_notes.author_user_id`；数据库 v5 增加 `space_id`，留言按 `(space_id, resource_id)` 隔离。同一 Space 中引用相同资源的地图共享留言，不同 Space 不共享。旧留言迁移时归入默认 Space `main`。旧留言只有临时 `author_session_id`，作者 user id 保持 NULL，不按昵称自动认领，可由管理员清理。
+地图类型 `web` 提供外部网页入口。每个 `web` 区域通过 `resourceId` 对应 `EXTERNAL_TOOLS` 配置中的 URL。进入区域只显示入口；玩家点击后才打开网页。
 
-存储实现见 [board/store.ts](../apps/backend/src/interactions/board/store.ts)，消息见 [留言板 handler](../apps/backend/src/interactions/board/handler.ts)，权限检查见 [SpaceRoom.ts](../apps/backend/src/rooms/SpaceRoom.ts)。
+| 地图资源 ID | 用途示例 | 服务状态 |
+| --- | --- | --- |
+| `shared-canvas` | 白板 | Compose 示例提供可选 WBO 服务配置 |
+| `shared-drawing` | 面向绘师的共同作画 | 需另行部署兼容的服务 |
+| `lounge-screen` | YouTube/Bilibili 同步观看 | 需另行部署兼容的服务 |
+| `shared-document` | 协作文档 | Compose 示例提供可选 Etherpad 服务配置 |
 
-### 共享番茄钟
+这些 ID 是地图中的示例入口，不表示对应服务已在目标环境部署或完成浏览器验收。Neko 共享浏览器也不提供视频同步语义；项目不包含视频通话或屏幕共享功能。
 
-支持专注 25 分钟、休息 5 分钟，以及开始、暂停、继续和重置；完成后需手动开始下一轮。有效身份且位于对应区域的成员均可控制。计时以服务端截止时间为准，客户端结合服务端时间快照平滑显示。
+外部服务自行管理账号、权限、内容和持久化。项目不会把 Impartation 账号或管理员角色映射到工具，不代理工具流量，不签发工具凭据，也不管理外部容器。入口 URL 会公开给浏览器，不能包含密码、访问 token 或私密邀请信息。需要限制访问时，应由外部服务或部署者配置的反向代理负责。
 
-计时器在同一 Space 的所有地图中共享；不同 Space 独立维护。房间销毁或后端重启后重置。计时与权限检查由[服务端番茄钟 handler](../apps/backend/src/interactions/pomodoro/handler.ts)执行；[前端面板 handler](../apps/frontend/src/interactions/pomodoro/handler.ts)接收用户操作并显示同步状态。
+工具可用新标签页 `external` 打开，或按需使用 `embed` iframe。是否可以嵌入取决于目标服务的 CSP、登录方式和浏览器策略；配置及 iframe 沙盒规则见[外部工具入口配置](external-tools.md)。项目没有 iframe bridge 或服务专用适配器。离开区域会关闭嵌入窗口，但不会撤销外部服务自己的登录会话。
 
-## 外置接入
+## 验收范围
 
-| 功能 | 预期服务 | 地图类型 | 默认 resourceId |
-| --- | --- | --- | --- |
-| 白板 | WBO | `web` | `shared-canvas` |
-| 面向绘师的共同作画 | Drawpile Web 浏览器入口 | `web` | `shared-drawing` |
-| YouTube/Bilibili 同步观看 | SyncTV | `web` | `lounge-screen` |
-| 协作文档 | Etherpad | `web` | `shared-document` |
-
-优先使用宿主机上的 Docker 服务。具体示例包括 WBO 白板、Drawpile Web 浏览器入口、SyncTV 和 Etherpad；这些是预期接入服务，不代表已完成对应服务的集成验收。先部署服务并确认目标浏览器可以访问，再在地图中为外置入口使用 `web` 类型，并通过 `EXTERNAL_TOOLS` 以 `resourceId` 配置 URL；配置格式和公开 API 见[入口配置](integration-plan.md)。`external` 是默认且跨浏览器环境最直接的打开路径；`embed` 是可选展示方式，是否可用取决于服务的 CSP、认证方式、浏览器策略和部署配置。进入区域只显示工具面板，点击“打开”后才按 `mode` 打开新标签页或挂载 iframe。配置可选 `manualExternalOpen`，在已打开的 embed 旁显示手动外链；旧 `fallback: "external"` 是兼容别名，没有加载失败检测或自动切换。`allowSameOrigin` 默认 false，仅供可信自托管页面按需启用。board 和 pomodoro 是项目内置交互，有独立面板 handler。
-
-项目不启动容器、代理工具流量或签发工具凭据，也不把编辑器、正文、笔触或播放状态复制到项目中。`embed` 默认使用 `allow-scripts allow-forms allow-popups` 且不含 `allow-same-origin` 的沙盒 iframe；配置 `allowSameOrigin: true` 才增加该权限。离开区域会移除 iframe，但不会撤销工具自己的会话；项目身份和管理员角色不映射到外置服务。没有 iframe bridge、postMessage API 或服务适配层。服务的登录、权限、持久化、升级和备份由该服务及部署者负责。
-
-白板与面向绘师的共同作画是独立功能；视频通话和屏幕共享不在范围内。
-
-## 测试
-
-内置工具的存储、权限、计时与浏览器面板，以及外置入口的配置校验和页面打开行为，见[测试说明](testing.md)。外置服务自身的绘画、编辑、真实双平台播放和跨设备访问需另行验收。
+自动化检查覆盖内置互动的项目规则，以及外部入口的 URL 配置和打开行为；它不验证真实第三方服务的登录、协作、持久化或媒体同步。实际启用外部服务时，应从目标浏览器检查可访问性、权限和所需功能。测试命令与覆盖边界见[测试说明](testing.md)。

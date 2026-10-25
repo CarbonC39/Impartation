@@ -2,19 +2,11 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人互动空间，支持用选取的角色形象移动、互动、使用工具、文字交流。角色外观预设用于地图中的精灵形象，不是个人头像图片。
-
-Tiled JSON 是地图几何与交互的源数据；服务端 registry 按顺序登记多个 Space，并允许它们复用 16×16 tile 的有限正交地图。每个 Space 定义自己的初始地图和地图列表；Portal 只能在该 Space 的地图之间切换。开始页的 Space 列表来自 `GET /api/world`；默认产品 Space 使用稳定 ID `main`。
-
-地图作者直接选择 `action`、`variantSelector`、`privateArea`、`wardrobe`、`web` 或 `Portal` 类型。选择器独占动作点并切换目标图块；私密区域支持平等成员、锁定和服务端物理准入，离开区域立即移除成员及管理资格，锁区重入需重新邀请；尚未入场的邀请保留至入场或空置重置。镜子入口复用现有衣橱。新类型需在 Tiled 中显式制作，见[制图示例](docs/tiled.md)。私密区域成员可以收到公共频道的文字和附近语音，公共区域玩家收不到私密区域的文字或音频；不同私密区域仍相互隔离。不同 Space 的运行时状态彼此隔离；位置、正在输入标识等同步状态对所属 Space 内整个房间可见。
-
-入口列表显示在线人数与容量（如 `12 / 32`），列表可见时每 5 秒刷新。进入后点击“地图”可查看当前 Space 内的地图及实时在线人数，并快捷切换到另一张地图配置的默认 spawn。正常加入仍先进入 `initialMap`，物理 Portal 继续保留；两种切换均由服务端校验目标所属 Space 和私区准入。人数直接统计权威房间中 `connected` 的玩家；断线重连保留席位仍占容量，但不算在线人数。单 Space 部署显示简洁的进入入口。
-
-地图中的外置工具统一使用 `web` 交互类型，以 `resourceId` 匹配 `EXTERNAL_TOOLS` 页面配置。进入区域只在区域上方显示小提示；点击提示后才用 `external` 新标签页打开，或在居中的电视框窗口中展示 `embed` 沙盒 iframe，窗口可拖标题栏移动、拖左上角调整大小。窗口打开时背后的地图变淡，语音按钮移到左侧，聊天栏显示在窗口上层，右下角固定长度的桌子以坐姿按打开顺序坐最多四位打开了同一工具的人（先到的坐中间，之后依次右、左、最右，所有人看到的顺序一致；服务端记录每位玩家打开的 web 区域和打开时间，离开区域即清除）。人越多角色越小，新来的人滑入入座；在聊天框打字时角色头顶显示省略号，说话时角色轻轻跳动。标题栏按钮可隐藏或显示桌子；桌子可拖动和缩放，显隐和布局保存在本浏览器。点进网页后按键交给工具，点窗口标题栏即可继续行走。外置服务保留自己的账号和权限。
+基于 Phaser 4、Colyseus 和 Tiled 的 2D 多人互动空间。创建角色，与他人探索地图、交流并使用内置互动，也可打开外部协作工具。账号、世界状态和地图访问由服务端管理。
 
 ## 本地运行
 
-需要 Node.js 24 或更新版本、npm。
+需要 Node.js 24 或更新版本及 npm。
 
 ```sh
 cp .env.example .env
@@ -22,80 +14,35 @@ npm ci
 npm run dev
 ```
 
-打开 <http://localhost:5173>，使用用户名和密码注册或登录，再从服务端 Space 列表选择空间，进入试衣间换装。注册默认开放；设 `REGISTRATION_MODE=code` 并配置 `REGISTRATION_CODE` 可要求注册码，设为 `admin` 则仅管理员能创建账号。衣橱里每件衣服都直接穿在当前造型上预览；每个图层都提供糖果色预设和自由取色器。试衣镜可转身、预览坐姿；造型可随机搭配、撤销，并保存到账号的 3 个可命名造型槽位，可在已登录设备间使用。界面配色在开始页和试衣间右上角切换，提供 6 套预设和自定义配色，按浏览器保存。素材放在 `assets/characters/{body,face,hair,top,bottom,shoes,accessories}/` 对应目录，构建时自动按文件夹生成分类；PNG 文件名就是素材 ID。上衣、下装、鞋子和配饰可选择“不穿”。预览与地图使用相同图层、16×24 帧和脚点；每层保存素材 ID 与可编辑的 RGB 颜色。地图内昵称显示在角色脚下，坐下时不变；HUD 可隐藏昵称，并用滑杆调整聊天栏背景不透明度（0%–100% 任意值，靠近 0/50/100 节点时吸附，默认 50%），这些显示偏好按浏览器保存。
-
-使用 WASD、方向键或屏幕方向按钮移动；屏幕方向按钮只在触屏设备上出现，电脑浏览器窗口缩窄后仍用键盘移动。触屏上按住或在方向键上滑动即可走动（支持斜向）；拖动中间的手柄可移动方向键；单击或长按手柄会在旁边显示提示，双击手柄（或设置里的“调整按键布局”）进入布局调整，可缩放方向键大小、把方向键和动作按钮拖到任意位置，或一键复原。布局保存在本浏览器。动作列表来自 shared 的动作目录 `CHARACTER_ACTIONS`（目前只有“坐下”），服务端拒绝目录外的动作名。点击列表中的动作即执行；按 E 执行角色脚下锚点的动作，不在锚点上时执行上次选择的动作；动画选项只对有动画帧的动作生效。移动会取消当前动作。在地图上按 Enter 打开聊天输入；输入框聚焦时所有按键都用于编辑文字（方向键移动光标）。按 Enter 发送并自动回到地图继续行走；按 Esc 或 Tab 不发送直接退出，草稿保留。其他输入框聚焦时键盘移动也会暂停。聊天框可拖动标题栏移动、拖右上角调整大小，双击标题栏或在设置中复原。服务端根据玩家权威位置验证动作请求并查找锚点。
-
-聊天显示在可折叠的半透明面板中，同时以短暂的气泡显示在发言角色头顶；折叠时显示未读数。有人在聊天框里输入内容时，其他人会看到其角色头顶的跳动省略号；在设置中关闭“让别人看到我正在输入”即不再发送这一提示。昵称、气泡、省略号和说话麦克风与角色在同一帧绘制在地图画布上，走动时不会延迟跟随。
-
-连接提示区分 `connected`（已连接）、`reconnecting`（正在重连）和 `disconnected`（已断开）。断线后暂停移动、聊天、动作与实时交互，先由 Colyseus 尝试恢复原 session；心跳检查也能识别 WebSocket 未关闭但后端不再响应的情况。自动重连最多等待 30 秒，后端停服或重连失败时明确提示，并提供“重新连接”“刷新页面”“返回选世界”。原 session 已失效时，手动重连会重新验证账号并建立新连接；页面不会自动刷新。断线会释放麦克风，恢复后可按需手动开启。
-
-进入世界前会显示“进入前准备”：选择是否开麦进入、使用哪个麦克风（带实时音量条）、是否先静音；不打开麦克风就不会采集，选择保存在本浏览器。地图右上角的麦克风键开麦/闭麦（首次点击开启语音，之后闭麦仍保持连接、可继续听），喇叭键开关所有收到的语音（选择保存在本浏览器）；“设置”→“附近语音”中可切换麦克风（已连接的语音会直接换成新设备，无需重连），或断开语音并释放麦克风。昵称显隐在“设置”→“显示”中切换。本浏览器听到某个角色说话时（以及自己未静音说话时），角色头顶会显示麦克风标识；是否在说话由本地音量判断，不向服务端额外发送数据。语音使用浏览器间的 WebRTC 点对点音频。浏览器扫描已有玩家状态，服务端按连接状态、权威位置和地图 ID 校验每个信令连接，并通过 `GET /api/voice-config` 提供公开 ICE 配置；默认连接半径为 320 地图像素，断开半径为 384 像素，每个客户端最多连接 6 个语音节点。连接和断开半径之间的缓冲可避免在边界反复切换。语音需要麦克风权限和安全浏览器上下文（HTTPS 或 localhost）。`VOICE_ICE_SERVERS` 中不要放长期 TURN 凭据。使用 coturn TURN REST 认证时设置 `VOICE_TURN_URLS` 和仅后端保存的 `VOICE_TURN_SHARED_SECRET`；服务端为已登录用户签发短期凭据；浏览器在新建 peer 连接前检查并按需刷新。项目不运行 SFU，也不提供 TURN 服务。
-
-相机默认采用整数倍率，使地图图块尽量接近 48 像素，并限制在 1x–6x；16×16 图块会显示为 48×48（3x）。在“设置”→“地图缩放”中可选择自动或 1x–6x 的固定整数倍率，选择立即生效并保存在本浏览器。动作锚点定义角色位置、动作和可选朝向，不绘制家具；地图作者可在 Tiled 视觉层独立摆放家具。`assets/characters/body/walk.png` 目前只有行走帧，因此动作暂时显示对应方向的 idle 帧，等待动作帧图集。帧尺寸和帧内脚点单独配置；替换图集时要同步检查角色定义中的帧尺寸和 `groundAnchor`。
-
-后端健康检查为 <http://localhost:2567/health>。开发服务器会代理 `/api`、`/health`、Colyseus matchmaking 和 WebSocket。
+打开 <http://localhost:5173>。注册默认开放；设置 `REGISTRATION_MODE=code` 并提供 `REGISTRATION_CODE` 可启用注册码，设置 `REGISTRATION_MODE=admin` 可关闭公开注册。生产身份配置见[账号与权限](docs/account-system.md)。
 
 ## 常用命令
 
 | 命令 | 用途 |
 | --- | --- |
-| `npm run check` | strict 类型检查、Node 测试和生产构建 |
-| `npm run test:e2e` | Chromium 浏览器测试，自动启动开发服务 |
+| `npm run check` | 类型检查、Node 测试和生产构建 |
+| `npm run test:e2e` | Chromium 浏览器测试 |
 | `npm run check:all` | 执行以上两组检查 |
-| `npm run build` | 构建 shared、backend 和 frontend |
-| `npm start` | 启动已构建的后端，前端需单独托管 |
-| `npm run identity -- create USERNAME '显示名称' --password-stdin` | 从标准输入读取密码并创建账号 |
-| `npm run identity -- list` | 列出本地账号资料 |
-| `npm run identity -- role USER_ID admin --yes` | 确认后授予项目管理员 |
-| `npm run identity -- role USER_ID member --yes` | 确认后移除项目管理员 |
-| `npm run identity -- suspend USER_ID --yes` | 撤销会话并冻结账号 |
-| `npm run identity -- reset-password USER_ID --yes` | 输出一次性密码重置链接 |
-| `npm run identity -- unsuspend USER_ID --yes` / `kick USER_ID --yes` / `delete USER_ID --yes` | 解冻、断开在线连接或删除账号 |
+| `npm run build` | 构建所有 workspace |
+| `npm start` | 启动已构建的后端 |
 
-浏览器测试首次运行前执行 `npx playwright install chromium`。覆盖范围、隔离方式和 NixOS 配置见[测试说明](docs/testing.md)。
+首次运行浏览器测试前，用 `npx playwright install chromium` 安装 Chromium。覆盖范围和环境说明见[测试文档](docs/testing.md)。
 
 ## 配置与部署
 
-自定义 Space 和地图请先看[托管指南](docs/hosting.md)，其中包括 registry 配置、Docker 地图与封面挂载、更新回滚和部署验收步骤。
+本地开发可从 `.env.example` 开始配置。部署时设置至少 32 字符的随机 `IDENTITY_SECRET`、`IDENTITY_BASE_URL` 和 `IDENTITY_TRUSTED_ORIGINS`。当前使用单后端实例和 SQLite；请持久化并备份 `data/world.sqlite`。
 
-根目录 [`.env.example`](.env.example) 提供配置示例。后端和 Vite 都读取根目录 `.env`；修改配置后重启服务。`REGISTRATION_MODE` 默认为 `open`；`code` 模式还需设置 `REGISTRATION_CODE`，`admin` 模式关闭公开注册。`MAP_REGISTRY_PATH` 默认读取 `assets/maps/registry.json`；地图文件相对 registry 路径解析。`SPACE_MAX_CLIENTS` 设置每个 Space 共用的单房间人数上限，默认 `32`；满员后新账号按进入顺序排队，界面显示前方人数。关闭排队弹窗会返回 Space 选择页并退出队列；浏览器失联 30 秒后排队资格过期。同一账号在同一 Space 只允许一个连接，新进入会踢掉旧连接（包括等待重连的旧连接）；普通网络断线重连恢复原 session 和席位。可以同时进入不同 Space。地图设置中可分别开启消息音效和浏览器通知，只在标签页隐藏或浏览器窗口失焦时提醒其他人的聊天；浏览器通知需授权，不使用 service worker。Tiled 支持项目 Custom Classes 默认值、typed/object-reference properties、JSON Object Templates、atlas 瓦片动画和简单多边形区域/碰撞；地图和 Space 契约与渲染边界见[地图制作](docs/tiled.md)。
+[托管指南](docs/hosting.md)介绍 Space、地图、Docker 挂载、部署与回滚。仓库提供 [Docker Compose 示例](compose.example.yml) 和 [Docker 镜像](https://github.com/carbonc39/impartation/pkgs/container/virtualworkspace)。
 
-整站 Docker Compose 部署示例使用独立的 [`compose.env.example`](compose.env.example)、[`compose.example.yml`](compose.example.yml) 和 [`Caddyfile`](Caddyfile)，启动命令、网络端口及外部工具边界见[托管指南](docs/hosting.md#compose-站点示例)。本地 `npm run dev` 仍使用根目录 `.env.example`。
-
-生产环境需设置至少 32 字符的随机 `IDENTITY_SECRET`、公开站点 `IDENTITY_BASE_URL` 和实际前端来源 `IDENTITY_TRUSTED_ORIGINS`。单独托管前端时，通过同源反向代理连接 `/api`、`/matchmake` 和 Colyseus WebSocket；下方 Docker 镜像则在同一端口提供前后端。`VITE_SERVER_URL` 仅控制 Colyseus 连接地址，身份、地图与工具配置 API 始终使用同源 `/api`。
-
-[GitHub Actions 工作流](.github/workflows/build-release.yml)在每次 push 后执行 `npm run check`。`main` 分支检查通过后，以该提交创建并标记为 **Latest** 的 Release，附带 `impartation.tar.gz`；同时发布 `ghcr.io/carbonc39/virtualworkspace:latest` 和 `sha-<提交哈希>` 镜像，支持 `linux/amd64` 与 `linux/arm64`。压缩包包含编译后的代码与资源；解压后执行 `npm ci --omit=dev`，配置生产环境变量，将 `FRONTEND_DIST_PATH` 指向解压目录下的 `apps/frontend/dist`，再执行 `npm start`。仓库 Actions 需要 Release 和 GHCR 的写入权限；若镜像包为私有，部署主机还需拉取权限。
-
-Docker 镜像在 `2567` 端口同时提供前端、API 和 WebSocket。配置自己的 HTTPS 反向代理后，可用持久化 SQLite 卷运行：
-
-```sh
-docker run -d --name impartation --restart unless-stopped \
-  -p 127.0.0.1:2567:2567 -v impartation-data:/app/data \
-  --env-file .env.production \
-  ghcr.io/carbonc39/virtualworkspace:latest
-```
-
-按上文要求在 `.env.production` 中设置 `IDENTITY_SECRET`、`IDENTITY_BASE_URL` 和 `IDENTITY_TRUSTED_ORIGINS`，后两者填写实际公开的 HTTPS 来源。替换容器时保持 secret 不变。镜像包含仓库中的地图和角色资源；外部工具仍需单独运行。
-
-SQLite 按单后端实例部署，默认数据文件为 `data/world.sqlite`，需持久化并备份。HTTP Basic Auth 由部署者的代理提供。
-
-用 `EXTERNAL_TOOLS` 将地图 `resourceId` 关联到 `{ url, mode?, manualExternalOpen?, allowSameOrigin? }`。URL 必填，mode 默认 `external`。embed 在点击后挂载，离开区域时移除；`manualExternalOpen: true` 在已打开的 iframe 旁提供手动外链，不检测加载失败。`allowSameOrigin` 默认 false，仅供可信自托管工具启用；旧 `fallback: "external"` 仍作为手动外链别名接受。项目不启动 Docker 容器，实际工具的部署和使用需另行验证。地图目录由 `GET /api/world` 提供，服务端发布规范化 Tiled JSON 和地图显式引用的资源。
-
-近距离语音配置见 `.env.example`：`VOICE_ICE_SERVERS` 是公开 WebRTC ICE 配置（默认包含一个公共 STUN 服务）；`VOICE_CONNECT_RADIUS` 默认 `320`，`VOICE_DISCONNECT_RADIUS` 默认 `384`，`VOICE_MAX_PEERS` 默认 `6`，`VOICE_SCAN_INTERVAL_MS` 默认 `1000`。后端通过 `GET /api/voice-config` 发布公开 ICE 配置。使用 coturn TURN REST 认证时，同时设置逗号分隔的 `VOICE_TURN_URLS` 与仅后端保存的 `VOICE_TURN_SHARED_SECRET`，并在 coturn 配置 `--use-auth-secret` 和相同的 `--static-auth-secret`。需要登录的 `GET /api/voice-credentials` 返回按用户生成的 HMAC-SHA1 短期凭据；`VOICE_TURN_CREDENTIAL_TTL_SECONDS` 默认一小时，可设为 60–86400 秒。共享密钥不会发给浏览器。两项 TURN 设置都不填时保持默认公共 STUN 配置。修改后需重启后端。项目不运行 SFU，也不提供 TURN 服务。
-
-如果在 `http://127.0.0.1:5173/` 仍提示浏览器 API 不可用，可在该页面的开发者工具 Console 运行 `({ secure: isSecureContext, mic: !!navigator.mediaDevices?.getUserMedia, rtc: !!window.RTCPeerConnection })`。三项都应为 `true`；若有 API 缺失，检查浏览器或内嵌预览的设置。其它设备访问需要 HTTPS。
+地图几何与互动由 Tiled JSON 定义，见[地图制作](docs/tiled.md)。[互动说明](docs/integrations.md)介绍内置功能和外部服务边界；配置 `EXTERNAL_TOOLS` 请参阅[外部工具入口配置](docs/external-tools.md)。
 
 ## 文档
 
 | 文档 | 内容 |
 | --- | --- |
-| [托管指南](docs/hosting.md) | Space 配置、地图与封面路径、Docker 挂载、更新回滚和排查 |
+| [托管指南](docs/hosting.md) | Space、地图部署、Docker、更新和排查 |
 | [架构](docs/architecture.md) | 模块、状态归属和功能边界 |
-| [账号与权限](docs/account-system.md) | 注册策略、session、服务端造型槽、管理员 CLI 和数据库迁移 |
-| [地图制作](docs/tiled.md) | Tiled 制图步骤、碰撞、交互区和验证 |
-| [外部工具入口](docs/integration-plan.md) | 地址配置、公开 API 和入口行为 |
-| [Integrations](docs/integrations.md) | 内置工具与外置服务的接入和权限 |
+| [账号与权限](docs/account-system.md) | 注册、session、造型保存和管理员操作 |
+| [地图制作](docs/tiled.md) | 制图与地图验证契约 |
+| [集成说明](docs/integrations.md) | 内置互动与外部服务边界 |
 | [测试](docs/testing.md) | 命令、覆盖范围和未覆盖项 |
-| [待办](docs/roadmap.md) | 尚未实现的功能 |
-| [协作约定](AGENTS.md) | 实现、验证和提交要求 |

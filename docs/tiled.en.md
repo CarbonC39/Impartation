@@ -1,0 +1,104 @@
+# Tiled Map Authoring
+
+This guide is for map authors. It describes the map layers and interaction objects read by this project. See the [hosting guide](hosting.en.md) for Spaces, map mounts, and cover deployment. For native Tiled object fields, see the official [Working with Objects](https://doc.mapeditor.org/en/stable/manual/objects/) and [JSON Map Format](https://doc.mapeditor.org/en/stable/reference/json-map-format/) references. This project supports only the subset listed here.
+
+## Map requirements
+
+Maps must be finite, orthogonal, use 16×16 pixel tiles, and be saved as Tiled JSON (`.tmj`). The map registry assigns each map an ID, file, and default spawn, and assigns each Space an initial map and its available maps. A map ID may differ from its filename.
+
+Each map must have exactly these three object layers. They may be nested in Tiled groups:
+
+| Layer | Contents |
+| --- | --- |
+| `spawns` | Named point objects used for map entry and Portal destinations |
+| `collisions` | Rectangles or simple polygons that block character movement |
+| `interactions` | Action anchors and interaction areas |
+
+Example registry:
+
+```json
+{
+  "maps": [
+    { "id": "lobby", "file": "lobby.tmj", "defaultSpawn": "default" }
+  ],
+  "spaces": [
+    {
+      "id": "main",
+      "name": "Main Hall",
+      "cover": "/covers/main.png",
+      "initialMap": "lobby",
+      "maps": ["lobby"]
+    }
+  ]
+}
+```
+
+Spawn names must be unique within a map and match the registry's `defaultSpawn`. A spawn must be in a passable area. Ground tiles do not create collision automatically; draw walls and obstacles separately in `collisions`.
+
+Semantic objects in this project support only unrotated points, rectangles, and simple polygons. Polygons need at least three points and must not self-intersect. Private areas must not overlap. Draw decoration and furniture on tile layers instead of using semantic objects as map artwork.
+
+## Interaction objects
+
+Put interaction objects in the `interactions` layer and set their Tiled `class` to the interaction type. Legacy maps may use `type`. Every interaction object needs a non-empty name. `action`, `attachment`, `board`, `pomodoro`, `Portal`, and `web` use the name as their map-local ID, so these names must be unique. `variantSelector`, `privateArea`, and `wardrobe` use the numeric ID assigned by Tiled. Tiled object IDs must be unique within the map.
+
+| Type | Shape | Required properties | Purpose |
+| --- | --- | --- | --- |
+| `action` | Point | string `action`, currently `sit` | Character action anchor |
+| `variantSelector` | Point | string `action` (currently `sit`), numeric `targetObjectId`, comma-separated string `variants` | Select linked furniture tiles while sitting |
+| `privateArea` | Rectangle or polygon | None | Temporarily invite members and restrict entry |
+| `wardrobe` | Rectangle or polygon | None | Open the character wardrobe |
+| `Portal` | Rectangle or polygon | string `targetMap`, string `targetSpawn` | Travel to another map in the same Space |
+| `web` | Rectangle or polygon | non-empty string `resourceId` | Open an external webpage entry |
+| `attachment` | Rectangle or polygon | string `mode`, string `attachmentIds` | Take a character attachment |
+
+### Action anchors and furniture selection
+
+An action anchor is an `action` point; currently only `sit` is supported. Optional `facing` can be `up`, `down`, `left`, or `right`. If the character is not facing the required direction, they still sit in place but do not align to or occupy the seat. `offsetX` and `offsetY` fine-tune the sitting position in map pixels.
+
+```json
+{
+  "name": "window-seat",
+  "class": "action",
+  "x": 176,
+  "y": 224,
+  "point": true,
+  "properties": [
+    { "name": "action", "type": "string", "value": "sit" },
+    { "name": "facing", "type": "string", "value": "down" }
+  ]
+}
+```
+
+To make furniture selectable, add a `variantSelector` point and use `targetObjectId` to reference a target rectangle or tile object outside the `interactions` layer. The target needs a numeric ID, positive width and height, and a unique ID; it does not need a name. On the target, integer properties named `variant.<option>` set the zero-based tile number in an atlas tileset; `-1` hides the target. The option names must match the comma-separated `variants`. On maps with multiple tilesets, also add a string `variantTileset` property to the target with the tileset name.
+
+Each selector must have its own target object. Furniture backgrounds can remain on tile layers, but tiles that change must not also be drawn on a static layer. See the seat example in the repository maps.
+
+### Private areas, wardrobes, and Portals
+
+Private areas are open initially. Members inside can invite online players and lock or unlock entry. A member loses membership after leaving; re-entry after the area is locked requires a new invitation. Invitations for players who have not entered can remain for up to 60 seconds after the area becomes empty. Private areas do not replace walls or collision.
+
+A `wardrobe` area opens the character appearance editor. Draw furniture separately on regular tile layers.
+
+A Portal's `targetMap` must be available in the current Space, and `targetSpawn` must name a spawn in that map. If multiple Spaces share a map, every Portal on it must be valid for each Space.
+
+### External tools
+
+A `web` area maps its `resourceId` to a webpage URL in `EXTERNAL_TOOLS`. Entering the area only displays the entry; the player must click to open it. The external service manages its own login and permissions. See [external tool entry configuration](external-tools.en.md).
+
+### Character attachments
+
+An `attachment` area uses its name as the source ID. The `mode` and `attachmentIds` combinations are:
+
+| `mode` | Number of attachment IDs | Behavior |
+| --- | --- | --- |
+| `single-unlimited` | One | Can be taken repeatedly |
+| `single-unique` | One | Only one player can hold it from this map source at a time |
+| `multiple-unlimited-random` | Two or more | Randomly selects one each time |
+
+Attachments must use IDs registered by the project. To hide a map tile while a unique attachment is taken, set integer properties `visualGid`, `visualX`, and `visualY` on the source object and remove the corresponding tile from the static tile layer. X/Y are map pixel coordinates aligned to the 16-pixel grid; all three properties are required together.
+
+## Rendering and validation
+
+The project supports atlas tilesets, regular tile layers, and grouped tile layers. External JSON tilesets (`.tsj`) can be used with a map. XML tilesets (`.tsx`), image-collection tilesets, image layers, and generic tile objects have no map rendering path. Use atlas tilesets and check map appearance and resource paths in the target browser.
+
+At startup, the server checks map size and orientation, required object layers, spawns, interaction fields and geometry, furniture targets, and Portal destinations. Invalid configuration prevents startup. Restart the backend after changing map files; then check spawns, collision, interaction areas, and Portal destinations.
