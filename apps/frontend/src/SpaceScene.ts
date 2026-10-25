@@ -34,8 +34,10 @@ export class SpaceScene extends Phaser.Scene {
   private tileWidth = 16;
   private tileHeight = 16;
   private privateAreaMask?: Phaser.GameObjects.Image;
+  private privateAreaMaskCanvas?: Phaser.Textures.CanvasTexture;
   private privateAreaMaskTexture = '';
   private displayedPrivateArea = '';
+  private privateAreaMaskTarget = 0;
   private animationElapsed = 0;
   private canvasTiles: { tile: Phaser.Tilemaps.Tile; gid: number; tileset: Phaser.Tilemaps.Tileset }[] = [];
 
@@ -139,6 +141,8 @@ export class SpaceScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
       this.privateAreaMask?.destroy();
+      this.privateAreaMask = undefined;
+      this.privateAreaMaskCanvas = undefined;
       if (this.privateAreaMaskTexture && this.textures.exists(this.privateAreaMaskTexture)) this.textures.remove(this.privateAreaMaskTexture);
       this.attachmentSourceLayers.clear();
       this.canvasTiles = [];
@@ -233,7 +237,7 @@ export class SpaceScene extends Phaser.Scene {
     const ownPlayer = players.get(this.room.sessionId);
     const zoneId = ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.zoneId : '';
     this.hooks.zoneChanged(zoneId);
-    this.updatePrivateAreaMask(ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.privateAreaId : '');
+    this.updatePrivateAreaMask(ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.privateAreaId : '', delta);
     const activatePressed = Phaser.Input.Keyboard.JustDown(this.keys.E);
     // Never queue movement during automatic reconnection.
     if (!this.hooks.connected() || !ownPlayer?.connected || ownPlayer.mapId !== this.mapEntry.id || !this.room.connection.isOpen) {
@@ -260,31 +264,46 @@ export class SpaceScene extends Phaser.Scene {
       this.inputElapsed = 0;
     }
   }
-  private updatePrivateAreaMask(privateAreaId: string) {
-    if (privateAreaId === this.displayedPrivateArea) return;
-    this.displayedPrivateArea = privateAreaId;
-    this.privateAreaMask?.destroy();
-    this.privateAreaMask = undefined;
-    if (this.privateAreaMaskTexture && this.textures.exists(this.privateAreaMaskTexture)) this.textures.remove(this.privateAreaMaskTexture);
-    if (!privateAreaId) return;
-    const area = this.mapEntry.world.zones.find(zone => zone.kind === 'privateArea' && zone.id === privateAreaId);
-    if (!area) return;
-    const texture = this.textures.createCanvas(this.privateAreaMaskTexture, this.mapEntry.world.width, this.mapEntry.world.height);
-    if (!texture) return;
-    const context = texture.getContext();
-    context.fillStyle = 'rgba(0, 0, 0, 0.48)';
-    context.beginPath();
-    context.rect(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
-    if (area.polygon) {
-      context.moveTo(area.polygon[0]!.x, area.polygon[0]!.y);
-      for (const point of area.polygon.slice(1)) context.lineTo(point.x, point.y);
-      context.closePath();
-    } else {
-      context.rect(area.x, area.y, area.width, area.height);
+  private updatePrivateAreaMask(privateAreaId: string, delta: number) {
+    if (privateAreaId !== this.displayedPrivateArea) {
+      this.displayedPrivateArea = privateAreaId;
+      const area = privateAreaId && this.mapEntry.world.zones.find(zone => zone.kind === 'privateArea' && zone.id === privateAreaId);
+      if (!area) {
+        this.privateAreaMaskTarget = 0;
+      } else {
+        this.privateAreaMaskCanvas ??= this.textures.createCanvas(this.privateAreaMaskTexture,
+          this.mapEntry.world.width, this.mapEntry.world.height) ?? undefined;
+        const texture = this.privateAreaMaskCanvas;
+        if (!texture) {
+          this.privateAreaMaskTarget = 0;
+        } else {
+          const context = texture.getContext();
+          context.clearRect(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
+          context.fillStyle = 'rgba(0, 0, 0, 0.48)';
+          context.beginPath();
+          context.rect(0, 0, this.mapEntry.world.width, this.mapEntry.world.height);
+          if (area.polygon) {
+            context.moveTo(area.polygon[0]!.x, area.polygon[0]!.y);
+            for (const point of area.polygon.slice(1)) context.lineTo(point.x, point.y);
+            context.closePath();
+          } else {
+            context.rect(area.x, area.y, area.width, area.height);
+          }
+          context.fill('evenodd');
+          texture.refresh();
+          this.privateAreaMask ??= this.add.image(0, 0, this.privateAreaMaskTexture).setName('private-area-mask')
+            .setOrigin(0).setDepth(Number.MAX_SAFE_INTEGER).setAlpha(0);
+          this.privateAreaMask.setVisible(true);
+          this.privateAreaMaskTarget = 1;
+        }
+      }
     }
-    context.fill('evenodd');
-    texture.refresh();
-    this.privateAreaMask = this.add.image(0, 0, this.privateAreaMaskTexture).setName('private-area-mask')
-      .setOrigin(0).setDepth(Number.MAX_SAFE_INTEGER);
+    const mask = this.privateAreaMask;
+    if (!mask || mask.alpha === this.privateAreaMaskTarget) return;
+    const distance = this.privateAreaMaskTarget - mask.alpha;
+    const step = delta / 240;
+    const alpha = Math.abs(distance) <= step ? this.privateAreaMaskTarget : mask.alpha + Math.sign(distance) * step;
+    mask.setAlpha(alpha);
+    if (alpha === 0) mask.setVisible(false);
   }
 }

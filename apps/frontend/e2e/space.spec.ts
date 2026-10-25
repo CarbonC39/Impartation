@@ -330,7 +330,8 @@ test('private listeners receive public chat and audio while their microphone tra
   try {
     await move('s', () => observer.state.players.get(sessionId)!.y >= 450);
     await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('30');
-    await expect.poll(() => privateAreaMaskCount(page)).toBe(1);
+    await expect.poll(() => privateAreaMaskState(page).then(state => state.exists)).toBe(true);
+    await expect.poll(() => privateAreaMaskState(page).then(state => state.alpha)).toBe(1);
     await page.locator('#message').fill('房内消息'); await page.locator('#send').click();
     await bob.locator('#message').fill('公共消息'); await bob.locator('#send').click();
     await expect(page.locator('#messages')).toContainText('房内消息');
@@ -348,12 +349,13 @@ test('private listeners receive public chat and audio while their microphone tra
       (node as HTMLAudioElement).srcObject instanceof MediaStream))).toBe(true);
     await move('w', () => observer.state.players.get(sessionId)!.y < 425);
     await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('');
-    await expect.poll(() => privateAreaMaskCount(page)).toBe(0);
+    await expect.poll(() => privateAreaMaskState(page).then(state => state.alpha)).toBe(0);
+    expect((await privateAreaMaskState(page)).exists).toBe(true);
     await expect.poll(() => transmitting(page)).toBe(true);
     await expect.poll(() => muted(bob)).toBe(false);
     await move('s', () => observer.state.players.get(sessionId)!.y >= 450);
     await expect.poll(() => observer.state.players.get(sessionId)?.privateAreaId).toBe('30');
-    await expect.poll(() => privateAreaMaskCount(page)).toBe(1);
+    await expect.poll(() => privateAreaMaskState(page).then(state => state.alpha)).toBe(1);
     await expect.poll(() => transmitting(page)).toBe(false);
     await expect.poll(() => muted(bob)).toBe(true);
     await bob.locator('#sound-toggle').click(); await bob.locator('#sound-toggle').click();
@@ -395,8 +397,11 @@ async function captureRenderedScene(page: Page) {
     };
   }, '/src/SpaceScene.ts');
 }
-function privateAreaMaskCount(page: Page) {
-  return page.evaluate(() => Number(Boolean((window as RenderingWindow).sceneUnderTest?.children.getByName('private-area-mask'))));
+function privateAreaMaskState(page: Page) {
+  return page.evaluate(() => {
+    const mask = (window as RenderingWindow).sceneUnderTest?.children.getByName('private-area-mask') as Phaser.GameObjects.Image | undefined;
+    return { exists: Boolean(mask), alpha: mask?.visible ? mask.alpha : 0 };
+  });
 }
 
 test('pre-join check opens the microphone once, enters muted, and shows a mic over the speaking character', async ({ page }) => {
