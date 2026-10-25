@@ -6,23 +6,19 @@ import { loadWebTools } from '../src/interactions/web/config.js';
 
 const world = parseWorldMap(JSON.parse(readFileSync(new URL('../../../assets/maps/lobby.tmj', import.meta.url), 'utf8')));
 
-test('web tools are optional and select URLs by resource without tool kinds or identity fields', () => {
+test('web tools are optional and resolve arbitrary resource IDs without provider kinds or identity fields', () => {
   assert.deepEqual(loadWebTools('{}', world), []);
+  const calendar = { ...world.zones[0], id: 'calendar-entry', kind: 'web', resourceId: 'team-calendar' };
+  const customWorld = { ...world, zones: [...world.zones, calendar] };
   const config = {
     'shared-canvas': { url: 'https://board.example/boards/shared' },
     'shared-drawing': { url: 'https://draw.example/' },
     'lounge-screen': { url: 'http://localhost:8080/' },
     'shared-document': { url: 'https://docs.example/p/shared' },
+    'team-calendar': { url: 'https://calendar.example/', mode: 'embed' },
   };
-  assert.deepEqual(loadWebTools(JSON.stringify(config), world),
+  assert.deepEqual(loadWebTools(JSON.stringify(config), customWorld),
     Object.entries(config).map(([resourceId, entry]) => ({ resourceId, ...entry })));
-});
-
-test('any hosted application can use a web resource without registering a provider kind', () => {
-  const calendar = { ...world.zones[0], id: 'calendar-entry', kind: 'web', resourceId: 'team-calendar' };
-  const customWorld = { ...world, zones: [...world.zones, calendar] };
-  assert.deepEqual(loadWebTools(JSON.stringify({ 'team-calendar': { url: 'https://calendar.example/', mode: 'embed' } }), customWorld),
-    [{ resourceId: 'team-calendar', url: 'https://calendar.example/', mode: 'embed' }]);
 });
 
 test('invalid JSON, unknown or non-web resources, obsolete kinds and identity fields fail configuration', () => {
