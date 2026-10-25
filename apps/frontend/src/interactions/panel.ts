@@ -1,6 +1,6 @@
 import type { Room } from '@colyseus/sdk';
 import type { SpaceProtocol, InteractionResult, Zone } from '@impartation/shared';
-import type { InteractionHandler } from './dispatcher';
+import type { InteractionHandler, ZoneEntry } from './dispatcher';
 
 export function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -15,15 +15,24 @@ export abstract class PanelInteraction implements InteractionHandler {
   protected disposed = false;
   protected controller = new AbortController();
   protected feedback = element('feature-status');
+  private open = false;
   private renderState = () => this.render();
 
-  constructor(protected room: Room<SpaceProtocol>, private panel: HTMLElement) {
+  constructor(protected room: Room<SpaceProtocol>, private panel: HTMLElement, private entry: ZoneEntry) {
     room.onStateChange(this.renderState);
   }
   setZone(zone: Zone | undefined) {
     this.current = zone;
-    this.panel.hidden = !zone;
+    if (!zone) this.open = false;
+    this.panel.hidden = !zone || !this.open;
     this.feedback.textContent = '';
+    this.render();
+  }
+  zoneEntries() { return this.current ? [{ ...this.entry, pressed: this.open, disabled: !this.connected }] : []; }
+  activateZoneEntry(id: string) {
+    if (id !== this.entry.id || !this.current || !this.connected) return;
+    this.open = !this.open;
+    this.panel.hidden = !this.open;
     this.render();
   }
   setConnected(value: boolean) { this.connected = value; this.render(); }

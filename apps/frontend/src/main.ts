@@ -49,7 +49,6 @@ let gameDestruction: Promise<void> = Promise.resolve();
 function destroyScene(): Promise<void> {
   const previous = game;
   game = undefined; scene = undefined;
-  element('zone-anchor').hidden = true;
   if (previous) {
     // Remove the old canvas immediately, including during leave/rejoin on the same page.
     previous.canvas?.remove();
@@ -860,17 +859,11 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
     if (generation !== renderGeneration || room !== activeRoom) return;
     await destroyScene();
     if (generation !== renderGeneration || room !== activeRoom) return;
-    const zoneAnchor = element('zone-anchor');
     scene = new SpaceScene(activeRoom, entry, renderMap, {
       zoneChanged: id => {
         if (generation !== renderGeneration || room !== activeRoom) return;
         const current = entry.world.zones.find(item => item.id === id);
         interactions?.setZone(current);
-      },
-      zoneAnchor: point => {
-        if (generation !== renderGeneration || room !== activeRoom) return;
-        zoneAnchor.hidden = !point;
-        if (point) zoneAnchor.style.transform = `translate(${point.x}px, ${point.y}px)`;
       },
       activate: () => { void actions?.activate(); },
       connected: () => connected && !travelPending && !renderingMap && renderedMap === activeRoom.state.players.get(activeRoom.sessionId)?.mapId,

@@ -822,6 +822,7 @@ async function joinSavedProfile(page: Page) {
   await expect(page.locator('#status')).toContainText('已进入空间');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
+const zoneEntry = (page: Page, label: string) => page.locator('#zone-entries').getByRole('button', { name: label, exact: true });
 async function observe(spaceId = 'main'): Promise<Room<SpaceProtocol>> {
   const endpoint = test.info().project.use.baseURL!;
   const username = nextUsername();
@@ -848,6 +849,10 @@ async function walkTo(page: Page, observer: Room<SpaceProtocol>, name: string, k
   try {
     await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(zoneId);
   } finally { await page.keyboard.up(direction); }
+  await expect(page.locator(`#${kind}-panel`)).toBeHidden();
+  const entry = zoneEntry(page, kind === 'board' ? '留言板' : '共享计时');
+  await expect(entry).toBeVisible();
+  await entry.click();
   await expect(page.locator(`#${kind}-panel`)).toBeVisible();
 }
 
@@ -876,7 +881,7 @@ async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typ
   try {
     await expect.poll(() => observer.state.players.get(sessionId)?.zoneId).toBe(target.resourceId);
   } finally { await page.keyboard.up('w'); }
-  await expect(page.locator('#tool-hint')).toBeVisible();
+  await expect(zoneEntry(page, '网页工具')).toBeVisible();
 }
 
 for (const target of toolCases) {
@@ -890,11 +895,10 @@ for (const target of toolCases) {
     const observer = await observe();
     try {
       await walkToTool(page, observer, target);
-      await expect(page.locator('#tool-open')).toHaveText('打开网页工具 ↗');
+      await expect(zoneEntry(page, '网页工具')).toHaveAttribute('aria-label', '网页工具');
       const url = `https://tools.example/resources/${target.resourceId}`;
-      await expect(page.locator('#tool-open')).toHaveAttribute('href', url);
       const popupReady = page.waitForEvent('popup');
-      await page.locator('#tool-open').click();
+      await zoneEntry(page, '网页工具').click();
       const popup = await popupReady;
       await popup.waitForLoadState('domcontentloaded');
       await expect(popup).toHaveURL(url);
@@ -906,9 +910,8 @@ for (const target of toolCases) {
       await page.locator('#game canvas').focus();
       const direction = target.x > 352 ? 'a' : 'd';
       await page.keyboard.down(direction);
-      try { await expect(page.locator('#tool-hint')).toBeHidden(); }
+      try { await expect(zoneEntry(page, '网页工具')).toBeHidden(); }
       finally { await page.keyboard.up(direction); }
-      await expect(page.locator('#tool-open')).not.toHaveAttribute('href');
     } finally { if (observer.connection.isOpen) await observer.leave(); }
   });
 }
@@ -924,12 +927,12 @@ for (const scenario of [
     const observer = await observe();
     try {
       await walkToTool(page, observer, toolCases[1]);
+      await zoneEntry(page, '网页工具').click();
       await expect(page.locator('#tool-status')).toContainText(scenario.message);
-      await expect(page.locator('#tool-open')).toBeHidden();
-      await expect(page.locator('#tool-open')).not.toHaveAttribute('href');
+      await expect(zoneEntry(page, '网页工具')).toBeVisible();
       await expect(page.locator('#status')).toContainText('已进入空间');
       await page.locator('#leave').click();
-      await expect(page.locator('#tool-hint')).toBeHidden();
+      await expect(zoneEntry(page, '网页工具')).toBeHidden();
     } finally { if (observer.connection.isOpen) await observer.leave(); }
   });
 }
@@ -1521,9 +1524,10 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
     await walkToTool(page, observer, target);
     const frame = page.locator('#tool-window iframe');
     await expect(frame).toHaveCount(0);
-    await page.locator('#tool-open').click();
+    await zoneEntry(page, '网页工具').click();
     await expect(frame).toBeVisible();
-    await expect(page.locator('#tool-open')).toBeHidden();
+    await expect(zoneEntry(page, '网页工具')).toBeVisible();
+    await expect(zoneEntry(page, '网页工具')).toHaveAttribute('aria-pressed', 'true');
     await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
     await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
     await expect(page.frameLocator('#tool-window iframe').getByText('Embedded tool fixture')).toBeVisible();
@@ -1582,8 +1586,9 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
     await expect(frame).toHaveCount(0);
     await expect(page.locator('#tool-window')).toBeHidden();
     await expect(page.locator('#tool-backdrop')).toBeHidden();
-    await expect(page.locator('#tool-open')).toBeVisible();
-    await page.locator('#tool-open').click();
+    await expect(zoneEntry(page, '网页工具')).toBeVisible();
+    await expect(zoneEntry(page, '网页工具')).toHaveAttribute('aria-pressed', 'false');
+    await zoneEntry(page, '网页工具').click();
     await expect(frame).toBeVisible();
     // Typing goes to the embedded page until the tool frame itself is clicked again.
     await page.frameLocator('#tool-window iframe').getByText('Embedded tool fixture').click();
@@ -1624,7 +1629,7 @@ test('embed stage seats people with the same tool open center-outward', async ({
   try {
     await walkToTool(page, first, target);
     const own = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
-    await page.locator('#tool-open').click();
+    await zoneEntry(page, '网页工具').click();
     const seats = page.locator('#tool-stage-seats .tool-stage-seat');
     const order = () => seats.evaluateAll(nodes => (nodes as HTMLElement[])
       .sort((a, b) => Number(a.style.order) - Number(b.style.order)).map(node => node.dataset.session));
@@ -1683,7 +1688,7 @@ test('embed presentation provides a manual external link and clears both on zone
   try {
     await walkToTool(page, observer, toolCases[1]);
     await expect(page.locator('#tool-window iframe')).toHaveCount(0);
-    await page.locator('#tool-open').click();
+    await zoneEntry(page, '网页工具').click();
     const fallback = page.locator('#tool-window').getByRole('link', { name: '手动在新标签页打开', exact: true });
     await expect(fallback).toHaveAttribute('href', toolDirectory[1].url);
     await expect(page.locator('#tool-window iframe')).toBeVisible();
@@ -1698,7 +1703,7 @@ test('embed presentation provides a manual external link and clears both on zone
     await page.bringToFront();
     await page.locator('#game canvas').focus();
     await page.keyboard.down('d');
-    try { await expect(page.locator('#tool-hint')).toBeHidden(); }
+    try { await expect(zoneEntry(page, '网页工具')).toBeHidden(); }
     finally { await page.keyboard.up('d'); }
     await expect(page.locator('#tool-window')).toBeHidden();
     await expect(page.locator('#tool-window iframe')).toHaveCount(0);
@@ -1820,6 +1825,7 @@ test('scene selectors render chosen tiles, private members control locks, and a 
     await move('s', () => player().y >= 449);
     await page.locator('#action-list [data-action="sit"][data-animated="false"]').click();
     await expect(page.locator('#variant-selector-panel')).toBeVisible();
+    await expect(zoneEntry(page, '私密区域')).toBeVisible();
     await expect.poll(() => player().actionTargetId).toBe('20');
     await page.waitForTimeout(550);
     await page.locator('#variant-choices [data-variant="book"]').click();
@@ -1830,10 +1836,14 @@ test('scene selectors render chosen tiles, private members control locks, and a 
         (child as Phaser.GameObjects.Image).frame?.name === 'world-variant-19');
     })).toBe(true);
     await page.locator('#variant-cancel').click(); await expect(page.locator('#variant-selector-panel')).toBeHidden();
+    await expect(page.locator('#private-area-panel')).toBeHidden();
+    await zoneEntry(page, '私密区域').click();
     await expect(page.locator('#private-area-panel')).toBeVisible();
     await page.waitForTimeout(550); await page.locator('#private-area-lock').click();
     await expect(page.locator('#private-area-lock')).toHaveText('解锁');
     await move('a', () => player().x < 346);
+    await expect(page.locator('#wardrobe-panel')).toBeHidden();
+    await zoneEntry(page, '更衣处').click();
     await expect(page.locator('#wardrobe-panel')).toBeVisible();
     const roomId = await page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.['room'].roomId);
     await page.locator('#wardrobe-open').click();
@@ -1891,12 +1901,12 @@ test('selector choices survive state patches, take priority over web areas, and 
     try { await expect.poll(() => player().y >= 449, { intervals: [10] }).toBe(true); }
     finally { await page.keyboard.up('s'); }
     await expect.poll(() => player().motion).toBe('idle');
-    await page.locator('#tool-open').click();
+    await zoneEntry(page, '网页工具').click();
     await expect(page.locator('#tool-window iframe')).toBeVisible();
     // Submit the same UI intent through the scene's real connection while the window is open.
     await page.evaluate(async () => { await (window as RenderingWindow).sceneUnderTest!['room'].request('activateAction', { action: 'sit' }); });
     await expect(page.locator('#tool-window')).toBeHidden();
-    await expect(page.locator('#tool-hint')).toBeHidden();
+    await expect(zoneEntry(page, '网页工具')).toBeHidden();
     await expect(page.locator('#variant-selector-panel')).toBeVisible();
     await page.waitForTimeout(550);
     const empty = page.locator('#variant-choices [data-variant="empty"]');
@@ -1929,7 +1939,7 @@ test('selector choices survive state patches, take priority over web areas, and 
     await expect(page.locator('#variant-selector-panel')).toBeHidden();
     await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variantCleared).toBe(false);
     await expect.poll(targetPixel).toEqual([136, 85, 204]);
-    await expect(page.locator('#tool-open')).toBeVisible();
+    await expect(zoneEntry(page, '网页工具')).toBeVisible();
     await expect(page.locator('#tool-window')).toBeHidden();
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
@@ -2051,7 +2061,7 @@ test('quick travel stays clickable above an embedded tool and closes its map con
   const sessionId = await sessionOf(page); const observer = await observe();
   try {
     await walkToTool(page, observer, toolCases[1]);
-    await page.locator('#tool-open').click();
+    await zoneEntry(page, '网页工具').click();
     await expect(page.locator('#tool-window iframe')).toBeVisible();
     await page.locator('#map-navigation-toggle').click();
     await page.locator('#map-navigation-list [data-quick-travel="studio"]').click();

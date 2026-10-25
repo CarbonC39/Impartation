@@ -8,32 +8,36 @@ import { releaseToolFocus, ToolStage } from './stage';
 const MIN_TV_WIDTH = 360;
 const MIN_TV_HEIGHT = 200;
 
-/** Entering a web zone shows a small hint above it; only a click opens the tool. */
+/** A topbar entry appears while the player is in the web zone; clicking it opens the tool. */
 export class WebToolInteraction {
-  private hint = element('tool-hint');
   private status = element('tool-status');
-  private link = element<HTMLAnchorElement>('tool-open');
   private window = new TvWindow();
   private cleanupPresentation?: () => void;
+  private embeddedOpen = false;
   private controller = new AbortController();
   private current?: Zone;
   private tools: WebTool[] = [];
   private connected = true;
   private state: 'loading' | 'ready' | 'failed' = 'loading';
-  private readonly openTool = (event: MouseEvent) => {
-    event.preventDefault();
-    this.link.blur(); // Return keyboard movement to the map.
+  private disposed = false;
+  private entriesChanged = () => {};
+  private readonly openTool = () => {
     const zone = this.current;
-    if (!this.connected || this.state !== 'ready' || zone?.kind !== 'web') return;
+    if (!this.connected || zone?.kind !== 'web') return;
+    if (this.state === 'loading') { this.status.textContent = '正在加载工具入口…'; return; }
+    if (this.state === 'failed') { this.status.textContent = '工具入口加载失败，请重新进入空间重试'; return; }
     const tool = this.tools.find(item => item.resourceId === zone.resourceId);
-    if (!tool || ((tool.mode ?? 'external') === 'embed' && this.cleanupPresentation)) return;
-    this.closePresentation();
+    if (!tool) { this.status.textContent = '此区域尚未配置工具地址'; return; }
+    const mode = tool.mode ?? 'external';
+    if (mode === 'embed' && this.cleanupPresentation) { this.closePresentation(); this.render(); return; }
+    this.status.textContent = '';
     try {
-      if ((tool.mode ?? 'external') === 'embed') {
+      if (mode === 'embed') {
         this.window.open(zoneLabels[zone.kind] ?? zone.kind, () => this.close());
         this.stage?.show();
       }
       this.cleanupPresentation = this.presentations.open(tool, this.window.screen, this.window.links);
+      this.embeddedOpen = mode === 'embed';
       this.render();
     } catch (error) {
       this.window.close();
@@ -46,7 +50,6 @@ export class WebToolInteraction {
   constructor(presentations?: PresentationRegistry, room?: Room<SpaceProtocol>, speaking?: (sessionId: string) => boolean) {
     this.presentations = presentations ?? createPresentations();
     if (room) this.stage = new ToolStage(room, speaking);
-    this.link.addEventListener('click', this.openTool);
     void this.load();
   }
 
@@ -64,13 +67,18 @@ export class WebToolInteraction {
   }
 
   dispose() {
+    this.disposed = true;
+    this.entriesChanged = () => {};
     this.controller.abort();
-    this.link.removeEventListener('click', this.openTool);
     this.closePresentation();
     this.window.dispose();
     this.current = undefined;
     this.render();
   }
+
+  zoneEntries() { return !this.disposed && this.current?.kind === 'web' ? [{ id: 'web', label: '网页工具', icon: '↗', pressed: this.embeddedOpen, disabled: !this.connected }] : []; }
+  activateZoneEntry(id: string) { if (id === 'web') this.openTool(); }
+  onZoneEntriesChanged(listener: () => void) { this.entriesChanged = listener; }
 
   private close() {
     this.closePresentation();
@@ -80,6 +88,7 @@ export class WebToolInteraction {
   private closePresentation() {
     this.cleanupPresentation?.();
     this.cleanupPresentation = undefined;
+    this.embeddedOpen = false;
     this.stage?.hide();
     this.window.close();
   }
@@ -97,22 +106,14 @@ export class WebToolInteraction {
   }
 
   private render() {
-    this.link.hidden = true;
-    this.link.removeAttribute('href');
+    if (this.disposed) return;
     this.status.textContent = '';
     const zone = this.current;
-    this.hint.hidden = !this.connected || !zone || zone.kind !== 'web';
-    if (this.hint.hidden || !zone) return;
-    if (this.state === 'loading') { this.status.textContent = '正在加载工具入口…'; return; }
-    if (this.state === 'failed') { this.status.textContent = '工具入口加载失败，请重新进入空间重试'; return; }
-    const tool = this.tools.find(item => item.resourceId === zone.resourceId);
-    if (!tool) { this.status.textContent = '此区域尚未配置工具地址'; return; }
-    const mode = tool.mode ?? 'external';
-    const label = zoneLabels[zone.kind] ?? zone.kind;
-    this.link.textContent = mode === 'external' ? `打开${label} ↗` : `打开${label}`;
-    this.link.title = mode === 'external' ? '在新标签页打开；身份和权限由工具管理' : '在窗口中打开；离开区域时关闭。身份和权限由工具管理';
-    this.link.href = tool.url;
-    this.link.hidden = mode === 'embed' && !!this.cleanupPresentation;
+    if (!this.connected || zone?.kind !== 'web') { this.entriesChanged(); return; }
+    if (this.state === 'loading') this.status.textContent = '正在加载工具入口…';
+    else if (this.state === 'failed') this.status.textContent = '工具入口加载失败，请重新进入空间重试';
+    else if (!this.tools.some(item => item.resourceId === zone.resourceId)) this.status.textContent = '此区域尚未配置工具地址';
+    this.entriesChanged();
   }
 }
 

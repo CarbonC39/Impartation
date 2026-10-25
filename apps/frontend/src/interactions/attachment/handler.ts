@@ -14,6 +14,7 @@ export class AttachmentInteraction implements InteractionHandler {
   private connected = true;
   private pending = false;
   private disposed = false;
+  private open = false;
   private controller = new AbortController();
   private renderState = () => this.render();
 
@@ -34,7 +35,7 @@ export class AttachmentInteraction implements InteractionHandler {
       this.current.setAttribute('aria-label', `当前附着：${asset.name}；清除`);
     }
     this.clear.disabled = !this.connected || this.pending || !player?.connected || !asset;
-    this.panel.hidden = !this.zone;
+    this.panel.hidden = !this.zone || !this.open;
     if (!this.zone || !player) return;
     const source = attachmentSource(this.zone);
     const holder = this.room.state.attachmentSources.get(attachmentSourceKey(player.mapId, this.zone.id))?.holder;
@@ -56,7 +57,9 @@ export class AttachmentInteraction implements InteractionHandler {
       if (!this.disposed) this.feedback.textContent = '操作失败，请检查连接后重试';
     } finally { this.pending = false; if (!this.disposed) this.render(); }
   }
-  setZone(zone: Zone | undefined) { this.zone = zone; this.feedback.textContent = ''; this.render(); }
+  setZone(zone: Zone | undefined) { this.zone = zone; if (!zone) this.open = false; this.feedback.textContent = ''; this.render(); }
+  zoneEntries() { return this.zone ? [{ id: 'attachment', label: '取用附件', icon: '♧', pressed: this.open, disabled: !this.connected }] : []; }
+  activateZoneEntry(id: string) { if (id !== 'attachment' || !this.zone || !this.connected) return; this.open = !this.open; this.render(); }
   setConnected(value: boolean) { this.connected = value; this.render(); }
   dispose() { this.disposed = true; this.controller.abort(); this.room.onStateChange.remove(this.renderState); this.setZone(undefined); }
 }

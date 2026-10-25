@@ -9,12 +9,9 @@ import { cameraZoom } from './cameraZoom';
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[]; attachment: Phaser.GameObjects.Sprite; status: CharacterStatus;
   animation: string; elapsed: number };
 type ChatBubble = { text: string; expiresAt: number };
-export type ScreenPoint = { x: number; y: number };
 export type SceneHooks = {
   connected(): boolean;
   zoneChanged(id: string): void;
-  /** Screen position (canvas pixels) of the top edge of the player's current zone. */
-  zoneAnchor(point: ScreenPoint | undefined): void;
   activate(): void;
   virtualInput(): MovementInput;
   /** Local display preference; read every frame so toggling needs no scene restart. */
@@ -34,7 +31,6 @@ export class SpaceScene extends Phaser.Scene {
   private inputElapsed = 0;
   private lastInput = '';
   private bubbles = new Map<string, ChatBubble>();
-  private lastAnchor = '';
   private tileWidth = 16;
   private tileHeight = 16;
   private privateAreaMask?: Phaser.GameObjects.Image;
@@ -146,7 +142,6 @@ export class SpaceScene extends Phaser.Scene {
       if (this.privateAreaMaskTexture && this.textures.exists(this.privateAreaMaskTexture)) this.textures.remove(this.privateAreaMaskTexture);
       this.attachmentSourceLayers.clear();
       this.canvasTiles = [];
-      this.hooks.zoneAnchor(undefined);
       canvas.removeEventListener('pointerdown', focusCanvas);
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', visibility);
@@ -156,7 +151,6 @@ export class SpaceScene extends Phaser.Scene {
     const zoom = cameraZoom(this.tileWidth, this.tileHeight);
     this.cameras.main.setZoom(zoom);
     for (const sprite of this.sprites.values()) sprite.status.setZoom(zoom);
-    this.lastAnchor = '';
   }
   stopInput() {
     this.input?.keyboard?.resetKeys();
@@ -239,7 +233,6 @@ export class SpaceScene extends Phaser.Scene {
     const ownPlayer = players.get(this.room.sessionId);
     const zoneId = ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.zoneId : '';
     this.hooks.zoneChanged(zoneId);
-    this.updateZoneAnchor(zoneId);
     this.updatePrivateAreaMask(ownPlayer?.mapId === this.mapEntry.id ? ownPlayer.privateAreaId : '');
     const activatePressed = Phaser.Input.Keyboard.JustDown(this.keys.E);
     // Never queue movement during automatic reconnection.
@@ -266,18 +259,6 @@ export class SpaceScene extends Phaser.Scene {
       this.lastInput = serialized;
       this.inputElapsed = 0;
     }
-  }
-  private updateZoneAnchor(zoneId: string) {
-    const zone = zoneId ? this.mapEntry.world.zones.find(item => item.id === zoneId) : undefined;
-    const camera = this.cameras.main;
-    const point = zone && {
-      x: Math.round(Phaser.Math.Clamp((zone.x + zone.width / 2 - camera.worldView.x) * camera.zoom, 0, camera.width)),
-      y: Math.round(Phaser.Math.Clamp((zone.y - camera.worldView.y) * camera.zoom, 0, camera.height)),
-    };
-    const key = point ? `${point.x},${point.y}` : '';
-    if (key === this.lastAnchor) return;
-    this.lastAnchor = key;
-    this.hooks.zoneAnchor(point);
   }
   private updatePrivateAreaMask(privateAreaId: string) {
     if (privateAreaId === this.displayedPrivateArea) return;

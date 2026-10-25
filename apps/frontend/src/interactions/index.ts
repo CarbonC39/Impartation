@@ -19,9 +19,10 @@ export function createInteractions(room: Room<SpaceProtocol>, presentations?: Pr
     .register('Portal', new PortalInteraction(room))
     .register('web', new WebToolInteraction(presentations, room, native?.speaking));
   registry.register('attachment', new AttachmentInteraction(room));
-  const dispatcher = new InteractionDispatcher(registry);
-  if (native) registry.register('variantSelector', new VariantSelectorInteraction(room, native.world, claimed => dispatcher.setZoneSuspended(claimed)))
+  if (native) registry
     .register('privateArea', new PrivateAreaInteraction(room))
     .register('wardrobe', new WardrobeInteraction(native.openWardrobe));
+  const dispatcher = new InteractionDispatcher(registry);
+  if (native) registry.register('variantSelector', new VariantSelectorInteraction(room, native.world, claimed => dispatcher.setZoneSuspended(claimed)));
   return dispatcher;
 }

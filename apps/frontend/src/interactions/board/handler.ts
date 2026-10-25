@@ -12,7 +12,7 @@ export class BoardInteraction extends PanelInteraction {
   private notesKey = '';
 
   constructor(room: Room<SpaceProtocol>) {
-    super(room, element('board-panel'));
+    super(room, element('board-panel'), { id: 'board', label: '留言板', icon: '▤' });
     const options = { signal: this.controller.signal };
     element<HTMLFormElement>('board-form').addEventListener('submit', event => {
       event.preventDefault();

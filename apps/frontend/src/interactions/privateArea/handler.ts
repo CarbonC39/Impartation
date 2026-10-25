@@ -27,8 +27,10 @@ export class PrivateAreaInteraction implements InteractionHandler {
   private connected = true;
   private pending = false;
   private disposed = false;
+  private open = false;
   private selected = '';
   private controller = new AbortController();
+  private entriesChanged = () => {};
   private renderState = () => this.render();
   constructor(private room: Room<SpaceProtocol>) {
     room.onStateChange(this.renderState);
@@ -43,11 +45,12 @@ export class PrivateAreaInteraction implements InteractionHandler {
     this.render();
   }
   private render() {
+    if (this.disposed) return;
     const player = this.room.state.players.get(this.room.sessionId);
     const areas = player && this.room.state.privateAreas.get(player.mapId)?.areas;
     const memberships = [...(areas?.entries() ?? [])].filter(([, area]) => area.members.get(this.room.sessionId) === true);
-    this.panel.hidden = !memberships.length;
-    if (!memberships.length) { this.selected = ''; return; }
+    this.panel.hidden = !this.open || !memberships.length;
+    if (!memberships.length) { this.selected = ''; this.entriesChanged(); return; }
     if (!memberships.some(([id]) => id === this.selected)) this.selected = player?.privateAreaId || memberships[0]![0];
     setOptions(this.areas, memberships.map(([id, area]) => [id, `区域 ${id}${area.locked ? ' · 已锁定' : ' · 开放'}`]));
     if (this.areas.value !== this.selected) this.areas.value = this.selected;
@@ -62,6 +65,7 @@ export class PrivateAreaInteraction implements InteractionHandler {
     this.lock.disabled = !this.connected || !player?.connected || this.pending;
     this.add.disabled = this.lock.disabled || !this.players.options.length;
     this.areas.disabled = this.pending;
+    this.entriesChanged();
   }
   private async run(input: PrivateAreaOperationInput) {
     if (!this.connected || this.pending || this.disposed) return;
@@ -70,7 +74,15 @@ export class PrivateAreaInteraction implements InteractionHandler {
     catch { if (!this.disposed) this.status.textContent = '操作失败，请检查连接后重试'; }
     finally { this.pending = false; if (!this.disposed) this.render(); }
   }
-  setZone(_zone: Zone | undefined) {}
+  setZone(zone: Zone | undefined) { if (!zone) this.open = false; this.render(); }
+  zoneEntries() {
+    const player = this.room.state.players.get(this.room.sessionId);
+    const areas = player && this.room.state.privateAreas.get(player.mapId)?.areas;
+    const member = [...(areas?.values() ?? [])].some(area => area.members.get(this.room.sessionId) === true);
+    return member ? [{ id: 'privateArea', label: '私密区域', icon: '▣', pressed: this.open, disabled: !this.connected }] : [];
+  }
+  activateZoneEntry(id: string) { if (id !== 'privateArea' || !this.connected) return; this.open = !this.open; this.render(); }
+  onZoneEntriesChanged(listener: () => void) { if (!this.disposed) this.entriesChanged = listener; }
   setConnected(value: boolean) { this.connected = value; this.render(); }
-  dispose() { this.disposed = true; this.controller.abort(); this.room.onStateChange.remove(this.renderState); this.panel.hidden = true; }
+  dispose() { this.disposed = true; this.entriesChanged = () => {}; this.controller.abort(); this.room.onStateChange.remove(this.renderState); this.panel.hidden = true; }
 }
