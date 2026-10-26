@@ -105,7 +105,7 @@ async function enter(page: Page, canvasOnly: boolean) {
   await page.locator('#name').fill('TileAnimation');
   await page.locator('#join').click();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
 
@@ -162,6 +162,7 @@ async function selectAnimatedVariant(page: Page) {
     const scene = (window as RenderingWindow).sceneUnderTest!;
     await scene['room'].request('activateAction', { action: 'sit' });
   });
+  await page.locator('#zone-entries').getByRole('button', { name: '图块选择', exact: true }).click();
   await expect(page.locator('#variant-selector-panel')).toBeVisible();
   await page.waitForTimeout(550);
   await page.locator('#variant-choices [data-variant="computer"]').click();

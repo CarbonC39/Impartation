@@ -9,7 +9,7 @@ export class PomodoroInteraction extends PanelInteraction {
   private interval: ReturnType<typeof setInterval>;
 
   constructor(room: Room<SpaceProtocol>) {
-    super(room, element('pomodoro-panel'), { id: 'pomodoro', label: '共享计时', icon: '◷' });
+    super(room, element('pomodoro-panel'), { id: 'pomodoro', label: '共享计时', icon: '◷', panelId: 'pomodoro-panel' });
     const options = { signal: this.controller.signal };
     for (const action of ['start', 'pause', 'resume', 'reset'] as const) {
       element(`pomodoro-${action}`).addEventListener('click', () => {

@@ -156,7 +156,7 @@ export function mountThemePanel(toggle: HTMLButtonElement, panel: HTMLElement) {
     const colors = palette('custom');
     const low = contrast(colors.ink, colors.panel) < 4.5 || contrast(colors.accentInk, colors.accent) < 4.5;
     hint.hidden = !low;
-    hint.textContent = low ? '文字对比度偏低，可能看不清：试试把面板调浅、描边调深，或换个按钮色' : '';
+    hint.textContent = low ? '文字对比度偏低' : '';
     toggle.querySelector('.theme-dots')?.replaceWith(dots(palette(current)));
   }
   listeners.add(render);

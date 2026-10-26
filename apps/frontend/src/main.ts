@@ -22,7 +22,7 @@ import { ProximityVoice } from './voice';
 import { TouchPad } from './touchPad';
 import { LayoutEditor } from './layoutEditor';
 import { ChatLayout } from './chatLayout';
-import { PanelLayout } from './panelLayout';
+import { PanelAnchor, PanelLayout } from './panelLayout';
 import { mountPrejoin, type VoicePlan } from './prejoin';
 import { fillMicrophoneSelect, preferredMicrophone, setPreferredMicrophone } from './microphone';
 import { automaticCameraZoom, cameraZoomPreference, MAX_CAMERA_ZOOM, MIN_CAMERA_ZOOM, setCameraZoomPreference } from './cameraZoom';
@@ -249,10 +249,13 @@ chatOpacityInput.addEventListener('change', () => {
 });
 const settingsToggle = element<HTMLButtonElement>('settings-toggle');
 settingsToggle.addEventListener('click', () => {
-  const panel = element('settings-panel');
-  panel.hidden = !panel.hidden;
-  settingsToggle.setAttribute('aria-expanded', String(!panel.hidden));
-  if (!panel.hidden) refreshVoiceDevices();
+  settingsPanel.hidden = !settingsPanel.hidden;
+  settingsToggle.setAttribute('aria-expanded', String(!settingsPanel.hidden));
+  if (!settingsPanel.hidden) {
+    mapNavigationPanel.hidden = true;
+    mapNavigationToggle.setAttribute('aria-expanded', 'false');
+    refreshVoiceDevices();
+  }
 });
 
 function showScreen(id: string) {
@@ -352,7 +355,6 @@ async function loadSpaces() {
 function renderWorldTiles() {
   const singleSpace = (spaceDirectory?.spaces.length ?? 0) <= 1;
   element('world-title').textContent = singleSpace ? '进入空间' : '去哪儿？';
-  element('world-subtitle').textContent = currentProfile ? '选择空间后进入试衣间' : '先登录，再选择空间';
   for (const action of document.querySelectorAll('#world-list .world-join')) action.textContent = currentProfile ? '去换装' : '登录后进入';
   for (const count of document.querySelectorAll<HTMLElement>('#world-list .world-online')) {
     const item = occupancy?.spaces.find(space => space.id === count.dataset.spaceOnline);
@@ -556,11 +558,14 @@ async function quickTravel(mapId: string) {
 }
 const mapNavigationToggle = element<HTMLButtonElement>('map-navigation-toggle');
 const mapNavigationPanel = element('map-navigation-panel');
+const settingsPanel = element('settings-panel');
+new PanelAnchor(settingsPanel);
+new PanelAnchor(mapNavigationPanel);
 mapNavigationToggle.addEventListener('click', () => {
   mapNavigationPanel.hidden = !mapNavigationPanel.hidden;
   mapNavigationToggle.setAttribute('aria-expanded', String(!mapNavigationPanel.hidden));
   if (!mapNavigationPanel.hidden) {
-    element('settings-panel').hidden = true;
+    settingsPanel.hidden = true;
     settingsToggle.setAttribute('aria-expanded', 'false');
     renderMapNavigation();
   }
@@ -580,6 +585,7 @@ function setConnectionState(value: ConnectionState, message: string, notify = fa
   for (const id of ['map-screen', 'avatar-screen']) element(id).inert = notify;
 }
 function cleanup() {
+  delete status.dataset.sessionId;
   stopConnectionWatch?.();
   stopConnectionWatch = undefined;
   queueAttempt?.cancel();
@@ -773,7 +779,7 @@ async function enterWorld(plan: VoicePlan, retry = false) {
       const next = own.privateAreaId ? `${own.mapId}/${own.privateAreaId}` : '';
       if (next === audience) return;
       audience = next;
-      appendChat(next ? '已进入私密房间：房外看不到或听不到房内；仍可接收公共区域的聊天和附近语音。' : '已回到公共区域：聊天和语音恢复公共范围。', 'chat-system');
+      appendChat(next ? '已进入私密房间' : '已回到公共区域', 'chat-system');
     });
     room.onError((_code, message) => {
       if (room === nativeRoom && connectionState === 'connected') status.textContent = `房间错误：${message}`;
@@ -790,12 +796,9 @@ async function enterWorld(plan: VoicePlan, retry = false) {
     await renderWorld(room.state?.players?.get(room.sessionId)?.mapId ?? worldRegistry.initialMap, room);
     if (!isCurrentJoin() || room !== nativeRoom) { stopPlannedStream(); return; }
     leave.disabled = false;
-    const sessionId = document.createElement('span');
-    sessionId.className = 'session-id';
-    sessionId.textContent = ` · ${room.sessionId}`;
+    status.dataset.sessionId = room.sessionId;
     if (!nativeRoom.reconnection.isReconnecting && nativeRoom.connection.isOpen) {
-      setConnectionState('connected', '已进入空间');
-      status.append(sessionId);
+      setConnectionState('connected', '');
     }
     join.blur();
     if (plan.enabled && connected) {

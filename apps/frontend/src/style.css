@@ -162,8 +162,6 @@ body.login-route .account-page { display: block; }
 .world-tile:hover:not(:disabled) .world-join { color: var(--ink); }
 .create-tile { padding: 14px; gap: 12px; box-shadow: var(--px-sm); }
 .create-tile form { display: flex; flex-direction: column; gap: 10px; }
-.key-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-top: auto; padding: 12px 16px; background: var(--soft); font-size: 13px; color: var(--ink2); }
-.key-hints b { color: var(--ink); }
 
 /* Wardrobe screen */
 .steps { list-style: none; margin: 0; padding: 0; display: none; gap: 10px; flex-wrap: wrap; font-size: 14px; font-weight: 700; }
@@ -271,21 +269,20 @@ body.map-open #app-shell { max-width: none; padding: 0; }
 .map-topbar strong { font-size: 18px; font-weight: 900; }
 .map-info { flex: none; flex-wrap: wrap; max-width: calc(100% - 220px); }
 .map-indicators { display: none; flex: none; align-items: center; align-content: flex-start; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 280px); }
-.map-indicators:has(> .zone-entries:not(:empty), > #attachment-clear:not([hidden]), > #variant-selector-panel:not([hidden])) { display: flex; }
-.zone-entries, .map-state-group, .map-state-choices { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.map-indicators:has(> .zone-entries:not(:empty), > #attachment-clear:not([hidden])) { display: flex; }
+.zone-entries, .map-state-choices { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .zone-entries:empty { display: none; }
 .map-state-icon { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 4px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--panel) 76%, transparent); box-shadow: var(--px-sm); font-size: 18px; line-height: 1; }
-.map-state-icon[hidden], .map-state-group[hidden] { display: none; }
+.map-state-icon[hidden] { display: none; }
 .map-action-status:empty { display: none; }
 .map-state-icon img { width: 24px; height: 24px; image-rendering: pixelated; }
 .map-state-icon[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .map-topbar .hud-buttons { margin-left: auto; flex: none; }
-#feature-status:empty, #tool-status:empty { display: none; }
+#status:empty, #feature-status:empty, #tool-status:empty, #variant-status:empty { display: none; }
 #status { color: var(--ink2); overflow-wrap: anywhere; }
 #voice-status { color: var(--ink2); overflow-wrap: anywhere; }
 .hud-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.session-id { display: none; } /* Kept in #status text for diagnostics only. */
 .settings-panel { position: absolute; z-index: 7; top: 76px; right: 16px; width: 260px; max-height: calc(100% - 92px); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .map-navigation-panel { position: absolute; z-index: 24; top: 76px; right: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100% - 92px); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .map-navigation-panel h2 { font-size: 18px; }
@@ -391,6 +388,8 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .feature-panel[hidden] { display: none; }
 /* Dragged panels leave the default stack; viewport coordinates come from PanelLayout. */
 .feature-panel.floating { position: fixed; }
+/* Panels controlled by an entry icon use viewport coordinates beneath that icon. */
+.anchored-panel { position: fixed !important; right: auto !important; bottom: auto !important; }
 .feature-panel.collapsed { width: auto; height: auto; max-height: none; padding-bottom: 12px; }
 .feature-panel.adjusting { user-select: none; -webkit-user-select: none; }
 .panel-heading { display: flex; align-items: center; gap: 8px; cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -407,6 +406,8 @@ body.layout-editing:has(.dragging) .layout-panel { opacity: .35; pointer-events:
 .timer-controls { flex-flow: row wrap; align-items: end; }
 /* Desk item picker shown while seated. */
 .map-state-choices { gap: 4px; }
+#variant-body { display: flex; flex-direction: column; gap: 10px; }
+#variant-body[hidden] { display: none; }
 .map-state-choices button[aria-pressed="true"]:disabled { opacity: 1; }
 
 /* Message board notes: own/admin notes get a trash button centred on the right. */

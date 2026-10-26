@@ -100,7 +100,8 @@ export class ChatAlerts {
     this.notificationSwitch.setAttribute('aria-checked', String(this.notificationEnabled));
     const supported = typeof Notification !== 'undefined';
     this.notificationSwitch.disabled = !supported;
-    if (!supported) this.status.textContent = '此浏览器不支持通知；消息音效仍可单独使用。';
-    else if (showDefaultStatus) this.status.textContent = '仅在标签页隐藏或浏览器窗口失焦时提醒其他人的新消息。';
+    if (!supported) this.status.textContent = '此浏览器不支持通知。';
+    else if (showDefaultStatus) this.status.textContent = '';
+    this.status.hidden = !this.status.textContent;
   }
 }

@@ -23,7 +23,6 @@ export function createInteractions(room: Room<SpaceProtocol>, presentations?: Pr
   if (native) registry
     .register('privateArea', new PrivateAreaInteraction(room))
     .register('wardrobe', new WardrobeInteraction(native.openWardrobe));
-  const dispatcher = new InteractionDispatcher(registry, element('zone-entries'));
-  if (native) registry.register('variantSelector', new VariantSelectorInteraction(room, native.world, claimed => dispatcher.setZoneSuspended(claimed)));
-  return dispatcher;
+  if (native) registry.register('variantSelector', new VariantSelectorInteraction(room, native.world));
+  return new InteractionDispatcher(registry, element('zone-entries'));
 }

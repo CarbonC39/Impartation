@@ -14,7 +14,7 @@ export class WardrobeInteraction implements InteractionHandler {
     this.button.addEventListener('click', () => { if (this.connected && this.current) open(); }, { signal: this.controller.signal });
   }
   setZone(zone: Zone | undefined) { this.current = zone; if (!zone) this.openPanel = false; this.panel.hidden = !zone || !this.openPanel; }
-  zoneEntries() { return this.current ? [{ id: 'wardrobe', label: '更衣处', icon: '♙', pressed: this.openPanel, disabled: !this.connected }] : []; }
+  zoneEntries() { return this.current ? [{ id: 'wardrobe', label: '更衣处', icon: '♙', panelId: 'wardrobe-panel', pressed: this.openPanel, disabled: !this.connected }] : []; }
   activateZoneEntry(id: string) {
     if (id !== 'wardrobe' || !this.current || !this.connected) return;
     this.openPanel = !this.openPanel;

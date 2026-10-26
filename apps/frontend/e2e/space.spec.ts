@@ -42,7 +42,7 @@ async function enter(page: Page, name: string, outfit = 'mint', prepare?: () => 
   }
   await page.locator('#join').click();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#game canvas')).toBeVisible();
   return account;
 }
@@ -163,7 +163,7 @@ test('a display name edited in the wardrobe is saved when entering a world', asy
   await page.locator('#name').fill('衣橱里改的名字');
   await page.locator('#join').click();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   const response = await page.request.get(new URL('/api/me', test.info().project.use.baseURL!).toString());
   const profile = await response.json() as { displayName: string; name: string };
   expect(profile.displayName ?? profile.name).toBe('衣橱里改的名字');
@@ -380,8 +380,10 @@ function visibleMicCount(page: Page): Promise<number> {
     .filter(child => child.name.startsWith('status:') && (child as Phaser.GameObjects.Container).visible &&
       Boolean(((child as Phaser.GameObjects.Container).getByName('mic') as Phaser.GameObjects.Image | null)?.visible)).length);
 }
-function sessionOf(page: Page) {
-  return page.locator('#status').textContent().then(text => text!.split(' · ').at(-1)!);
+async function sessionOf(page: Page): Promise<string> {
+  const sessionId = await page.locator('#status').getAttribute('data-session-id');
+  if (!sessionId) throw new Error('Connected session ID is missing');
+  return sessionId;
 }
 
 async function captureRenderedScene(page: Page) {
@@ -430,11 +432,11 @@ test('pre-join check opens the microphone once, enters muted, and shows a mic ov
   expect(await captures()).toBe(0);
   await page.locator('#prejoin-mic').click();
   await expect(page.locator('#prejoin-mic-options')).toBeVisible();
-  await expect(page.locator('#prejoin-status')).toContainText('对着麦克风说话');
+  await expect(page.locator('#prejoin-status')).toContainText('麦克风正常');
   await expect(page.locator('#prejoin-device option')).not.toHaveCount(0);
   await page.locator('#prejoin-muted').check();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#voice-status')).toContainText('语音已开启 · 麦克风已关');
   expect(await captures()).toBe(1);
 
@@ -467,7 +469,7 @@ test('camera zoom defaults to map tiles and settings apply integer zoom', async 
     if (new URL(request.url()).pathname === '/objects/seat.svg') seatVisualRequests.push(request.url());
   });
   await enter(page, 'E2ERender', 'mint', () => captureRenderedScene(page));
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const sessionId = await sessionOf(page);
   const renderState = () => page.evaluate(id => {
     const scene = (window as RenderingWindow).sceneUnderTest;
     if (!scene) return;
@@ -554,7 +556,7 @@ test('map zoom choice persists across visits', async ({ page }) => {
   await expect(page.locator('#account-status')).toContainText('@');
   await captureRenderedScene(page);
   await joinSavedProfile(page);
-  await expect(page.locator('#status')).toContainText('已进入空间', { timeout: 7_000 });
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected', { timeout: 7_000 });
   await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.cameras.main.zoom)).toBe(6);
 });
 
@@ -630,7 +632,7 @@ test('pagehide during SDK reconnection retires pending attempts before a fresh j
     await expect(page.locator('#connection-notice')).toBeHidden();
     await expect.poll(() => observer.state.players.has(previous), { timeout: 10_000 }).toBe(false);
     await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
-    await expect(page.locator('#status')).toContainText('已进入空间');
+    await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
     expect(await sessionOf(page)).not.toBe(previous);
     await page.waitForTimeout(600);
     await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
@@ -762,7 +764,7 @@ test('in-place static and animated sit use distinct action columns and movement 
     contentType: 'image/png', body: Buffer.from(sheet, 'base64'),
   }));
   await enter(page, 'E2EActions', 'mint', () => captureRenderedScene(page));
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const sessionId = await sessionOf(page);
   const observer = await observe();
   const player = () => observer.state.players.get(sessionId)!;
   const frame = () => page.evaluate(id => {
@@ -824,10 +826,22 @@ async function joinSavedProfile(page: Page) {
   await openAvatarScreen(page);
   await page.locator('#join').click();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#game canvas')).toBeVisible();
 }
 const zoneEntry = (page: Page, label: string) => page.locator('#zone-entries').getByRole('button', { name: label, exact: true });
+async function expectPanelBelowEntry(page: Page, panelId: string, label: string) {
+  await expect.poll(() => page.evaluate(({ targetPanel, entryLabel }) => {
+    const entry = [...document.querySelectorAll<HTMLButtonElement>('#zone-entries button')]
+      .find(button => button.getAttribute('aria-label') === entryLabel);
+    const panel = document.getElementById(targetPanel);
+    if (!entry || !panel || panel.hidden) return false;
+    const entryRect = entry.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const gap = panelRect.top - entryRect.bottom;
+    return gap >= 0 && gap <= 16 && Math.abs(panelRect.left - entryRect.left) <= 16;
+  }, { targetPanel: panelId, entryLabel: label })).toBe(true);
+}
 async function observe(spaceId = 'main'): Promise<Room<SpaceProtocol>> {
   const endpoint = test.info().project.use.baseURL!;
   const username = nextUsername();
@@ -845,7 +859,7 @@ async function observe(spaceId = 'main'): Promise<Room<SpaceProtocol>> {
 async function walkTo(page: Page, observer: Room<SpaceProtocol>, name: string, kind: 'board' | 'pomodoro') {
   const zoneId = kind === 'board' ? 'message-wall' : 'focus-corner';
   const direction = kind === 'board' ? 'd' : 'a';
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const sessionId = await sessionOf(page);
   await expect.poll(() => observer.state.players.get(sessionId)?.name).toBe(name);
   await page.bringToFront();
   await page.locator('#game canvas').scrollIntoViewIfNeeded();
@@ -872,7 +886,7 @@ const toolDirectory: WebTool[] = toolCases.map(({ resourceId }) => ({
 }));
 
 async function walkToTool(page: Page, observer: Room<SpaceProtocol>, target: typeof toolCases[number]) {
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const sessionId = await sessionOf(page);
   await expect.poll(() => observer.state.players.has(sessionId)).toBe(true);
   await expect(page.locator('#map-indicators')).toBeHidden();
   await page.bringToFront();
@@ -911,7 +925,7 @@ for (const target of toolCases) {
       await expect(popup).toHaveURL(url);
       expect(await popup.evaluate(() => window.opener === null)).toBe(true);
       expect(await popup.evaluate(() => document.referrer)).toBe('');
-      await expect(page.locator('#status')).toContainText('已进入空间');
+      await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
       await popup.close();
       await page.bringToFront();
       await page.locator('#game canvas').focus();
@@ -939,7 +953,7 @@ for (const scenario of [
       await expect(page.locator('#map-indicators #tool-status')).toHaveCount(0);
       await expect(page.locator('#map-indicators')).not.toContainText(scenario.message);
       await expect(zoneEntry(page, '网页工具')).toBeVisible();
-      await expect(page.locator('#status')).toContainText('已进入空间');
+      await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
       await page.locator('#leave').click();
       await expect(zoneEntry(page, '网页工具')).toBeHidden();
     } finally { if (observer.connection.isOpen) await observer.leave(); }
@@ -1037,7 +1051,7 @@ test('mobile seat activation renders the character and releases occupancy when w
   const observer = await observe();
   const button = page.locator('#action-list [data-action="sit"][data-animated="false"]');
   const canvas = page.locator('#game canvas');
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const sessionId = await sessionOf(page);
   const player = () => observer.state.players.get(sessionId)!;
   const seat = () => observer.state.worldObjects.get(player().mapId)?.objects.get('lobby-seat-1');
   const vertical = async (key: string, arrived: () => boolean) => {
@@ -1306,7 +1320,7 @@ test.describe('touch device', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await enter(page, 'E2ETouchControls');
     const observer = await observe();
-    const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const sessionId = await sessionOf(page);
     const player = () => observer.state.players.get(sessionId)!;
     let pointerDown = false;
     try {
@@ -1453,7 +1467,7 @@ test('a narrow desktop window hides the direction pad and keeps keyboard movemen
   await expect(page.locator('#touch-controls')).toBeHidden();
   const observer = await observe();
   try {
-    const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const sessionId = await sessionOf(page);
     await expect.poll(() => observer.state.players.has(sessionId)).toBe(true);
     const start = observer.state.players.get(sessionId)!.x;
     await page.keyboard.down('d');
@@ -1604,7 +1618,7 @@ test('embed presentation uses a sandboxed container and clears it when leaving',
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
     await page.locator('#tool-heading').click();
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('BODY');
-    const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const sessionId = await sessionOf(page);
     const startY = observer.state.players.get(sessionId)!.y;
     await page.keyboard.down('w');
     try {
@@ -1637,7 +1651,7 @@ test('embed stage seats people with the same tool open center-outward', async ({
   const second = await observe();
   try {
     await walkToTool(page, first, target);
-    const own = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+    const own = await sessionOf(page);
     await zoneEntry(page, '网页工具').click();
     const seats = page.locator('#tool-stage-seats .tool-stage-seat');
     const order = () => seats.evaluateAll(nodes => (nodes as HTMLElement[])
@@ -1728,7 +1742,7 @@ test('Portal switches rendered maps, loads multiple tilesets and preserves the c
   page.on('response', response => { if (response.ok() && response.url().includes('/api/maps/studio/assets/')) assets.add(response.url()); });
   await enter(page, 'E2ETraveler');
   const observer = await observe();
-  const sessionId = (await page.locator('#status').textContent())!.split(' · ').at(-1)!;
+  const sessionId = await sessionOf(page);
   try {
     await expect(page.locator('#game canvas')).toHaveAttribute('data-map-id', 'workspace');
     await page.locator('#game canvas').focus();
@@ -1798,7 +1812,7 @@ test('wardrobe previews items, keeps three named outfit slots and remembers disp
 
   await page.locator('#join').click();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#chat-card')).toHaveAttribute('data-mode', 'half');
   await page.locator('#settings-toggle').click();
   // The opacity slider takes any value and snaps to its 0/50/100 marks when released near them.
@@ -1833,7 +1847,12 @@ test('scene selectors render chosen tiles, private members control locks, and a 
     await expect.poll(() => player()?.name).toBe('SceneTypes');
     await move('s', () => player().y >= 449);
     await page.locator('#action-list [data-action="sit"][data-animated="false"]').click();
+    await expect(page.locator('#variant-selector-panel')).toBeHidden();
+    await expect(zoneEntry(page, '图块选择')).toHaveCount(1);
+    await expect(zoneEntry(page, '私密区域')).toBeVisible();
+    await zoneEntry(page, '图块选择').click();
     await expect(page.locator('#variant-selector-panel')).toBeVisible();
+    await expectPanelBelowEntry(page, 'variant-selector-panel', '图块选择');
     await expect(zoneEntry(page, '私密区域')).toBeVisible();
     await expect.poll(() => player().actionTargetId).toBe('20');
     await page.waitForTimeout(550);
@@ -1844,7 +1863,10 @@ test('scene selectors render chosen tiles, private members control locks, and a 
       return scene?.children.list.some(child => child instanceof Object && 'frame' in child &&
         (child as Phaser.GameObjects.Image).frame?.name === 'world-variant-19');
     })).toBe(true);
-    await page.locator('#variant-cancel').click(); await expect(page.locator('#variant-selector-panel')).toBeHidden();
+    await page.locator('#variant-selector-panel .panel-heading').dblclick();
+    await expectPanelBelowEntry(page, 'variant-selector-panel', '图块选择');
+    await move('s', () => player().actionTargetId === '');
+    await expect(page.locator('#variant-selector-panel')).toBeHidden();
     await expect(page.locator('#private-area-panel')).toBeHidden();
     await zoneEntry(page, '私密区域').click();
     await expect(page.locator('#private-area-panel')).toBeVisible();
@@ -1873,7 +1895,7 @@ test('scene selectors render chosen tiles, private members control locks, and a 
 });
 
 
-test('selector choices survive state patches, take priority over web areas, and visibly clear tiles', async ({ page, context }) => {
+test('selector choices coexist with web areas, survive state patches, and visibly clear tiles', async ({ page, context }) => {
   test.setTimeout(45000);
   await page.route('**/api/tools', route => route.fulfill({ json: [{
     resourceId: 'shared-canvas', url: 'https://tools.example/selector', mode: 'embed',
@@ -1894,6 +1916,12 @@ test('selector choices survive state patches, take priority over web areas, and 
   });
   const observer = await observe(); const sessionId = await sessionOf(page);
   const player = () => observer.state.players.get(sessionId)!;
+  const moveUntilActionReleased = async () => {
+    await page.locator('#game canvas').focus(); await page.keyboard.down('s');
+    try { await expect.poll(() => player().actionTargetId, { intervals: [10] }).toBe(''); }
+    finally { await page.keyboard.up('s'); }
+    await expect.poll(() => player().motion).toBe('idle');
+  };
   const targetPixel = () => page.evaluate(() => new Promise<number[]>((resolve, reject) => {
     const scene = (window as RenderingWindow).sceneUnderTest;
     if (!scene) { reject(new Error('Scene missing')); return; }
@@ -1904,6 +1932,8 @@ test('selector choices survive state patches, take priority over web areas, and 
       else reject(new Error('Expected pixel color'));
     });
   }));
+  // The fixture sample at (392, 440) is outside the private area and receives its 48% black overlay.
+  const outsideAreaPixel = (rgb: number[]) => rgb.map(channel => Math.round(channel * 133 / 255));
   try {
     await expect.poll(() => player()?.name).toBe('SelectorPixels');
     await page.locator('#game canvas').focus(); await page.keyboard.down('s');
@@ -1914,13 +1944,16 @@ test('selector choices survive state patches, take priority over web areas, and 
     await expect(page.locator('#tool-window iframe')).toBeVisible();
     // Submit the same UI intent through the scene's real connection while the window is open.
     await page.evaluate(async () => { await (window as RenderingWindow).sceneUnderTest!['room'].request('activateAction', { action: 'sit' }); });
-    await expect(page.locator('#tool-window')).toBeHidden();
-    await expect(zoneEntry(page, '网页工具')).toBeHidden();
+    await expect(page.locator('#tool-window')).toBeVisible();
+    await expect(zoneEntry(page, '网页工具')).toBeVisible();
+    await expect(zoneEntry(page, '图块选择')).toHaveCount(1);
+    await page.locator('#tool-close').click();
+    await zoneEntry(page, '图块选择').click();
     await expect(page.locator('#variant-selector-panel')).toBeVisible();
     await page.waitForTimeout(550);
     const empty = page.locator('#variant-choices [data-variant="empty"]');
     if (await empty.isEnabled()) await empty.click();
-    await expect.poll(targetPixel).toEqual([51, 102, 153]);
+    await expect.poll(targetPixel).toEqual(outsideAreaPixel([51, 102, 153]));
     await page.waitForTimeout(550);
     const book = page.locator('#variant-choices [data-variant="book"]');
     await book.hover(); await page.mouse.down();
@@ -1933,21 +1966,23 @@ test('selector choices survive state patches, take priority over web areas, and 
     }
     await page.mouse.up();
     await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variant).toBe('book');
-    await expect.poll(targetPixel).toEqual([34, 170, 85]);
+    await expect.poll(targetPixel).toEqual(outsideAreaPixel([34, 170, 85]));
     await page.waitForTimeout(550);
     await page.locator('#variant-choices [data-variant="computer"]').click();
-    await expect.poll(targetPixel).toEqual([238, 102, 51]);
+    await expect.poll(targetPixel).toEqual(outsideAreaPixel([238, 102, 51]));
     await page.waitForTimeout(550);
-    await page.evaluate(async () => {
-      await (window as RenderingWindow).sceneUnderTest!['room'].request('selectVariant', { selectorId: '20', variant: null });
-    });
+    await page.locator('#variant-clear').click();
     await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variantCleared).toBe(true);
-    expect(player().actionTargetId).toBe('20');
-    await expect.poll(targetPixel).toEqual([51, 102, 153]);
-    await page.locator('#variant-cancel').click();
+    await expect.poll(() => player().actionTargetId).toBe('20');
+    await expect(page.locator('#variant-selector-panel')).toBeVisible();
+    await expect(zoneEntry(page, '图块选择')).toHaveCount(1);
+    await expect(page.locator('#variant-clear')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#variant-clear')).toBeDisabled();
+    await expect.poll(targetPixel).toEqual(outsideAreaPixel([51, 102, 153]));
+    await moveUntilActionReleased();
     await expect(page.locator('#variant-selector-panel')).toBeHidden();
     await expect.poll(() => observer.state.worldObjects.get('workspace')?.objects.get('90')?.variantCleared).toBe(false);
-    await expect.poll(targetPixel).toEqual([136, 85, 204]);
+    await expect.poll(targetPixel).toEqual(outsideAreaPixel([136, 85, 204]));
     await expect(zoneEntry(page, '网页工具')).toBeVisible();
     await expect(page.locator('#tool-window')).toBeHidden();
   } finally { if (observer.connection.isOpen) await observer.leave(); }
@@ -1966,7 +2001,7 @@ test('Space tiles follow the registry and selecting a Space uses its own initial
   await page.locator('#world-list [data-world="other"]').click();
   await page.locator('#name').fill('OtherSpace');
   await page.locator('#join').click(); await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#map-world-name')).toHaveText('Other');
   const main = await observe('main');
   const identity = await page.request.get('/api/me');
@@ -2033,7 +2068,7 @@ test('Space occupancy is shown in the list and quick travel follows live map occ
   await page.locator('#name').fill('MapNavigation');
   await page.locator('#join').click();
   await page.locator('#prejoin-enter').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   const sessionId = await sessionOf(page);
   const observer = await observe();
   try {
@@ -2133,7 +2168,7 @@ test('server shutdown is shown as disconnected and a manual reconnect creates a 
   await expect(page.locator('#send')).toBeDisabled();
   await expect(page.locator('#connection-refresh')).toBeVisible();
   await page.locator('#reconnect').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#connection-notice')).toBeHidden();
   expect(await sessionOf(page)).not.toBe(previous);
   await page.locator('#message').fill('重连后可以聊天');
@@ -2172,7 +2207,7 @@ test('exhausted SDK reconnection stops with retry controls and never refreshes a
   expect(navigations).toBe(0);
   rejectConnections = false;
   await page.locator('#reconnect').click();
-  await expect(page.locator('#status')).toContainText('已进入空间');
+  await expect(page.locator('body')).toHaveAttribute('data-connection-state', 'connected');
   await expect(page.locator('#send')).toBeEnabled();
 });
 

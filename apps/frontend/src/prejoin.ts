@@ -21,7 +21,10 @@ export function mountPrejoin(elements: Elements, onEnter: (plan: VoicePlan) => v
   let generation = 0;
   let handedOver = false;
 
-  function setStatus(text: string) { elements.status.textContent = text; }
+  function setStatus(text: string) {
+    elements.status.textContent = text;
+    elements.status.hidden = !text;
+  }
   function setSwitch(on: boolean) {
     elements.micSwitch.setAttribute('aria-checked', String(on));
     elements.options.hidden = !on;
@@ -45,14 +48,14 @@ export function mountPrejoin(elements: Elements, onEnter: (plan: VoicePlan) => v
     const reason = microphoneUnavailableReason();
     if (reason) { setSwitch(false); setStatus(`无法使用麦克风：${reason}`); return; }
     const current = ++generation;
-    setStatus('正在请求麦克风…（也可以直接进入，进入后再开启）');
+    setStatus('正在请求麦克风…');
     try {
       const opened = await openMicrophone(deviceId);
       if (current !== generation) { opened.getTracks().forEach(track => track.stop()); return; }
       stream = opened;
       meter = new LevelMeter(opened);
       await fillMicrophoneSelect(elements.device, streamDevice(opened) || deviceId);
-      setStatus('对着麦克风说话，下面的条会跳动。');
+      setStatus('麦克风正常');
       drawLevel();
     } catch (error) {
       if (current !== generation) return;
@@ -65,7 +68,7 @@ export function mountPrejoin(elements: Elements, onEnter: (plan: VoicePlan) => v
     const on = elements.micSwitch.getAttribute('aria-checked') !== 'true';
     setSwitch(on);
     setJoinWithMicrophone(on);
-    if (on) void startPreview(); else { stopPreview(); setStatus('进入后可点右上角麦克风键随时开麦。'); }
+    if (on) void startPreview(); else { stopPreview(); setStatus(''); }
   });
   elements.device.addEventListener('change', () => {
     setPreferredMicrophone(elements.device.value);
@@ -96,7 +99,7 @@ export function mountPrejoin(elements: Elements, onEnter: (plan: VoicePlan) => v
       elements.muted.checked = joinMuted();
       const on = joinWithMicrophone();
       setSwitch(on);
-      setStatus(on ? '' : '附近语音只和同地图、距离较近的人通话；进入后也可以在设置里开关。');
+      setStatus('');
       elements.dialog.showModal();
       if (on) void startPreview();
       else void fillMicrophoneSelect(elements.device, preferredMicrophone());

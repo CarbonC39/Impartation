@@ -1,6 +1,6 @@
 import { InteractionRegistry, type Zone } from '@impartation/shared';
 
-export type ZoneEntry = { id: string; label: string; icon: string; pressed?: boolean; disabled?: boolean };
+export type ZoneEntry = { id: string; label: string; icon: string; panelId?: string; pressed?: boolean; disabled?: boolean };
 export interface InteractionHandler {
   setZone(zone: Zone | undefined): void;
   setConnected(value: boolean): void;
@@ -15,7 +15,6 @@ export class InteractionDispatcher implements InteractionHandler {
   private active?: InteractionHandler;
   private zone?: Zone;
   private connected = true;
-  private zoneSuspended = false;
   private buttons = new Map<string, { button: HTMLButtonElement; handler: InteractionHandler }>();
 
   constructor(private registry: InteractionRegistry<InteractionHandler>, private entries?: HTMLElement) {
@@ -45,6 +44,13 @@ export class InteractionDispatcher implements InteractionHandler {
       record.handler = handler;
       const button = record.button;
       button.textContent = entry.icon; button.title = entry.label; button.setAttribute('aria-label', entry.label);
+      if (entry.panelId) {
+        button.setAttribute('aria-controls', entry.panelId);
+        button.setAttribute('aria-expanded', String(entry.pressed ?? false));
+      } else {
+        button.removeAttribute('aria-controls');
+        button.removeAttribute('aria-expanded');
+      }
       button.setAttribute('aria-pressed', String(entry.pressed ?? false)); button.disabled = entry.disabled ?? false;
     }
   };
@@ -52,14 +58,7 @@ export class InteractionDispatcher implements InteractionHandler {
   setZone(zone: Zone | undefined) {
     if (this.zone === zone) return;
     this.zone = zone;
-    if (!this.zoneSuspended) this.presentZone(zone);
-    this.renderEntries();
-  }
-  /** A claimed point interaction temporarily owns presentation; retain the current area. */
-  setZoneSuspended(value: boolean) {
-    if (this.zoneSuspended === value) return;
-    this.zoneSuspended = value;
-    this.presentZone(value ? undefined : this.zone);
+    this.presentZone(zone);
     this.renderEntries();
   }
   private presentZone(zone: Zone | undefined) {

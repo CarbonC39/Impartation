@@ -47,7 +47,6 @@ export function mountAccounts(onProfile: (profile: Profile | undefined) => void)
     required<HTMLElement>('auth-forms').hidden = Boolean(profile) || !loginRoute || Boolean(resetToken);
     required<HTMLElement>('reset-password-panel').hidden = !resetToken || !loginRoute;
     required<HTMLElement>('welcome-grid').hidden = !profile || Boolean(resetToken);
-    required<HTMLElement>('key-hints').hidden = !profile || Boolean(resetToken);
     required<HTMLButtonElement>('open-admin').hidden = profile?.role !== 'admin';
     // The outfit preview belongs to an account; signed out it would only show the default look.
     required<HTMLElement>('welcome-outfit').hidden = !profile;

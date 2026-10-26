@@ -79,7 +79,7 @@ export class PrivateAreaInteraction implements InteractionHandler {
     const player = this.room.state.players.get(this.room.sessionId);
     const areas = player && this.room.state.privateAreas.get(player.mapId)?.areas;
     const member = [...(areas?.values() ?? [])].some(area => area.members.get(this.room.sessionId) === true);
-    return member ? [{ id: 'privateArea', label: '私密区域', icon: '▣', pressed: this.open, disabled: !this.connected }] : [];
+    return member ? [{ id: 'privateArea', label: '私密区域', icon: '▣', panelId: 'private-area-panel', pressed: this.open, disabled: !this.connected }] : [];
   }
   activateZoneEntry(id: string) { if (id !== 'privateArea' || !this.connected) return; this.open = !this.open; this.render(); }
   onZoneEntriesChanged(listener: () => void) { if (!this.disposed) this.entriesChanged = listener; }
