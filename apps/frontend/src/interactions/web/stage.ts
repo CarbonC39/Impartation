@@ -45,6 +45,7 @@ export class ToolStage {
   private visible = readPreference(VISIBLE_KEY) !== 'false';
   private open = false;
   private shown = '';
+  private zoneId = '';
   private seated = new Map<string, HTMLElement>();
   private status?: number;
   private readonly refresh = () => this.render();
@@ -82,7 +83,8 @@ export class ToolStage {
     this.sync();
   }
 
-  show() {
+  show(zoneId: string) {
+    this.zoneId = zoneId;
     this.open = true;
     this.shown = '';
     this.send(true);
@@ -129,8 +131,8 @@ export class ToolStage {
     const openedAt = (id: string) => players.get(id)?.webToolAt || (id === this.room.sessionId ? Number.MAX_SAFE_INTEGER : 0);
     const present: string[] = [this.room.sessionId];
     players.forEach((player, id) => {
-      if (id !== this.room.sessionId && player.connected && player.mapId === own.mapId && own.zoneId
-        && player.zoneId === own.zoneId && player.webToolZone === own.zoneId) present.push(id);
+      if (id !== this.room.sessionId && player.connected && player.mapId === own.mapId && this.zoneId
+        && player.webToolZone === this.zoneId) present.push(id);
     });
     present.sort((a, b) => openedAt(a) - openedAt(b) || a.localeCompare(b));
     const arrival = present.slice(0, SEATS);
@@ -176,7 +178,7 @@ export class ToolStage {
   }
 
   private send(open: boolean) {
-    if (this.room.connection.isOpen) this.room.send('webTool', { open });
+    if (this.room.connection.isOpen) this.room.send('webTool', { open, zoneId: this.zoneId });
   }
 
   private track(target: HTMLElement, update: (start: Rect, dx: number, dy: number) => void,

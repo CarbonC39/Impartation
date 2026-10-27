@@ -54,10 +54,13 @@ export function loadWorldRegistry(path: string) {
           throw new Error(`Variant target ${target.id} requires an atlas tile GID with bottom-left alignment: ${gid}`);
       }
       for (const zone of world.zones.filter(zone => zone.kind === 'attachment')) {
-        const gid = attachmentSource(zone).visualGid;
+        const source = attachmentSource(zone);
+        const gid = source.visualGid;
         if (gid === undefined) continue;
         const atlas = atlases.filter(set => set.firstgid <= gid).sort((a, b) => b.firstgid - a.firstgid)[0];
-        if (!atlas?.image || !atlas.tilecount || !atlas.tilewidth || !atlas.tileheight || gid >= atlas.firstgid + atlas.tilecount)
+        if (!atlas?.image || !atlas.tilecount || !atlas.tilewidth || !atlas.tileheight || gid >= atlas.firstgid + atlas.tilecount ||
+          (source.visualObjectId !== undefined && (atlas.tilewidth !== 16 || atlas.tileheight !== 16 ||
+            atlas.objectalignment !== undefined && !['unspecified', 'bottomleft'].includes(atlas.objectalignment))))
           throw new Error(`Attachment source ${zone.id} requires an atlas tile GID: ${gid}`);
       }
     }

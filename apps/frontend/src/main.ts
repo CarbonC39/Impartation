@@ -1,3 +1,4 @@
+import { currentZones } from '@impartation/shared';
 import Phaser from 'phaser';
 import { Client, CloseCode, type Room } from '@colyseus/sdk';
 import { ROOM_NAME, SPACE_REPLACED_CLOSE_CODE, DEFAULT_APPEARANCE, APPEARANCE_LAYERS, appearanceSchema, joinSchema, chatSchema, worldRegistryResponseSchema, validateWorldRegistry, spaceJoinSchema, type WorldRegistry, type MapCollection, type SpaceProtocol, type JoinOptions, type Occupancy, type InteractionResult } from '@impartation/shared';
@@ -863,10 +864,10 @@ async function renderWorld(mapId: string, activeRoom: Room<SpaceProtocol>) {
     await destroyScene();
     if (generation !== renderGeneration || room !== activeRoom) return;
     scene = new SpaceScene(activeRoom, entry, renderMap, {
-      zoneChanged: id => {
+      zoneChanged: () => {
         if (generation !== renderGeneration || room !== activeRoom) return;
-        const current = entry.world.zones.find(item => item.id === id);
-        interactions?.setZone(current);
+        const player = activeRoom.state.players.get(activeRoom.sessionId);
+        interactions?.setZones(player?.mapId === entry.id ? currentZones(entry.world, player) : []);
       },
       activate: () => { void actions?.activate(); },
       connected: () => connected && !travelPending && !renderingMap && renderedMap === activeRoom.state.players.get(activeRoom.sessionId)?.mapId,

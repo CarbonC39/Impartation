@@ -101,7 +101,9 @@ test('chat trims whitespace, allows 500 characters and keeps markup as plain tex
   assert.equal(typingSchema.safeParse({ typing: 1 }).success, false);
   assert.equal(typingSchema.safeParse({ typing: true, sessionId: 'forged' }).success, false);
   assert.deepEqual(webToolOpenSchema.parse({ open: true }), { open: true });
-  assert.equal(webToolOpenSchema.safeParse({ open: true, zoneId: 'forged' }).success, false);
+  assert.deepEqual(webToolOpenSchema.parse({ open: true, zoneId: 'second-tool' }), { open: true, zoneId: 'second-tool' });
+  assert.equal(webToolOpenSchema.safeParse({ open: true, zoneId: '' }).success, false);
+  assert.equal(webToolOpenSchema.safeParse({ open: true, sessionId: 'forged' }).success, false);
   assert.equal(chatSchema.parse({ text: 'x'.repeat(500) }).text.length, 500);
 });
 for (const [name, value] of [

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currentZone, portalPropertiesSchema, quickTravelSchema, type QuickTravelInput, type Point,
+import { currentZone, currentZones, portalPropertiesSchema, quickTravelSchema, type QuickTravelInput, type Point,
   type InteractionResult, type RegisteredMap } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 import type { PrivateAreaAccess } from '../privateArea/handler.js';
@@ -32,7 +32,7 @@ export function createPortalInteraction(context: InteractionContext & {
         if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
         const player = context.state.players.get(client.sessionId);
         const map = player && context.maps.get(player.mapId);
-        const zone = map && player && currentZone(map.world, player);
+        const zone = map && player && currentZones(map.world, player).find(zone => zone.kind === 'Portal' && zone.id === zoneId);
         if (!player?.connected || zone?.id !== zoneId || zone.kind !== 'Portal') return { ok: false, message: '请先走进对应传送区' };
         const error = context.check(client, 'Portal', zone.resourceId);
         if (error) return { ok: false, message: error };

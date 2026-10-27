@@ -34,7 +34,7 @@ export class WebToolInteraction {
     try {
       if (mode === 'embed') {
         this.window.open(zoneLabels[zone.kind] ?? zone.kind, () => this.close());
-        this.stage?.show();
+        this.stage?.show(zone.id);
       }
       this.cleanupPresentation = this.presentations.open(tool, this.window.screen, this.window.links);
       this.embeddedOpen = mode === 'embed';

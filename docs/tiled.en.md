@@ -95,9 +95,27 @@ An `attachment` area uses its name as the source ID. The `mode` and `attachmentI
 | `single-unique` | One | Only one player can hold it from this map source at a time |
 | `multiple-unlimited-random` | Two or more | Randomly selects one each time |
 
-Attachments must use IDs registered by the project. To hide a map tile while a unique attachment is taken, set integer properties `visualGid`, `visualX`, and `visualY` on the source object and remove the corresponding tile from the static tile layer. X/Y are map pixel coordinates aligned to the 16-pixel grid; all three properties are required together.
+Attachments must use IDs registered by the project. For a tile that disappears when taken, use a native Tiled tile object:
+
+1. Insert a tile on a decorative object layer such as `attachment-visuals`, then drag it into position.
+2. Add an **object** property named `visualObjectId` to the attachment source area and select that tile object with Tiled's object picker.
+3. Use an upright, unflipped 16×16 atlas tile. Positions need not align to the grid; group and object-layer offsets are supported. Each visual belongs to one source and cannot also be a variant target.
+
+Do not also provide manual GID/X/Y properties or duplicate the visual on a static tile layer. Tiled supplies the global GID and bottom-left position; the project converts that position for rendering. Move the referenced tile object to reposition the source visual.
+
+Legacy maps may continue using manual properties. To hide a map tile while a unique attachment is taken, set integer properties `visualGid`, `visualX`, and `visualY` on the source object and remove the corresponding tile from the static tile layer. X/Y are map pixel coordinates aligned to the 16-pixel grid; all three properties are required together. Coordinates identify the top-left corner starting at `(0, 0)`; column 6, row 4 is `(80, 48)`. `visualGid` is the map-global GID, calculated as `tileset.firstgid + Tiled local tile ID`, rather than the local ID. Each tileset has its own `firstgid`.
 
 ## Rendering and validation
+
+Optional boolean tile-layer properties:
+
+| Property | Effect |
+| --- | --- |
+| Neither | Ground behind players; ordinary layers retain Tiled order |
+| `ySort = true` | Sort each row's bottom Y against player feet; equal-Y tile rows retain Tiled layer order |
+| `abovePlayers = true` | Always above players; do not also enable `ySort` |
+
+Layer names such as `top` and `y-sort` have no special meaning. These rendering groups take precedence over cross-group Tiled stacking. The `spawns` layer position does not define player depth. Body, clothing, hair, and attachments share a single depth so tiles cannot render between character parts.
 
 The project supports atlas tilesets, regular tile layers, and grouped tile layers. External JSON tilesets (`.tsj`) can be used with a map. XML tilesets (`.tsx`), image-collection tilesets, image layers, and generic tile objects have no map rendering path. Use atlas tilesets and check map appearance and resource paths in the target browser.
 

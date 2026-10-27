@@ -561,3 +561,27 @@ test('runtime capacity applies to every Space and concurrent joins never create 
   assert.equal((await matchMaker.query({ name: 'space' })).length, 2);
   assert.equal(roomFor(joined[0]).state.players.size, 3);
 });
+
+
+test('overlapping areas authorize the requested source and resource independently', async () => {
+  const alice = await connect('Alice');
+  const room = roomFor(alice);
+  const player = room.state.players.get(alice.sessionId)!;
+  const world = worlds.get('home')!.world;
+  const original = world.zones.slice();
+  const drink = world.zones.find(zone => zone.id === 'drink')!;
+  try {
+    world.zones.unshift({ ...drink, id: 'blocking-tool', kind: 'web', resourceId: 'tool-a', properties: {} });
+    world.zones.push({ ...drink, id: 'overlapping-tool', kind: 'web', resourceId: 'tool-b', properties: {} });
+    player.x = 40; player.y = 104;
+    assert.equal((await alice.request('takeAttachment', { sourceId: 'drink' })).ok, true);
+    alice.send('webTool', { open: true, zoneId: 'overlapping-tool' });
+    await until(() => player.webToolZone === 'overlapping-tool');
+    await delay(1100);
+    assert.equal(player.webToolZone, 'overlapping-tool', 'presence survives the primary context belonging to another zone');
+    alice.send('webTool', { open: true, zoneId: 'missing-tool' });
+    await until(() => player.webToolZone === '');
+    player.x = 120;
+    assert.equal((await alice.request('takeAttachment', { sourceId: 'drink' })).ok, false);
+  } finally { world.zones.splice(0, world.zones.length, ...original); }
+});

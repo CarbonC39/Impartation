@@ -23,7 +23,7 @@ export class PanelAnchor {
     this.observer.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
     const topbar = panel.ownerDocument.querySelector('.map-topbar');
     if (topbar) this.observer.observe(topbar, {
-      attributes: true, attributeFilter: ['hidden', 'class', 'style', 'aria-controls'],
+      attributes: true, attributeFilter: ['hidden', 'class', 'style', 'aria-controls', 'aria-expanded'],
       childList: true, characterData: true, subtree: true,
     });
     window.addEventListener('resize', () => this.schedule());
@@ -40,17 +40,19 @@ export class PanelAnchor {
     const anchor = this.findAnchor();
     if (!anchor) return false;
     const anchorRect = anchor.getBoundingClientRect();
+    const toolbarBottom = anchor.closest('.map-topbar')?.getBoundingClientRect().bottom ?? anchorRect.bottom;
     this.panel.classList.add('anchored-panel');
     this.panel.style.left = `${Math.round(anchorRect.left)}px`;
-    this.panel.style.top = `${Math.round(anchorRect.bottom + ANCHOR_GAP)}px`;
+    this.panel.style.top = `${Math.round(Math.max(anchorRect.bottom, toolbarBottom) + ANCHOR_GAP)}px`;
     this.clamp();
     return true;
   }
 
   private findAnchor(): HTMLElement | undefined {
     if (!this.panel.id) return undefined;
-    return [...document.querySelectorAll<HTMLElement>('[aria-controls]')]
-      .find(candidate => candidate.getAttribute('aria-controls')?.split(/\s+/).includes(this.panel.id));
+    const candidates = [...document.querySelectorAll<HTMLElement>('[aria-controls]')]
+      .filter(candidate => candidate.getAttribute('aria-controls')?.split(/\s+/).includes(this.panel.id));
+    return candidates.find(candidate => candidate.getAttribute('aria-expanded') === 'true') ?? candidates[0];
   }
 
   private schedule() {

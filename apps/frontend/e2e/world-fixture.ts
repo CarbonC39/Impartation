@@ -28,8 +28,11 @@ export function createWorldFixture(): string {
       properties: properties({ resourceId: 'shared-canvas' }) },
     { id: 30, name: 'quiet-room', class: 'privateArea', x: 256, y: 432, width: 128, height: 64 },
     { id: 31, name: 'mirror', class: 'wardrobe', x: 320, y: 432, width: 32, height: 32 },
+    { id: 191, name: 'native-crown', class: 'attachment', x: 432, y: 352, width: 16, height: 16,
+      properties: properties({ mode: 'single-unique', attachmentIds: 'party-crown', visualObjectId: 190 }) },
   );
   map.layers.push({ name: 'variant-decor', type: 'objectgroup', objects: [
+    { id: 190, name: 'source-visual', gid: 10, x: 432, y: 368, width: 16, height: 16 },
     { id: 90, name: 'sofa-item', gid: 8, x: 384, y: 448, width: 16, height: 16,
       properties: properties({ 'variant.computer': 6, 'variant.book': 18, 'variant.drawing-board': 31, 'variant.empty': -1 }) },
   ] });

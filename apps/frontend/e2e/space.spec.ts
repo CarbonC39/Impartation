@@ -832,7 +832,7 @@ async function joinSavedProfile(page: Page) {
 const zoneEntry = (page: Page, label: string) => page.locator('#zone-entries').getByRole('button', { name: label, exact: true });
 async function expectPanelBelowEntry(page: Page, panelId: string, label: string) {
   await expect.poll(() => page.evaluate(({ targetPanel, entryLabel }) => {
-    const entry = [...document.querySelectorAll<HTMLButtonElement>('#zone-entries button')]
+    const entry = Array.from(document.querySelectorAll<HTMLButtonElement>('#zone-entries button'))
       .find(button => button.getAttribute('aria-label') === entryLabel);
     const panel = document.getElementById(targetPanel);
     if (!entry || !panel || panel.hidden) return false;

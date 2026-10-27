@@ -95,9 +95,27 @@ Portal 的 `targetMap` 必须是当前 Space 可用地图的 ID，`targetSpawn` 
 | `single-unique` | 一个 | 同一地图来源同时仅一人持有 |
 | `multiple-unlimited-random` | 两个或更多 | 每次随机取用一个 |
 
-附件需使用项目已登记的 ID。若唯一来源的附件被取走时还要隐藏地图图块，在来源对象上配置整数属性 `visualGid`、`visualX`、`visualY`，并将对应图块从静态瓦片层移除。X/Y 是地图像素坐标，需对齐 16 像素网格；三个属性须同时填写。
+附件需使用项目已登记的 ID。需要可取走的地图图块时，推荐使用 Tiled 原生图块对象：
+
+1. 在普通对象层（例如 `attachment-visuals`）选择“插入图块”，选中图块并直接拖动到地图上的目标位置。
+2. 在 `attachment` 来源区域上新增 **object 类型**属性 `visualObjectId`，用 Tiled 的对象选择器选中刚放置的图块对象。
+3. 图块对象当前只支持未旋转、未翻转的 16×16 atlas 图块；位置可以不对齐网格，支持对象层和 group 的偏移。每个图块对象只归一个来源所有，不可同时作为家具选择目标。
+
+不需要另填 GID、X 或 Y，也不要把同一图块重复绘制到静态瓦片层。Tiled 保存图块对象的位置和全局 GID，项目会处理其左下角原点与渲染坐标的转换。`crown-east`、`crown-west` 使用这种方式；移动对应图块对象即可调整显示位置。
+
+旧地图也可继续手动配置：若唯一来源的附件被取走时还要隐藏地图图块，在来源对象上配置整数属性 `visualGid`、`visualX`、`visualY`，并将对应图块从静态瓦片层移除。X/Y 是地图像素坐标，需对齐 16 像素网格；三个属性须同时填写。坐标指目标图块左上角，从 `(0, 0)` 开始，例：第 6 列、第 4 行是 `(80, 48)`。`visualGid` 是地图中的全局 GID：`tileset.firstgid + Tiled 图块本地 ID`，不是本地 ID；多个 tileset 各自使用自己的 `firstgid`。
 
 ## 渲染与验收
+
+瓦片层的可选布尔属性：
+
+| 属性 | 效果 |
+| --- | --- |
+| 无 | 地面层，在人物后方；普通层之间遵循 Tiled 图层顺序 |
+| `ySort = true` | 按每行底边 Y 与人物脚底 Y 排序；相同 Y 的瓦片行按 Tiled 图层顺序叠放 |
+| `abovePlayers = true` | 始终在人物前方；此层不要同时设置 `ySort` |
+
+`top`、`y-sort` 等图层名称没有特殊含义。排序按以上用途分组，不保证跨组遵循 Tiled 中的图层堆叠；`spawns` 的图层位置只影响编辑器显示，不定义人物层级。人物的身体、衣服、头发和附件作为同一深度绘制，图块不会插入其部件之间。
 
 本项目支持 atlas tileset、普通瓦片层和分组瓦片层；外置 JSON tileset（`.tsj`）可与地图一起使用。XML tileset（`.tsx`）、image collection tileset、image layer 和通用 tile object 没有对应的地图渲染路径。请使用 atlas tileset，并在目标浏览器验收地图外观和资源路径。
 

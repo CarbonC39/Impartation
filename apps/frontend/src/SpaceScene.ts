@@ -116,9 +116,9 @@ export class SpaceScene extends Phaser.Scene {
       if (zone.kind !== 'attachment') continue;
       const { visualGid, visualX, visualY } = attachmentSource(zone);
       if (visualGid === undefined || visualX === undefined || visualY === undefined) continue;
-      const visual = map.createBlankLayer(`__attachment_${zone.id}`, tiles, 0, 0, map.width, map.height);
+      const visual = map.createBlankLayer(`__attachment_${zone.id}`, tiles, visualX, visualY, 1, 1);
       if (!visual) throw new Error(`Unable to render attachment source: ${zone.id}`);
-      visual.putTileAt(visualGid, visualX / map.tileWidth, visualY / map.tileHeight);
+      visual.putTileAt(visualGid, 0, 0);
       visual.setDepth(0.01);
       trackCanvasAnimations(visual);
       this.attachmentSourceLayers.set(zone.id, visual);
@@ -199,20 +199,19 @@ export class SpaceScene extends Phaser.Scene {
       const frame = characterFrame(player.avatar, facing, motion, action, player.actionAnimated, sprite.elapsed);
       const renderedFrame = this.textures.get(APPEARANCE_ASSETS.body[0]).has(String(frame)) ? frame : avatar.idle[facing];
       const appearance = characterAppearance(player.appearance);
+      // Keep the character indivisible relative to map tiles; stable display order stacks its parts.
       for (const [index, layer] of APPEARANCE_LAYERS.entries()) {
         const part = appearance[layer];
-        const layerSprite = sprite.layers[index]!;
+        const layerSprite = sprite.layers[index]!.setDepth(sprite.sprite.y);
         if (part.assetId === 'none') { layerSprite.setVisible(false); continue; }
         layerSprite.setVisible(true).setTexture(part.assetId, renderedFrame).setTint(tintNumber(part.color))
-          .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
-          .setDepth(sprite.sprite.y + index * 0.001);
+          .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35);
       }
       const attachmentId = player.attachmentId as AttachmentId;
       const asset = ATTACHMENTS[attachmentId];
-      sprite.attachment.setVisible(Boolean(asset));
+      sprite.attachment.setVisible(Boolean(asset)).setDepth(sprite.sprite.y);
       if (asset) sprite.attachment.setTexture(`attachment:${attachmentId}`, renderedFrame)
-        .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35)
-        .setDepth(sprite.sprite.y + APPEARANCE_LAYERS.length * 0.001);
+        .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35);
       sprite.status.update(sprite.sprite.x, sprite.sprite.y + 1, sprite.sprite.y - avatar.groundAnchor.y - 1, {
         name: player.name, nameVisible: namesVisible, connected: player.connected,
         bubble: this.bubbles.get(id)?.text,

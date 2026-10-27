@@ -39,7 +39,7 @@ export const chatSchema = z.object({ text: z.string().trim().min(1).max(500) });
 /** Typing indicator: the client refreshes `true` while composing; the server clears it after this long without a refresh. */
 export const typingSchema = z.object({ typing: z.boolean() }).strict();
 /** Embedded web tool presence: the server records the sender's current web zone and when it was opened, and clears both when they leave. */
-export const webToolOpenSchema = z.object({ open: z.boolean() }).strict();
+export const webToolOpenSchema = z.object({ open: z.boolean(), zoneId: z.string().trim().min(1).max(128).optional() }).strict();
 export const TYPING_TIMEOUT_MS = 8000;
 export type MovementInput = z.infer<typeof inputSchema>;
 export type JoinOptions = z.infer<typeof joinSchema>;

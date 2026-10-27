@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AttachmentSourceState, attachmentSource, attachmentSourceKey, currentZone, takeAttachmentSchema,
+import { AttachmentSourceState, attachmentSource, attachmentSourceKey, currentZones, takeAttachmentSchema,
   type InteractionResult, type Player, type RegisteredMap, type TakeAttachmentInput } from '@impartation/shared';
 import type { InteractionContext, SpaceClient } from '../context.js';
 
@@ -27,7 +27,7 @@ export function createAttachmentInteraction(context: InteractionContext & { maps
           if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
           const player = context.state.players.get(client.sessionId);
           const map = player && context.maps.get(player.mapId);
-          const zone = player && map && currentZone(map.world, player);
+          const zone = player && map && currentZones(map.world, player).find(zone => zone.kind === 'attachment' && zone.id === sourceId);
           if (!player?.connected || !zone || zone.id !== sourceId || zone.kind !== 'attachment')
             return { ok: false, message: '请先走进对应附件区' };
           const error = context.check(client, 'attachment', zone.resourceId);

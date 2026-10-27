@@ -187,3 +187,26 @@ test('semantic properties reject duplicate keys, invalid shapes, and invalid war
     { name: 'variant.book', value: 102 }, { name: 'variant.drawing-board', value: 103 },
   ] }]), /Duplicate target property/);
 });
+
+
+test('attachment visual references use native tile-object GIDs and bottom-left coordinates, including group offsets', () => {
+  const source: TiledObject = { id: 50, name: 'native-source', class: 'attachment', x: 32, y: 32, width: 32, height: 32,
+    properties: properties({ mode: 'single-unique', attachmentIds: 'party-crown', visualObjectId: 90 }) };
+  const tile = { id: 90, name: 'crown', gid: 82, x: 64.5, y: 96.5, width: 16, height: 16 };
+  const map = makeMap([source]);
+  map.layers.push({ name: 'decoration', type: 'group', offsetx: 16, offsety: 8, layers: [
+    { name: 'source-visuals', type: 'objectgroup', objects: [tile] },
+  ] });
+  const zone = parseWorldMap(map).zones[0]!;
+  assert.equal(zone.properties.visualObjectId, 90);
+  assert.equal(zone.properties.visualGid, 82);
+  assert.equal(zone.properties.visualX, 80.5);
+  assert.equal(zone.properties.visualY, 88.5);
+  assert.throws(() => parse([source]), /./, 'missing object rejected');
+  assert.throws(() => parse([source], [{ ...tile, width: 32 }]));
+  assert.throws(() => parse([source], [{ ...tile, gid: 0x80000052 }]));
+  assert.throws(() => parse([source], [{ ...tile, y: 8 }]));
+  assert.throws(() => parse([{ ...source, properties: properties({ mode: 'single-unique', attachmentIds: 'party-crown',
+    visualObjectId: 90, visualGid: 82, visualX: 64, visualY: 80 }) }], [tile]), /cannot be combined/);
+  assert.throws(() => parse([source, { ...source, id: 51, name: 'duplicate-owner' }], [tile]), /own decorative/);
+});

@@ -201,6 +201,27 @@ export function parseWorldMap(raw: unknown, definitions = interactionDefinitions
     variantTargets.push({ id: String(target.id), x: target.x, y: target.gid === undefined ? target.y : target.y - target.height,
       width: target.width, height: target.height, gid: target.gid ?? 0, variants });
   }
+  const visualOwners = new Set(selectors.map(selector => selector.targetObjectId));
+  for (const zone of zones.filter(zone => zone.kind === 'attachment')) {
+    const source = attachmentSourcePropertiesSchema.parse(zone.properties);
+    if (source.visualObjectId === undefined) continue;
+    const id = String(source.visualObjectId);
+    if (source.visualGid !== undefined || source.visualX !== undefined || source.visualY !== undefined)
+      throw new Error('Attachment visualObjectId cannot be combined with manual visual coordinates');
+    if (visualOwners.has(id) || ids.has(id) || duplicateObjectIds.has(source.visualObjectId))
+      throw new Error('Attachment visual must reference its own decorative tile object');
+    visualOwners.add(id);
+    const target = z.object({ id: tiledIdSchema, gid: gidSchema.positive(),
+      x: z.number().finite(), y: z.number().finite(), width: z.literal(TILE_SIZE), height: z.literal(TILE_SIZE),
+      rotation: z.literal(0).default(0),
+    }).passthrough().parse(authoredObjects.get(source.visualObjectId));
+    for (const shape of ['point', 'ellipse', 'polygon', 'polyline', 'template']) {
+      if (target[shape] !== undefined && target[shape] !== false) throw new Error('Attachment visual must be an upright tile object');
+    }
+    // Orthogonal Tiled tile objects use a bottom-left origin; the renderer uses top-left pixels.
+    zone.properties = { ...zone.properties, visualGid: target.gid, visualX: target.x, visualY: target.y - target.height };
+    attachmentSourcePropertiesSchema.parse(zone.properties);
+  }
   const privateAreas = zones.filter(zone => zone.kind === 'privateArea');
   for (const [index, area] of privateAreas.entries()) for (const other of privateAreas.slice(index + 1)) {
     if (areasOverlap(area, other))
@@ -355,7 +376,12 @@ export const worldRegistryResponseSchema = z.object({
   })).min(1),
 });
 
-/** Interaction precedence is explicit; private context is computed independently. */
+/** All containing areas remain independently available, including overlapping interactions. */
+export function currentZones(map: WorldMap, position: Point): Zone[] {
+  return map.zones.filter(zone => contains(zone, position.x, position.y));
+}
+
+/** Legacy primary context; authorization must check the requested interaction among currentZones. */
 export function currentZone(map: WorldMap, position: Point): Zone | undefined {
   return map.zones.find(zone => zone.kind !== 'privateArea' && contains(zone, position.x, position.y)) ??
     map.zones.find(zone => zone.kind === 'privateArea' && contains(zone, position.x, position.y));

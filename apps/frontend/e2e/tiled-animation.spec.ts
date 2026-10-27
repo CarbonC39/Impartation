@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type Phaser from 'phaser';
+import type { WorldRegistry } from '@impartation/shared';
 import type { SpaceScene } from '../src/SpaceScene';
 
 const PASSWORD = 'e2e-workspace-password';
@@ -37,6 +38,17 @@ async function installAnimationMap(page: Page) {
     return canvas.toDataURL('image/png').split(',')[1]!;
   });
 
+  await page.route('**/api/world', async route => {
+    const response = await route.fetch();
+    const registry = await response.json() as WorldRegistry;
+    const world = registry.maps.find(map => map.id === 'workspace')!.world;
+    // Keep the variant probe inside the private-area mask's clear region.
+    const privateArea = world.zones.find(zone => zone.id === '30')!;
+    privateArea.width = 160;
+    world.zones.push(...['overlap-a', 'overlap-b'].map(id => ({ id, kind: 'board', resourceId: id, properties: {}, x: 336, y: 368, width: 32, height: 32 })),
+      { id: 'overlap-wardrobe', kind: 'wardrobe', resourceId: '', properties: {}, x: 336, y: 368, width: 32, height: 32 });
+    await route.fulfill({ response, json: registry });
+  });
   await page.route('**/api/maps/workspace/map.json', async route => {
     const response = await route.fetch();
     const map = await response.json() as RenderMap;
@@ -54,7 +66,7 @@ async function installAnimationMap(page: Page) {
     map.layers.push(
       makeLayer('sorted-probe', [{ name: 'ySort', type: 'bool', value: true }], [{ x: 18, y: 24, gid: 7 }]),
       makeLayer('above-players-probe', [{ name: 'abovePlayers', type: 'bool', value: true }], [{ x: 19, y: 24, gid: 7 }]),
-      makeLayer('animated-probe', [], [{ x: 30, y: 18, gid: 7 }]),
+      makeLayer('animated-probe', [], [{ x: 30, y: 18, gid: 7 }, { x: 28, y: 22, gid: 10 }]),
     );
     const tileset = map.tilesets[0];
     if (!tileset) throw new Error('Expected one atlas tileset');
@@ -128,8 +140,8 @@ async function expectBothAnimationFrames(page: Page, point: { x: number; y: numb
     seen.add(await pixelAtWorld(page, point.x, point.y));
     await page.waitForTimeout(25);
   }
-  expect(seen.has(colors[0])).toBe(true);
-  expect(seen.has(colors[1])).toBe(true);
+  expect([...seen]).toContain(colors[0]);
+  expect([...seen]).toContain(colors[1]);
 }
 
 async function expectLayerOrdering(page: Page) {
@@ -179,6 +191,17 @@ for (const renderer of ['WebGL', 'Canvas'] as const) {
     await expect.poll(() => page.evaluate(() => (window as RenderingWindow).sceneUnderTest?.game.renderer.type))
       .toBe(renderer === 'Canvas' ? 1 : 2);
 
+    const entries = page.locator('#zone-entries');
+    await entries.getByRole('button', { name: '留言板 · overlap-b', exact: true }).click();
+    await expect(page.locator('#board-panel')).toBeVisible();
+    await expect(entries.getByRole('button', { name: '留言板 · overlap-b', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await entries.getByRole('button', { name: '留言板 · overlap-a', exact: true }).click();
+    await expect(page.locator('#board-panel')).toBeVisible();
+    await expect(entries.getByRole('button', { name: '留言板 · overlap-b', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await entries.getByRole('button', { name: '留言板 · overlap-a', exact: true }).click();
+    await expect(page.locator('#board-panel')).toBeHidden();
+    await expect(entries.getByRole('button', { name: '更衣处', exact: true })).toBeVisible();
+
     // The fixture intentionally uses unequal frame durations for both layer and object animations.
     const frameDurations = await page.evaluate(() => {
       const scene = (window as RenderingWindow).sceneUnderTest;
@@ -192,6 +215,16 @@ for (const renderer of ['WebGL', 'Canvas'] as const) {
     });
     expect(frameDurations).toEqual([[90, 270], [120, 360]]);
     await expectLayerOrdering(page);
+    // Attachment pixels must match the same global GID on a static layer, at zero-based pixel coordinates.
+    expect(await pixelAtWorld(page, 440, 360)).toBe('194,29,55');
+    expect(await pixelAtWorld(page, 456, 360)).toBe('194,29,55');
+    expect(await pixelAtWorld(page, 424, 344)).toBe('73,73,73');
+    const partDepths = await page.evaluate(() => {
+      const scene = (window as RenderingWindow).sceneUnderTest!;
+      const visual = scene['sprites'].get(scene['room'].sessionId)!;
+      return [...visual.layers, visual.attachment].map(part => part.depth);
+    });
+    expect(new Set(partDepths).size).toBe(1);
     await expectBothAnimationFrames(page, { x: 488, y: 296 }, ['223,36,115', '34,68,238']);
     await expectBothAnimationFrames(page, { x: 296, y: 392 }, ['223,36,115', '34,68,238']);
     await expectBothAnimationFrames(page, { x: 312, y: 392 }, ['223,36,115', '34,68,238']);

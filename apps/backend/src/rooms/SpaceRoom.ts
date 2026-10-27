@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Room, validate, CloseCode, ServerError, type AuthContext } from '@colyseus/core';
 import { WebSocketClient } from '@colyseus/ws-transport';
-import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone,
+import { SpaceState, Player, spaceJoinSchema, spaceIdSchema, inputSchema, chatSchema, typingSchema, webToolOpenSchema, TYPING_TIMEOUT_MS, stepMovement, currentZone, currentZones,
   TICK_MS, SPACE_REPLACED_CLOSE_CODE, canReceive, movementFacing, facingSchema, voiceEnabledSchema, voiceOfferSchema, voiceAnswerSchema,
   voiceIceCandidateSchema, voiceEndSchema, type VoiceOffer, type VoiceAnswer, type VoiceIceCandidate, type VoiceEnd,
   type Occupancy, type SpaceJoinOptions, type WorldMap, type RegisteredMap, type MovementInput, type ChatMessage, type Zone } from '@impartation/shared';
@@ -198,11 +198,11 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       if (!await this.authorize(client)) return;
       this.setTyping(client.sessionId, typing);
     }),
-    webTool: validate(webToolOpenSchema, async (client: SpaceClient, { open }: { open: boolean }) => {
+    webTool: validate(webToolOpenSchema, async (client: SpaceClient, { open, zoneId }: { open: boolean; zoneId?: string }) => {
       if (!await this.authorize(client)) return;
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      const zone = currentZone(this.maps.get(player.mapId)!.world, player);
+      const zone = currentZones(this.maps.get(player.mapId)!.world, player).find(zone => zone.kind === 'web' && (!zoneId || zone.id === zoneId));
       this.setWebTool(player, open && player.connected && zone?.kind === 'web' ? zone.id : '');
     }),
     voiceEnabled: validate(voiceEnabledSchema, async (client: SpaceClient, input: { enabled: boolean }) => {
@@ -241,6 +241,10 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
     player.webToolZone = zoneId;
     player.webToolAt = zoneId ? Date.now() : 0;
   }
+  private refreshWebTool(player: Player) {
+    if (player.webToolZone && !currentZones(this.maps.get(player.mapId)!.world, player)
+      .some(zone => zone.kind === 'web' && zone.id === player.webToolZone)) this.setWebTool(player, '');
+  }
   /** Typing is only an expiring hint: chat, disconnect, leave or silence clears it. */
   private setTyping(sessionId: string, typing: boolean) {
     const player = this.state.players.get(sessionId);
@@ -252,8 +256,8 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
   private checkInteraction(client: SpaceClient, kind: Zone['kind'], resourceId: string): string | undefined {
     const player = this.state.players.get(client.sessionId);
     const map = player && this.maps.get(player.mapId);
-    const current = player && map && currentZone(map.world, player);
-    if (!player?.connected || current?.kind !== kind || current.resourceId !== resourceId) return '请先走进对应功能区';
+    const current = player && map && currentZones(map.world, player).find(zone => zone.kind === kind && zone.resourceId === resourceId);
+    if (!player?.connected || !current) return '请先走进对应功能区';
     return this.throttleInteraction(client);
   }
 
@@ -287,7 +291,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
       const now = Date.now();
       for (const [id, until] of this.typingUntil) if (until <= now) this.setTyping(id, false);
       // Portals and actions move players without the movement step; leaving the zone closes the tool.
-      for (const player of this.state.players.values()) if (player.webToolZone !== player.zoneId) this.setWebTool(player, '');
+      for (const player of this.state.players.values()) this.refreshWebTool(player);
       for (const handler of this.interactions.registry.values()) handler.tick?.();
       for (const client of this.clients) void this.authorize(client).then(value => {
         if (!value) { this.movementInputs.delete(client.sessionId); client.leave(4003, 'Identity expired'); }
@@ -304,7 +308,7 @@ export class SpaceRoom extends Room<{ state: SpaceState; client: SpaceClient; me
         player.x = next.x;
         player.y = next.y;
         player.zoneId = currentZone(world, player)?.id ?? '';
-        if (player.webToolZone !== player.zoneId) this.setWebTool(player, '');
+        this.refreshWebTool(player);
         const privateAreaId = player.privateAreaId;
         this.interactions.access.syncPlayer(id, player);
         // Crossing a private-area border ends voice pairs now instead of on the next 1 s tick.
