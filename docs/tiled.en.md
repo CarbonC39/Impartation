@@ -112,8 +112,12 @@ Optional boolean tile-layer properties:
 | Property | Effect |
 | --- | --- |
 | Neither | Ground behind players; ordinary layers retain Tiled order |
-| `ySort = true` | Sort each row's bottom Y against player feet; equal-Y tile rows retain Tiled layer order |
+| `ySort = true` | Sort world-space horizontal band bottoms against player feet; preserve Tiled layer order within each band |
 | `abovePlayers = true` | Always above players; do not also enable `ySort` |
+
+Y-sorted content is drawn in world-space horizontal bands, each 16 pixels high. Tiles crossing a band boundary are cropped into separate fragments. Each band retains Tiled layer order, so shifted wall decorations cannot lose half their pixels behind an adjacent row from another layer. Positive, negative, fractional, and multi-tile X/Y offsets and nested group offsets are supported, along with tile flips, rotations, opacity, and animation. Tile-layer `x` and `y` use tile units; group `x` and `y` and all `offsetx` and `offsety` values use pixels. X does not contribute to Y depth.
+
+A numeric `sortOffsetY` property (int or float, default `0`, in map pixels) deliberately changes depth: sorting Y = the world band's bottom Y + `sortOffsetY`. Positive values bring content forward; negative values move it backward, changing its overlap with other layers and players. Layer and group offsets need no reverse compensation. Multi-row objects still interleave with players by band, rather than sorting as a single object at a bottom anchor.
 
 Layer names such as `top` and `y-sort` have no special meaning. These rendering groups take precedence over cross-group Tiled stacking. The `spawns` layer position does not define player depth. Body, clothing, hair, and attachments share a single depth so tiles cannot render between character parts.
 

@@ -5,6 +5,8 @@ import { avatarDefinition, characterAppearance, characterFacing, characterFrame,
 import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
 import { cameraZoom } from './cameraZoom';
+import { tiledLayerLayout } from './tiledLayerLayout';
+import { YSortedTiles } from './ySortedTiles';
 
 type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[]; attachment: Phaser.GameObjects.Sprite; status: CharacterStatus;
   animation: string; elapsed: number };
@@ -26,6 +28,7 @@ let privateAreaMaskSequence = 0;
 export class SpaceScene extends Phaser.Scene {
   private sprites = new Map<string, PlayerVisual>();
   private objectVisuals?: WorldObjectVisuals;
+  private sortedTiles?: YSortedTiles;
   private attachmentSourceLayers = new Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>();
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private inputElapsed = 0;
@@ -42,7 +45,7 @@ export class SpaceScene extends Phaser.Scene {
   private canvasTiles: { tile: Phaser.Tilemaps.Tile; gid: number; tileset: Phaser.Tilemaps.Tileset }[] = [];
 
   constructor(private room: Room<SpaceProtocol>, private mapEntry: RegisteredMap,
-    private renderMap: { tilesets: { name: string; image?: string }[] }, private hooks: SceneHooks) {
+    private renderMap: { tilesets: { name: string; image?: string }[]; layers?: unknown }, private hooks: SceneHooks) {
     super('space');
   }
   /** Show a short-lived speech bubble; plain text only, so markup is never interpreted. */
@@ -67,6 +70,7 @@ export class SpaceScene extends Phaser.Scene {
   create() {
     prepareStatusTextures(this);
     const map = this.make.tilemap({ key: 'world' });
+    const layouts = tiledLayerLayout(this.renderMap.layers, map.tileWidth, map.tileHeight);
     this.tileWidth = map.tileWidth;
     this.tileHeight = map.tileHeight;
     const zoom = cameraZoom(this.tileWidth, this.tileHeight);
@@ -85,23 +89,21 @@ export class SpaceScene extends Phaser.Scene {
         if (tileset && data && typeof data === 'object' && 'animation' in data) this.canvasTiles.push({ tile, gid: tile.index, tileset });
       });
     };
-    // Blank row layers are appended to map.layers, so only visit the authored layers.
+    this.sortedTiles = new YSortedTiles(this, map.tileHeight);
     for (const [index, layer] of [...map.layers].entries()) {
+      const layout = layouts.get(layer.name);
+      if (!layout) throw new Error(`Missing Tiled layer layout: ${layer.name}`);
+      // Tiled tile-layer x/y use tile units; Phaser's finite-map parser treats them as pixels.
+      layer.x = layout.x;
+      layer.y = layout.y;
       const enabled = (name: string) => layer.properties.some(property =>
         'name' in property && property.name === name && 'value' in property && property.value === true);
       if (enabled('ySort')) {
-        for (const [row, cells] of layer.data.entries()) {
-          if (!cells.some(tile => tile && tile.index >= 0)) continue;
-          const sorted = map.createBlankLayer(`__ySort_${index}_${row}`, tiles,
-            layer.x, layer.y + row * map.tileHeight, layer.width, 1);
-          if (!sorted) throw new Error(`Unable to render Y-sorted Tiled layer: ${layer.name}`);
-          for (const [column, tile] of cells.entries()) {
-            if (tile && tile.index >= 0) sorted.putTileAt(tile, column, 0, false);
-          }
-          sorted.setAlpha(layer.alpha).setVisible(layer.visible)
-            .setDepth(layer.y + (row + 1) * map.tileHeight + index * 0.001);
-          trackCanvasAnimations(sorted);
-        }
+        const sortOffset = layer.properties.find(property => 'name' in property && property.name === 'sortOffsetY');
+        const sortOffsetY: unknown = sortOffset && 'value' in sortOffset ? sortOffset.value : 0;
+        if (typeof sortOffsetY !== 'number' || !Number.isFinite(sortOffsetY))
+          throw new Error(`Invalid sortOffsetY on Tiled layer: ${layer.name}; expected a finite number`);
+        this.sortedTiles.add(layer, tiles, index, sortOffsetY);
         continue;
       }
       const rendered = map.createLayer(layer.name, tiles);
@@ -140,6 +142,7 @@ export class SpaceScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', visibility);
     this.events.once('shutdown', () => {
       this.objectVisuals?.destroy();
+      this.sortedTiles?.destroy();
       this.privateAreaMask?.destroy();
       this.privateAreaMask = undefined;
       this.privateAreaMaskCanvas = undefined;
@@ -163,6 +166,7 @@ export class SpaceScene extends Phaser.Scene {
   }
   update(time: number, delta: number) {
     this.animationElapsed += delta;
+    this.sortedTiles?.update(this.animationElapsed);
     for (const { tile, gid, tileset } of this.canvasTiles) tile.index = tileset.getAnimatedTileId(gid, this.animationElapsed) ?? gid;
     const players = this.room.state?.players;
     if (!players) return;

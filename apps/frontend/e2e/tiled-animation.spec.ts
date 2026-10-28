@@ -57,17 +57,32 @@ async function installAnimationMap(page: Page) {
     if (!ground || !Array.isArray(ground.data)) throw new Error('Expected the fixture floor tile layer');
     const width = Number(ground.width);
     const height = Number(ground.height);
-    const makeLayer = (name: string, properties: { name: string; type: string; value: boolean }[], cells: { x: number; y: number; gid: number }[]): TiledLayer => {
+    const makeLayer = (name: string, properties: { name: string; type: string; value: boolean | number }[], cells: { x: number; y: number; gid: number }[]): TiledLayer => {
       const data = Array<number>(width * height).fill(0);
       for (const cell of cells) data[cell.y * width + cell.x] = cell.gid;
       return { id: 100 + map.layers.length, name, type: 'tilelayer', width, height, visible: true, opacity: 1, x: 0, y: 0, data,
         properties: properties.map(property => ({ ...property })) };
     };
     map.layers.push(
-      makeLayer('sorted-probe', [{ name: 'ySort', type: 'bool', value: true }], [{ x: 18, y: 24, gid: 7 }]),
+      makeLayer('wall-underlayer', [{ name: 'ySort', type: 'bool', value: true }], [
+        ...[23, 24, 25].flatMap(y => [{ x: 26, y, gid: 2 }, { x: 27, y, gid: 2 }]),
+      ]),
+      makeLayer('sorted-probe', [{ name: 'ySort', type: 'bool', value: true }], [{ x: 18, y: 24, gid: 7 }, { x: 23, y: 24, gid: 7 }, { x: 20, y: 24, gid: 7 }]),
       makeLayer('above-players-probe', [{ name: 'abovePlayers', type: 'bool', value: true }], [{ x: 19, y: 24, gid: 7 }]),
       makeLayer('animated-probe', [], [{ x: 30, y: 18, gid: 7 }, { x: 28, y: 22, gid: 10 }]),
+      { ...makeLayer('shifted-sort-probe', [{ name: 'ySort', type: 'bool', value: true }], [{ x: 23, y: 24, gid: 5 }]), offsety: 8 },
+      { ...makeLayer('raised-sort-probe', [{ name: 'ySort', type: 'bool', value: true },
+        { name: 'sortOffsetY', type: 'float', value: 0.5 }], [{ x: 20, y: 24, gid: 5 }]), offsety: -8 },
+      { ...makeLayer('hanging-positive', [{ name: 'ySort', type: 'bool', value: true }], [{ x: 26, y: 24, gid: 5 }]), offsety: 8 },
+      { ...makeLayer('hanging-negative', [{ name: 'ySort', type: 'bool', value: true }], [{ x: 27, y: 24, gid: 5 }]), offsety: -8 },
     );
+    // Exercise both axes, fractional and multi-tile offsets, and nested group accumulation.
+    for (const [index, [dx, dy]] of [[-24, -24], [-8, 8], [8, -8], [24, 24], [0.5, -0.5], [0, 0]].entries()) {
+      const probe = makeLayer(`offset-matrix-${index}`, [{ name: 'ySort', type: 'bool', value: true }], [{ x: 24, y: 24, gid: 5 }]);
+      map.layers.push({ name: `offset-group-${index}`, type: 'group', x: 2, y: 3, offsetx: dx / 2, offsety: dy / 2,
+        opacity: 1, visible: true, layers: [{ name: 'nested', type: 'group', x: -2, y: -3, offsetx: dx / 2, offsety: dy / 2,
+          opacity: 1, visible: true, layers: [{ ...probe, x: 1, y: -1 }] }] });
+    }
     const tileset = map.tilesets[0];
     if (!tileset) throw new Error('Expected one atlas tileset');
     tileset.tiles = [
@@ -149,14 +164,50 @@ async function expectLayerOrdering(page: Page) {
     const scene = (window as RenderingWindow).sceneUnderTest;
     if (!scene) throw new Error('Scene missing');
     const player = scene.children.getByName(scene['room'].sessionId) as Phaser.GameObjects.Sprite | null;
+    const images = scene.children.list.filter(child => child.type === 'Image') as Phaser.GameObjects.Image[];
+    const sorted = images.find(child => child.name.startsWith('__ySort_sorted-probe_24_18_'));
     const layers = scene.children.list.filter(child => child.type.startsWith('Tilemap')) as Phaser.Tilemaps.TilemapLayer[];
-    const sorted = layers.find(child => child.layer.name.startsWith('__ySort_') && child.layer.name.endsWith('_24'));
     const overlay = layers.find(child => child.layer.name === 'above-players-probe');
-    if (!player || !sorted || !overlay) throw new Error('Expected rendered player, Y-sorted row, and abovePlayers layer');
-    return { player: player.depth, sorted: sorted.depth, overlay: overlay.depth };
+    const shifted = images.find(child => child.name.startsWith('__ySort_shifted-sort-probe_24_23_'));
+    const raised = images.find(child => child.name.startsWith('__ySort_raised-sort-probe_24_20_'));
+    if (!player || !sorted || !overlay || !shifted || !raised) throw new Error('Expected rendered player and depth probe layers');
+    return { player: player.depth, sorted: sorted.depth, overlay: overlay.depth,
+      shifted: shifted.depth, shiftedY: shifted.y, raised: raised.depth, raisedY: raised.y,
+      sortedName: sorted.name, shiftedName: shifted.name, raisedName: raised.name };
   });
   expect(depths.sorted).toBeGreaterThan(depths.player);
   expect(depths.overlay).toBeGreaterThan(515);
+  expect(depths.shiftedY).toBe(400);
+  expect(depths.shifted).toBeGreaterThanOrEqual(400);
+  expect(depths.shifted).toBeLessThan(416.1);
+  expect(depths.raisedY).toBe(384);
+  expect(depths.raised).toBeGreaterThanOrEqual(384.5);
+  expect(depths.raised).toBeLessThan(400.6);
+  const matrix = await page.evaluate(() => {
+    const scene = (window as RenderingWindow).sceneUnderTest!;
+    return scene.children.list.filter(child => child.type === 'Image')
+      .map(child => child as Phaser.GameObjects.Image)
+      .filter(child => /^__ySort_offset-group-\d+\/nested\/offset-matrix-\d+_24_24_/.test(child.name))
+      .map(child => ({ name: child.name, x: child.x, y: child.y, depth: child.depth }));
+  });
+  expect(matrix.length).toBeGreaterThanOrEqual(6);
+  for (const [index, [dx, dy]] of [[-24, -24], [-8, 8], [8, -8], [24, 24], [0.5, -0.5], [0, 0]].entries()) {
+    const fragments = matrix.filter(fragment => fragment.name.startsWith(`__ySort_offset-group-${index}/nested/offset-matrix-${index}_`));
+    expect(fragments.length).toBeGreaterThan(0);
+    for (const fragment of fragments) {
+      expect(fragment.x).toBe(408 + dx);
+      expect(fragment.y).toBe(376 + dy);
+      const band = Number(fragment.name.split('_').at(-1));
+      expect(fragment.depth).toBeGreaterThanOrEqual((band + 1) * 16);
+      expect(fragment.depth).toBeLessThan((band + 1) * 16 + 0.1);
+    }
+  }
+  // The later authored layer wins the overlap while retaining its 8px visual shift.
+  expect(await pixelAtWorld(page, 376, 396)).toBe('24,168,74');
+  expect(await pixelAtWorld(page, 328, 388)).toBe('24,168,74');
+  for (const point of [{ x: 424, y: 396 }, { x: 424, y: 404 }, { x: 440, y: 380 }, { x: 440, y: 388 }]) {
+    expect(await pixelAtWorld(page, point.x, point.y)).toBe('24,168,74');
+  }
 }
 
 async function selectAnimatedVariant(page: Page) {
