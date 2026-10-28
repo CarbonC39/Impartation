@@ -20,7 +20,7 @@ EXTERNAL_TOOLS='{"shared-canvas":{"url":"https://board.example.com/boards/worksp
 Example:
 
 ```dotenv
-EXTERNAL_TOOLS='{"shared-drawing":{"url":"https://draw.example.com/"}}'
+EXTERNAL_TOOLS='{"nekobrowser":{"url":"https://browser.example.com/"}}'
 ```
 
 Restart the backend after changing the configuration. At startup, the server parses it and checks that each entry matches at least one `web` area. If a resource ID is reused in maps, all matching areas must be of type `web`.

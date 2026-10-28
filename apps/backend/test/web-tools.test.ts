@@ -12,7 +12,7 @@ test('web tools are optional and resolve arbitrary resource IDs without provider
   const customWorld = { ...world, zones: [...world.zones, calendar] };
   const config = {
     'shared-canvas': { url: 'https://board.example/boards/shared' },
-    'shared-drawing': { url: 'https://draw.example/' },
+    nekobrowser: { url: 'https://browser.example/' },
     'lounge-screen': { url: 'http://localhost:8080/' },
     'shared-document': { url: 'https://docs.example/p/shared' },
     'team-calendar': { url: 'https://calendar.example/', mode: 'embed' },
