@@ -4,11 +4,6 @@
       "id": "lobby",
       "file": "lobby.tmj",
       "defaultSpawn": "default"
-    },
-    {
-      "id": "interaction-lab",
-      "file": "interaction-lab.tmj",
-      "defaultSpawn": "arrival"
     }
   ],
   "spaces": [
@@ -19,18 +14,7 @@
       "cover": "/maps/tiles.png",
       "initialMap": "lobby",
       "maps": [
-        "lobby",
-        "interaction-lab"
-      ]
-    },
-    {
-      "id": "garden",
-      "name": "云朵花园",
-      "cover": "/maps/tiles.png",
-      "initialMap": "interaction-lab",
-      "maps": [
-        "lobby",
-        "interaction-lab"
+        "lobby"
       ]
     }
   ]

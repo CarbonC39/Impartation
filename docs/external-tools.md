@@ -20,7 +20,7 @@ EXTERNAL_TOOLS='{"shared-canvas":{"url":"https://board.example.com/boards/worksp
 示例：
 
 ```dotenv
-EXTERNAL_TOOLS='{"shared-drawing":{"url":"https://draw.example.com/"}}'
+EXTERNAL_TOOLS='{"nekobrowser":{"url":"https://browser.example.com/"}}'
 ```
 
 更改配置后重启后端。服务启动时会解析配置，并检查每个配置项至少对应一个 `web` 区域；某个资源 ID 在地图中重复使用时，所有匹配区域都必须是 `web` 类型。

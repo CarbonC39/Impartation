@@ -40,16 +40,16 @@ export function createWorldFixture(): string {
     properties: [{ name: 'ySort', type: 'bool', value: true }],
     data: Array.from({ length: 48 * 32 }, (_, index) => index === 27 * 48 + 24 ? 1 : 0),
   });
-  Object.assign(map.tilesets[0], { image, imagewidth: 192, imageheight: 96, columns: 12, tilecount: 72 });
+  Object.assign(map.tilesets[0], { image, imagewidth: 256, imageheight: 288, columns: 16, tilecount: 288 });
   writeFileSync(join(directory, 'entry.tmj'), JSON.stringify(map));
   writeFileSync(join(directory, 'atlas.tsj'), JSON.stringify({ ...map.tilesets[0], image }));
   const studio = {
     orientation: 'orthogonal', infinite: false, width: 24, height: 16, tilewidth: 16, tileheight: 16,
-    tilesets: [{ firstgid: 1, source: 'atlas.tsj' }, { ...map.tilesets[0], firstgid: 73, name: 'details' }],
+    tilesets: [{ firstgid: 1, source: 'atlas.tsj' }, { ...map.tilesets[0], firstgid: 289, name: 'details' }],
     layers: [
       { name: 'floor', type: 'tilelayer', width: 24, height: 16, data: Array.from({ length: 384 }, () => 1) },
       { name: 'artwork', type: 'group', layers: [
-        { name: 'decorations', type: 'tilelayer', width: 24, height: 16, data: Array.from({ length: 384 }, () => 75), opacity: 0.5 },
+        { name: 'decorations', type: 'tilelayer', width: 24, height: 16, data: Array.from({ length: 384 }, () => 291), opacity: 0.5 },
       ] },
       { name: 'spawns', type: 'objectgroup', objects: [{ name: 'arrival', point: true, x: 96, y: 96 }] },
       { name: 'collisions', type: 'objectgroup', objects: [] },

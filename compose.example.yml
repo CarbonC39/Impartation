@@ -24,9 +24,9 @@ services:
       # VOICE_TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in compose.env}
       # VOICE_TURN_CREDENTIAL_TTL_SECONDS: ${TURN_CREDENTIAL_TTL:-3600}
 
-      # Want in-map links to Etherpad or WBO? Uncomment and keep only enabled tools.
+      # Want in-map links to Etherpad, WBO or Neko? Uncomment and keep only enabled tools.
       # EXTERNAL_TOOLS: >-
-      #   {"shared-document":{"url":"https://${VW_HOST}/pad/p/workspace","mode":"embed","allowSameOrigin":true,"manualExternalOpen":true},"shared-canvas":{"url":"https://${VW_HOST}/board/boards/workspace","mode":"embed","allowSameOrigin":true,"manualExternalOpen":true}}
+      #   {"shared-document":{"url":"https://${VW_HOST}/pad/p/workspace","mode":"embed","allowSameOrigin":true,"manualExternalOpen":true},"shared-canvas":{"url":"https://${VW_HOST}/board/boards/workspace","mode":"embed","allowSameOrigin":true,"manualExternalOpen":true},"nekobrowser":{"url":"https://${BROWSER_HOST}/"}}
 
       # Want custom Tiled maps? Uncomment this and the content mount below.
       # MAP_REGISTRY_PATH: /app/content/registry.json
