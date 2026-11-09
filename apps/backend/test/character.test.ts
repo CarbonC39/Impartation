@@ -61,3 +61,14 @@ test('unknown actions fall back to directional walk idle regardless of motion', 
     assert.equal(characterFrame('mint', facing, 'idle', 'wave', false, 0), idle);
   }
 });
+
+test('in-place walk and jump actions loop through directional walk frames', () => {
+  const avatar = avatars.mint;
+  for (const action of ['walk', 'jump'] as const) {
+    for (const facing of FACINGS) {
+      assert.equal(characterFrame('mint', facing, 'idle', action, true, 0), avatar.walk[facing][0]);
+      assert.equal(characterFrame('mint', facing, 'idle', action, true, 100), avatar.walk[facing][1]);
+      assert.equal(characterFrame('mint', facing, 'idle', action, true, 400), avatar.walk[facing][0]);
+    }
+  }
+});

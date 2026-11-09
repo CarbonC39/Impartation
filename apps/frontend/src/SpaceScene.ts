@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
-import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
+import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, CHARACTER_ACTIONS, TICK_MS, attachmentSource, attachmentSourceKey, isCharacterAction, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
@@ -8,8 +8,8 @@ import { cameraZoom } from './cameraZoom';
 import { tiledLayerLayout } from './tiledLayerLayout';
 import { YSortedTiles } from './ySortedTiles';
 
-type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; layers: Phaser.GameObjects.Sprite[]; attachment: Phaser.GameObjects.Sprite; status: CharacterStatus;
-  animation: string; elapsed: number };
+type PlayerVisual = { sprite: Phaser.GameObjects.Sprite; cameraAnchor: Phaser.GameObjects.Zone; layers: Phaser.GameObjects.Sprite[]; attachment: Phaser.GameObjects.Sprite; status: CharacterStatus;
+  groundX: number; groundY: number; animation: string; elapsed: number };
 type ChatBubble = { text: string; expiresAt: number };
 export type SceneHooks = {
   connected(): boolean;
@@ -184,15 +184,17 @@ export class SpaceScene extends Phaser.Scene {
         const character = layers[0]!.setName(id);
         const attachment = this.add.sprite(player.x, player.y, APPEARANCE_ASSETS.body[0])
           .setOrigin(avatar.groundAnchor.x / avatar.frameWidth, avatar.groundAnchor.y / avatar.frameHeight).setVisible(false);
-        if (id === this.room.sessionId) this.cameras.main.startFollow(character, true);
+        const cameraAnchor = this.add.zone(player.x, player.y, 1, 1);
+        if (id === this.room.sessionId) this.cameras.main.startFollow(cameraAnchor, true);
         const status = new CharacterStatus(this, id, id === this.room.sessionId, this.cameras.main.zoom);
-        sprite = { sprite: character, layers, attachment, status, animation: '', elapsed: 0 };
+        sprite = { sprite: character, cameraAnchor, layers, attachment, status, groundX: player.x, groundY: player.y, animation: '', elapsed: 0 };
         this.sprites.set(id, sprite);
       }
       const blend = Math.min(1, delta / TICK_MS);
-      // Active actions snap to their ground anchor; walking interpolates patch positions.
-      sprite.sprite.x = player.action !== 'none' ? player.x : Phaser.Math.Linear(sprite.sprite.x, player.x, blend);
-      sprite.sprite.y = player.action !== 'none' ? player.y : Phaser.Math.Linear(sprite.sprite.y, player.y, blend);
+      const anchoredAction = isCharacterAction(player.action) && CHARACTER_ACTIONS[player.action].anchored;
+      // Authored actions snap to their ground anchor; free actions keep interpolating patch positions.
+      sprite.groundX = anchoredAction ? player.x : Phaser.Math.Linear(sprite.groundX, player.x, blend);
+      sprite.groundY = anchoredAction ? player.y : Phaser.Math.Linear(sprite.groundY, player.y, blend);
       const avatar = avatarDefinition(player.avatar);
       const facing = characterFacing(player.facing);
       const motion = player.motion === 'walk' ? 'walk' : 'idle';
@@ -200,23 +202,28 @@ export class SpaceScene extends Phaser.Scene {
       const animation = `${player.avatar}:${facing}:${motion}:${action}:${player.actionAnimated}`;
       sprite.elapsed = animation === sprite.animation ? sprite.elapsed + delta : 0;
       sprite.animation = animation;
+      const jumpPhase = player.action === 'jump' ? (sprite.elapsed % 500) / 500 : 0;
+      const visualOffsetY = player.action === 'jump' ? 4 * 16 * jumpPhase * (1 - jumpPhase) : 0;
+      const visualY = sprite.groundY - visualOffsetY;
+      sprite.cameraAnchor.setPosition(sprite.groundX, sprite.groundY);
+      sprite.sprite.setPosition(sprite.groundX, visualY);
       const frame = characterFrame(player.avatar, facing, motion, action, player.actionAnimated, sprite.elapsed);
       const renderedFrame = this.textures.get(APPEARANCE_ASSETS.body[0]).has(String(frame)) ? frame : avatar.idle[facing];
       const appearance = characterAppearance(player.appearance);
       // Keep the character indivisible relative to map tiles; stable display order stacks its parts.
       for (const [index, layer] of APPEARANCE_LAYERS.entries()) {
         const part = appearance[layer];
-        const layerSprite = sprite.layers[index]!.setDepth(sprite.sprite.y);
+        const layerSprite = sprite.layers[index]!.setDepth(sprite.groundY);
         if (part.assetId === 'none') { layerSprite.setVisible(false); continue; }
         layerSprite.setVisible(true).setTexture(part.assetId, renderedFrame).setTint(tintNumber(part.color))
-          .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35);
+          .setPosition(sprite.groundX, visualY).setAlpha(player.connected ? 1 : 0.35);
       }
       const attachmentId = player.attachmentId as AttachmentId;
       const asset = ATTACHMENTS[attachmentId];
-      sprite.attachment.setVisible(Boolean(asset)).setDepth(sprite.sprite.y);
+      sprite.attachment.setVisible(Boolean(asset)).setDepth(sprite.groundY);
       if (asset) sprite.attachment.setTexture(`attachment:${attachmentId}`, renderedFrame)
-        .setPosition(sprite.sprite.x, sprite.sprite.y).setAlpha(player.connected ? 1 : 0.35);
-      sprite.status.update(sprite.sprite.x, sprite.sprite.y + 1, sprite.sprite.y - avatar.groundAnchor.y - 1, {
+        .setPosition(sprite.groundX, visualY).setAlpha(player.connected ? 1 : 0.35);
+      sprite.status.update(sprite.groundX, sprite.groundY + 1, sprite.groundY - avatar.groundAnchor.y - 1 - visualOffsetY, {
         name: player.name, nameVisible: namesVisible, connected: player.connected,
         bubble: this.bubbles.get(id)?.text,
         typing: player.connected && player.typing && id !== this.room.sessionId,
@@ -231,6 +238,7 @@ export class SpaceScene extends Phaser.Scene {
     for (const [id, sprite] of this.sprites) {
       if (!players.has(id) || players.get(id)?.mapId !== this.mapEntry.id) {
         for (const layer of sprite.layers) layer.destroy();
+        sprite.cameraAnchor.destroy();
         sprite.attachment.destroy();
         sprite.status.destroy();
         this.sprites.delete(id);

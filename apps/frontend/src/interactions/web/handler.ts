@@ -77,7 +77,7 @@ export class WebToolInteraction {
     this.render();
   }
 
-  zoneEntries() { return !this.disposed && this.current?.kind === 'web' ? [{ id: 'web', label: '网页工具', icon: '↗', pressed: this.embeddedOpen, disabled: !this.connected }] : []; }
+  zoneEntries() { return !this.disposed && this.current?.kind === 'web' ? [{ id: 'web', label: '网页工具', icon: 'web', pressed: this.embeddedOpen, disabled: !this.connected }] : []; }
   activateZoneEntry(id: string) { if (id === 'web') this.openTool(); }
   onZoneEntriesChanged(listener: () => void) { this.entriesChanged = listener; }
 

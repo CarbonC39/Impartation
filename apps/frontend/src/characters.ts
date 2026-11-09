@@ -1,4 +1,4 @@
-import { APPEARANCE_ASSET_PATHS, APPEARANCE_LAYERS, appearanceSchema, FACINGS, type Facing, type Motion } from '@impartation/shared';
+import { APPEARANCE_ASSET_PATHS, APPEARANCE_LAYERS, appearanceSchema, CHARACTER_ACTIONS, FACINGS, isCharacterAction, type Facing, type Motion } from '@impartation/shared';
 
 export const layerAssets: Record<string, string> = APPEARANCE_ASSET_PATHS;
 export const layerAssetIds = Object.keys(APPEARANCE_ASSET_PATHS);
@@ -44,6 +44,10 @@ export function characterFrame(avatarId: string, facing: Facing, motion: Motion,
   actionAnimated: boolean, elapsedMs: number): number {
   const avatar = avatarDefinition(avatarId);
   if (action !== 'none') {
+    if (isCharacterAction(action) && CHARACTER_ACTIONS[action].frameMode === 'walk') {
+      const frames = avatar.walk[facing];
+      return frames[Math.floor(Math.max(0, elapsedMs) / avatar.walkFrameMs) % frames.length];
+    }
     const rows = avatar.actions[action as keyof typeof avatar.actions];
     const row = rows?.[facing];
     if (row === undefined) return avatar.idle[facing];

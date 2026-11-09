@@ -78,7 +78,7 @@ export class VariantSelectorInteraction implements InteractionHandler {
   }
   setZone(_zone: Zone | undefined) {}
   zoneEntries() {
-    return !this.disposed && this.selector() ? [{ id: 'variant-selector', label: '图块选择', icon: '▧', panelId: 'variant-selector-panel', pressed: this.open, disabled: !this.connected }] : [];
+    return !this.disposed && this.selector() ? [{ id: 'variant-selector', label: '图块选择', icon: 'variant-selector', panelId: 'variant-selector-panel', pressed: this.open, disabled: !this.connected }] : [];
   }
   activateZoneEntry(id: string) {
     if (id !== 'variant-selector' || !this.selector() || !this.connected) return;

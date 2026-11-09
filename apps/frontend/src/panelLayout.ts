@@ -39,7 +39,7 @@ export class PanelAnchor {
   place(): boolean {
     const anchor = this.findAnchor();
     if (!anchor) return false;
-    const anchorRect = anchor.getBoundingClientRect();
+    const anchorRect = (anchor.closest('.zone-entry-slot') ?? anchor).getBoundingClientRect();
     const toolbarBottom = anchor.closest('.map-topbar')?.getBoundingClientRect().bottom ?? anchorRect.bottom;
     this.panel.classList.add('anchored-panel');
     this.panel.style.left = `${Math.round(anchorRect.left)}px`;
@@ -77,6 +77,9 @@ export class PanelAnchor {
       this.place();
     }
     this.clamp();
+    // Entry slots move with Web Animations, which do not trigger ResizeObserver.
+    if (this.shouldFollow() && this.panel.ownerDocument.querySelector('.map-topbar')
+      ?.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')) this.schedule();
   }
 
   private clamp() {

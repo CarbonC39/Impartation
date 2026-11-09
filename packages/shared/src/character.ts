@@ -17,10 +17,12 @@ export function movementFacing(input: MovementInput, previous: Facing): Facing {
   return previous;
 }
 
-/** Actions the server accepts and the client offers; each entry needs matching character sprite rows. */
+/** Actions the server accepts and the client offers; rendering uses authored action rows or existing walk frames. */
 export const CHARACTER_ACTIONS = {
-  sit: { label: '坐下', activeLabel: '已坐下', animated: true },
-} as const satisfies Record<string, { label: string; activeLabel: string; animated: boolean }>;
+  sit: { label: '坐下', activeLabel: '已坐下', animated: true, selectableAnimation: true, anchored: true, frameMode: 'action' },
+  walk: { label: '原地走动', activeLabel: '正在原地走动', animated: true, selectableAnimation: false, anchored: false, frameMode: 'walk' },
+  jump: { label: '跳跃', activeLabel: '正在跳跃', animated: true, selectableAnimation: false, anchored: false, frameMode: 'walk' },
+} as const satisfies Record<string, { label: string; activeLabel: string; animated: boolean; selectableAnimation: boolean; anchored: boolean; frameMode: 'action' | 'walk' }>;
 export type CharacterActionName = keyof typeof CHARACTER_ACTIONS;
 export const CHARACTER_ACTION_NAMES = Object.keys(CHARACTER_ACTIONS) as [CharacterActionName, ...CharacterActionName[]];
 export const characterActionSchema = z.enum(CHARACTER_ACTION_NAMES);

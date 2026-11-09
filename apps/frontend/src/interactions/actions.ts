@@ -11,7 +11,7 @@ export class CharacterActions {
   private pending = false;
   private disposed = false;
   private selected: CharacterActionName = CHARACTER_ACTION_NAMES[0];
-  private selectedAnimated = false;
+  private selectedAnimated = !CHARACTER_ACTIONS[CHARACTER_ACTION_NAMES[0]].selectableAnimation;
   private readonly buttons = new Map<string, HTMLButtonElement>();
   private readonly drawnFrames = new Map<string, string>();
   private frame = 0;
@@ -54,15 +54,16 @@ export class CharacterActions {
     private readonly feedback: HTMLElement,
   ) {
     for (const action of CHARACTER_ACTION_NAMES) {
-      for (const animated of [false, true]) {
-        if (animated && !CHARACTER_ACTIONS[action].animated) continue;
+      const animationModes = CHARACTER_ACTIONS[action].selectableAnimation ? [false, true] : [CHARACTER_ACTIONS[action].animated];
+      for (const animated of animationModes) {
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'action-option secondary';
         button.dataset.action = action; button.dataset.animated = String(animated);
-        button.setAttribute('aria-label', `${CHARACTER_ACTIONS[action].label}${animated ? '动画' : ''}`);
         const canvas = document.createElement('canvas');
-        canvas.width = 16; canvas.height = 24; canvas.className = 'action-preview'; canvas.setAttribute('aria-hidden', 'true');
-        const label = document.createElement('span'); label.textContent = animated ? `${CHARACTER_ACTIONS[action].label}（动画）` : CHARACTER_ACTIONS[action].label;
+        canvas.width = 16; canvas.height = 24; canvas.className = 'action-preview'; canvas.dataset.action = action; canvas.setAttribute('aria-hidden', 'true');
+        const modeLabel = CHARACTER_ACTIONS[action].selectableAnimation && animated ? '（动画）' : '';
+        button.setAttribute('aria-label', `${CHARACTER_ACTIONS[action].label}${modeLabel}`);
+        const label = document.createElement('span'); label.textContent = `${CHARACTER_ACTIONS[action].label}${modeLabel}`;
         button.append(canvas, label);
         this.buttons.set(`${action}:${animated}`, button);
       }
@@ -77,6 +78,7 @@ export class CharacterActions {
 
   private keyAction(): CharacterActionName {
     const player = this.room.state?.players.get(this.room.sessionId);
+    if (player && isCharacterAction(player.action) && !CHARACTER_ACTIONS[player.action].anchored) return player.action;
     const world = this.world();
     const anchor = player && world && findActionAnchor(world, player);
     return anchor && isCharacterAction(anchor.action) ? anchor.action : this.selected;
@@ -116,12 +118,13 @@ export class CharacterActions {
       const active = player?.action === action;
       const same = active && player.actionAnimated === animated;
       button.disabled = this.disposed || this.pending || !connected || same;
-      const anchor = player && world && findActionAnchor(world, player, action);
+      const anchor = definition.anchored && player && world ? findActionAnchor(world, player, action) : undefined;
       const labels = { up: '上', down: '下', left: '左', right: '右' } as const;
       const required = anchor?.facing && player && !actionFacingMatches(anchor, player.facing) ? `（朝${labels[anchor.facing]}可对齐）` : '';
-      button.title = `${definition.label}${animated ? '（动画）' : ''}${anchor ? `；目标：${'name' in anchor ? anchor.name : anchor.id}${required}` : ''}`;
+      const modeLabel = definition.selectableAnimation && animated ? '（动画）' : '';
+      button.title = `${definition.label}${modeLabel}${anchor ? `；目标：${'name' in anchor ? anchor.name : anchor.id}${required}` : ''}`;
       button.setAttribute('aria-pressed', String(active && player.actionAnimated === animated));
-      const keyboardMode = action === this.selected ? this.selectedAnimated : false;
+      const keyboardMode = action === this.selected ? this.selectedAnimated : !definition.selectableAnimation;
       if (action === keyAction && animated === keyboardMode) button.dataset.key = 'E'; else delete button.dataset.key;
     }
     for (const button of this.facing.querySelectorAll<HTMLButtonElement>('button[data-facing]')) {
@@ -131,7 +134,7 @@ export class CharacterActions {
   }
   async activate() {
     const action = this.keyAction();
-    return this.activateAction({ action, animated: action === this.selected ? this.selectedAnimated : false });
+    return this.activateAction({ action, animated: action === this.selected ? this.selectedAnimated : !CHARACTER_ACTIONS[action].selectableAnimation });
   }
   async activateAction(input: ActivateActionInput): Promise<InteractionResult> {
     const player = this.room.state?.players.get(this.room.sessionId);

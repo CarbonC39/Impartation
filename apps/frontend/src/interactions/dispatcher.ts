@@ -1,4 +1,6 @@
 import { InteractionRegistry, type Zone } from '@impartation/shared';
+import { createInteractionIcon } from './icons.js';
+import { animateIconIn, animateIconOut, animateEntryLayout } from './entryMotion.js';
 
 export type ZoneEntry = { id: string; label: string; icon: string; panelId?: string; pressed?: boolean; disabled?: boolean };
 export interface InteractionHandler {
@@ -15,7 +17,7 @@ export class InteractionDispatcher implements InteractionHandler {
   private zones: Zone[] = [];
   private selected = new Map<InteractionHandler, Zone>();
   private connected = true;
-  private buttons = new Map<string, { button: HTMLButtonElement; activate(): void }>();
+  private buttons = new Map<string, { button: HTMLButtonElement; slot: HTMLSpanElement; exit?: Animation; activate(): void }>();
 
   constructor(private registry: InteractionRegistry<InteractionHandler>, private entries?: HTMLElement) {
     for (const handler of new Set(registry.values())) handler.onZoneEntriesChanged?.(this.renderEntries);
@@ -48,22 +50,46 @@ export class InteractionDispatcher implements InteractionHandler {
     }
     for (const [id, record] of this.buttons) {
       if (available.has(id)) continue;
-      record.button.remove(); this.buttons.delete(id);
+      if (record.exit) continue;
+      record.exit = animateIconOut(record.button);
+      record.button.disabled = true;
+      record.button.setAttribute('aria-hidden', 'true');
+      const exit = record.exit;
+      const remove = () => {
+        if (this.buttons.get(id) !== record || record.exit !== exit) return;
+        animateEntryLayout(this.entries!, () => record.slot.remove());
+        this.buttons.delete(id);
+      };
+      if (exit) exit.onfinish = remove; else remove();
     }
     for (const [id, { entry, activate }] of available) {
       let record = this.buttons.get(id);
       if (!record) {
         const button = this.entries.ownerDocument.createElement('button');
         button.type = 'button'; button.className = 'map-state-icon'; button.dataset.zoneEntry = id;
+        const slot = this.entries.ownerDocument.createElement('span');
+        slot.className = 'zone-entry-slot'; slot.append(button);
         button.addEventListener('click', () => {
           this.buttons.get(id)?.activate();
           this.renderEntries(); button.blur();
         });
-        record = { button, activate }; this.buttons.set(id, record); this.entries.append(button);
+        record = { button, slot, activate }; this.buttons.set(id, record);
+        animateEntryLayout(this.entries, () => this.entries!.append(slot));
+        animateIconIn(button);
+      }
+      if (record.exit) {
+        record.exit.cancel(); record.exit = undefined;
+        record.button.removeAttribute('aria-hidden');
+        animateIconIn(record.button);
       }
       record.activate = activate;
       const button = record.button;
-      button.textContent = entry.icon; button.title = entry.label; button.setAttribute('aria-label', entry.label);
+      if (button.dataset.icon !== entry.icon) {
+        const icon = createInteractionIcon(entry.icon);
+        button.replaceChildren(...(icon ? [icon] : [entry.icon]));
+        button.dataset.icon = entry.icon;
+      }
+      button.title = entry.label; button.setAttribute('aria-label', entry.label);
       if (entry.panelId) {
         button.setAttribute('aria-controls', entry.panelId);
         button.setAttribute('aria-expanded', String(entry.pressed ?? false));
@@ -99,7 +125,12 @@ export class InteractionDispatcher implements InteractionHandler {
   }
   dispose() {
     for (const handler of new Set(this.registry.values())) handler.onZoneEntriesChanged?.(() => {});
-    for (const record of this.buttons.values()) record.button.remove();
+    for (const record of this.buttons.values()) {
+      record.exit?.cancel();
+      record.button.getAnimations().forEach(animation => animation.cancel());
+      record.slot.getAnimations().forEach(animation => animation.cancel());
+      record.slot.remove();
+    }
     this.buttons.clear();
     for (const handler of new Set(this.registry.values())) handler.dispose();
     this.selected.clear();

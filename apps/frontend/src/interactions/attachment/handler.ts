@@ -2,6 +2,7 @@ import type { Room } from '@colyseus/sdk';
 import { ATTACHMENTS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type Zone } from '@impartation/shared';
 import type { InteractionHandler } from '../dispatcher';
 import { element } from '../panel';
+import { animateIconIn, animateIconOut, animateEntryLayout } from '../entryMotion';
 
 export class AttachmentInteraction implements InteractionHandler {
   private panel = element('attachment-panel');
@@ -15,6 +16,8 @@ export class AttachmentInteraction implements InteractionHandler {
   private pending = false;
   private disposed = false;
   private open = false;
+  private currentAsset = '';
+  private exit?: Animation;
   private controller = new AbortController();
   private renderState = () => this.render();
 
@@ -27,12 +30,32 @@ export class AttachmentInteraction implements InteractionHandler {
   private render() {
     const player = this.room.state.players.get(this.room.sessionId);
     const asset = ATTACHMENTS[player?.attachmentId as AttachmentId];
-    this.current.hidden = !asset;
-    this.current.replaceChildren();
-    if (asset) {
+    const returning = Boolean(asset && this.exit);
+    if (asset || this.disposed) { this.exit?.cancel(); this.exit = undefined; }
+    if (this.disposed) {
+      this.current.getAnimations().forEach(animation => animation.cancel());
+      this.current.parentElement?.getAnimations().forEach(animation => animation.cancel());
+      this.current.hidden = true;
+    } else if (asset && (this.current.hidden || returning)) {
+      animateEntryLayout(this.current, () => { this.current.hidden = false; });
+      this.current.removeAttribute('aria-hidden');
+      animateIconIn(this.current);
+    } else if (!asset && !this.current.hidden && !this.exit) {
+      this.current.setAttribute('aria-hidden', 'true');
+      this.exit = animateIconOut(this.current);
+      const exit = this.exit;
+      const hide = () => {
+        if (this.exit !== exit) return;
+        animateEntryLayout(this.current, () => { this.current.hidden = true; });
+        this.exit?.cancel(); this.exit = undefined;
+      };
+      if (this.exit) this.exit.onfinish = hide; else hide();
+    }
+    if (asset && this.currentAsset !== player?.attachmentId) {
       const icon = document.createElement('img'); icon.src = asset.path; icon.alt = '';
-      this.current.append(icon); this.current.title = `当前附着：${asset.name}；清除`;
+      this.current.replaceChildren(icon); this.current.title = `当前附着：${asset.name}；清除`;
       this.current.setAttribute('aria-label', `当前附着：${asset.name}；清除`);
+      this.currentAsset = player?.attachmentId ?? '';
     }
     this.clear.disabled = !this.connected || this.pending || !player?.connected || !asset;
     this.panel.hidden = !this.zone || !this.open;
@@ -58,7 +81,7 @@ export class AttachmentInteraction implements InteractionHandler {
     } finally { this.pending = false; if (!this.disposed) this.render(); }
   }
   setZone(zone: Zone | undefined) { this.zone = zone; if (!zone) this.open = false; this.feedback.textContent = ''; this.render(); }
-  zoneEntries() { return this.zone ? [{ id: 'attachment', label: '取用附件', icon: '♧', panelId: 'attachment-panel', pressed: this.open, disabled: !this.connected }] : []; }
+  zoneEntries() { return this.zone ? [{ id: 'attachment', label: '取用附件', icon: 'attachment', panelId: 'attachment-panel', pressed: this.open, disabled: !this.connected }] : []; }
   activateZoneEntry(id: string) { if (id !== 'attachment' || !this.zone || !this.connected) return; this.open = !this.open; this.render(); }
   setConnected(value: boolean) { this.connected = value; this.render(); }
   dispose() { this.disposed = true; this.controller.abort(); this.room.onStateChange.remove(this.renderState); this.setZone(undefined); }

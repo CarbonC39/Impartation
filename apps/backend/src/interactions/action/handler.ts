@@ -63,12 +63,13 @@ export function createActionInteraction(context: ActionContext & { access: Priva
       activateAction: {
         format: activateActionSchema,
         handler: async (client: SpaceClient, { action, animated: requestedAnimation }: ActivateAction): Promise<InteractionResult> => {
-          const animated = requestedAnimation && CHARACTER_ACTIONS[action].animated;
+          const definition = CHARACTER_ACTIONS[action];
+          const animated = definition.selectableAnimation ? requestedAnimation && definition.animated : definition.animated;
           if (!await context.authorize(client)) return { ok: false, message: '身份已失效，请重新连接' };
           const player = context.state.players.get(client.sessionId);
           const map = player && context.maps.get(player.mapId);
           if (!player?.connected || !map) return { ok: false, message: '角色尚未进入地图' };
-          const candidate = findActionAnchor(map.world, player, action);
+          const candidate = CHARACTER_ACTIONS[action].anchored ? findActionAnchor(map.world, player, action) : undefined;
           const anchor = candidate && actionFacingMatches(candidate, player.facing) ? candidate : undefined;
           const object = anchor && context.state.worldObjects.get(player.mapId)?.objects.get(anchor.id);
           if ((action === 'sit' || anchor?.kind === 'variantSelector') && object?.occupiedBy && object.occupiedBy !== client.sessionId) {

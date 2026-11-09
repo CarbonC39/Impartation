@@ -1,0 +1,11 @@
+Fluent Emoji Flat assets from https://github.com/microsoft/fluentui-emoji
+Repository license: MIT (see LICENSE).
+
+Original asset paths:
+- board.svg: assets/Memo/Flat/memo_flat.svg
+- pomodoro.svg: assets/Tomato/Flat/tomato_flat.svg
+- wardrobe.svg: assets/T-shirt/Flat/t-shirt_flat.svg
+- privateArea.svg: assets/Locked/Flat/locked_flat.svg
+- web.svg: assets/Globe showing europe-africa/Flat/globe_showing_europe-africa_flat.svg
+- attachment.svg: assets/Backpack/Flat/backpack_flat.svg
+- variant-selector.svg: assets/Framed picture/Flat/framed_picture_flat.svg
