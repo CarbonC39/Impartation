@@ -1,7 +1,7 @@
 import type { Room } from '@colyseus/sdk';
 import { activateActionSchema, CHARACTER_ACTIONS, CHARACTER_ACTION_NAMES, isCharacterAction, findActionAnchor, actionFacingMatches,
   type ActivateActionInput, type CharacterActionName, type InteractionResult, type SpaceProtocol, type WorldMap } from '@impartation/shared';
-import { characterAppearance, characterFacing, characterFrame } from '../characters';
+import { characterAppearance, characterFacing, characterFrame, jumpSample, JUMP_PREVIEW_SCALE } from '../characters';
 import { drawAppearancePreview } from '../appearancePreview';
 import { element } from './panel';
 
@@ -95,6 +95,7 @@ export class CharacterActions {
       if (!canvas || !action) continue;
       const animated = mode === 'true';
       const frame = characterFrame(player.avatar, characterFacing(player.facing), 'idle', action, animated, elapsed);
+      if (action === 'jump') canvas.style.setProperty('--jump-preview-offset', `${-jumpSample(elapsed).offsetY * JUMP_PREVIEW_SCALE}px`);
       const signature = `${player.avatar}:${player.appearance}:${player.facing}:${frame}`;
       if (this.drawnFrames.get(key) === signature) continue;
       this.drawnFrames.set(key, signature);

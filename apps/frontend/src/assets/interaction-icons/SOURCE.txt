@@ -1,11 +1,11 @@
-Fluent Emoji Flat assets from https://github.com/microsoft/fluentui-emoji
-Repository license: MIT (see LICENSE).
+IconPark SVG icons by ByteDance, from https://github.com/bytedance/IconPark
+Licensed under Apache License 2.0; see LICENSE.
 
-Original asset paths:
-- board.svg: assets/Memo/Flat/memo_flat.svg
-- pomodoro.svg: assets/Tomato/Flat/tomato_flat.svg
-- wardrobe.svg: assets/T-shirt/Flat/t-shirt_flat.svg
-- privateArea.svg: assets/Locked/Flat/locked_flat.svg
-- web.svg: assets/Globe showing europe-africa/Flat/globe_showing_europe-africa_flat.svg
-- attachment.svg: assets/Backpack/Flat/backpack_flat.svg
-- variant-selector.svg: assets/Framed picture/Flat/framed_picture_flat.svg
+Original SVG templates (48 × 48 viewBox), recolored for the project palette and exported at 32 × 32:
+- board.svg: source/Communicate/message-one.svg
+- pomodoro.svg: source/Time/alarm-clock.svg
+- wardrobe.svg: source/Life/hanger-two.svg
+- privateArea.svg: source/Edit/lock-one.svg
+- web.svg: source/Travel/earth.svg
+- attachment.svg: source/Office/paperclip.svg
+- variant-selector.svg: source/Office/picture.svg

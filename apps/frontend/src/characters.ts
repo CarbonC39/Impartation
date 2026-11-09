@@ -1,5 +1,26 @@
 import { APPEARANCE_ASSET_PATHS, APPEARANCE_LAYERS, appearanceSchema, CHARACTER_ACTIONS, FACINGS, isCharacterAction, type Facing, type Motion } from '@impartation/shared';
 
+export const IN_PLACE_WALK_FRAME_MS = 180;
+export const JUMP_AIRBORNE_MS = 500;
+export const JUMP_LANDING_MS = 100;
+export const JUMP_CYCLE_MS = JUMP_AIRBORNE_MS + JUMP_LANDING_MS;
+export const JUMP_HEIGHT = 16;
+export const JUMP_PREVIEW_SCALE = 3 / JUMP_HEIGHT;
+
+export type JumpSample = { offsetY: number; walkFrameIndex: 0 | 1 | 2 };
+/** Sample the shared jump arc and alternating stride pose from elapsed action time. */
+export function jumpSample(elapsedMs: number): JumpSample {
+  const elapsed = Math.max(0, elapsedMs);
+  const hop = Math.floor(elapsed / JUMP_CYCLE_MS);
+  const phase = elapsed % JUMP_CYCLE_MS;
+  if (phase >= JUMP_AIRBORNE_MS) return { offsetY: 0, walkFrameIndex: 1 };
+  const progress = phase / JUMP_AIRBORNE_MS;
+  return {
+    offsetY: 4 * JUMP_HEIGHT * progress * (1 - progress),
+    walkFrameIndex: hop % 2 === 0 ? 0 : 2,
+  };
+}
+
 export const layerAssets: Record<string, string> = APPEARANCE_ASSET_PATHS;
 export const layerAssetIds = Object.keys(APPEARANCE_ASSET_PATHS);
 
@@ -46,7 +67,8 @@ export function characterFrame(avatarId: string, facing: Facing, motion: Motion,
   if (action !== 'none') {
     if (isCharacterAction(action) && CHARACTER_ACTIONS[action].frameMode === 'walk') {
       const frames = avatar.walk[facing];
-      return frames[Math.floor(Math.max(0, elapsedMs) / avatar.walkFrameMs) % frames.length];
+      if (action === 'jump') return frames[jumpSample(elapsedMs).walkFrameIndex];
+      return frames[Math.floor(Math.max(0, elapsedMs) / IN_PLACE_WALK_FRAME_MS) % frames.length];
     }
     const rows = avatar.actions[action as keyof typeof avatar.actions];
     const row = rows?.[facing];

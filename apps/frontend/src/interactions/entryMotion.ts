@@ -5,12 +5,13 @@ export function animateIconIn(button: HTMLElement): Animation | undefined {
   button.getAnimations().forEach(animation => animation.cancel());
   if (reducedMotion()) return;
   return button.animate([
-    { opacity: 0, transform: 'translateY(-26px) scale(.55, .8)', offset: 0 },
-    { opacity: 1, transform: 'translateY(3px) scale(1.24, .82)', offset: .48 },
-    { transform: 'translateY(-3px) scale(.9, 1.12)', offset: .7 },
-    { transform: 'translateY(1px) scale(1.05, .96)', offset: .86 },
+    { opacity: 0, transform: 'translateY(-30px) scale(.4, .65)', offset: 0 },
+    { opacity: 1, transform: 'translateY(4px) scale(1.8, 1.45)', offset: .4 },
+    { transform: 'translateY(-4px) scale(1.32, 1.65)', offset: .56 },
+    { transform: 'translateY(2px) scale(.92, 1.05)', offset: .75 },
+    { transform: 'translateY(-1px) scale(1.08, .97)', offset: .9 },
     { opacity: 1, transform: 'translateY(0) scale(1)', offset: 1 },
-  ], { duration: 540, easing: 'cubic-bezier(.22,.7,.3,1)' });
+  ], { duration: 680, easing: 'cubic-bezier(.22,.7,.3,1)' });
 }
 
 export function animateIconOut(button: HTMLElement): Animation | undefined {

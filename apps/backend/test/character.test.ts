@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { FACINGS } from '@impartation/shared';
-import { avatars, avatarDefinition, characterFrame } from '../../frontend/src/characters.js';
+import { avatars, avatarDefinition, characterFrame, jumpSample } from '../../frontend/src/characters.js';
 
 test('configured character frames fit the supplied sheet and are independent from map tiles', () => {
   const image = readFileSync(new URL('../../../assets/characters/body/walk.png', import.meta.url));
@@ -62,13 +62,30 @@ test('unknown actions fall back to directional walk idle regardless of motion', 
   }
 });
 
-test('in-place walk and jump actions loop through directional walk frames', () => {
+test('in-place walk slows its frame cycle while real movement retains its stride timing', () => {
   const avatar = avatars.mint;
-  for (const action of ['walk', 'jump'] as const) {
-    for (const facing of FACINGS) {
-      assert.equal(characterFrame('mint', facing, 'idle', action, true, 0), avatar.walk[facing][0]);
-      assert.equal(characterFrame('mint', facing, 'idle', action, true, 100), avatar.walk[facing][1]);
-      assert.equal(characterFrame('mint', facing, 'idle', action, true, 400), avatar.walk[facing][0]);
-    }
+  for (const facing of FACINGS) {
+    assert.equal(characterFrame('mint', facing, 'idle', 'walk', true, 100), avatar.walk[facing][0]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'walk', true, 180), avatar.walk[facing][1]);
+    assert.equal(characterFrame('mint', facing, 'walk', 'none', false, 100), avatar.walk[facing][1]);
+  }
+});
+
+test('jump holds one stride in the air, lands on the middle pose and alternates the next hop', () => {
+  const avatar = avatars.mint;
+  for (const facing of FACINGS) {
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 0), avatar.walk[facing][0]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 250), avatar.walk[facing][0]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 499), avatar.walk[facing][0]);
+    assert.equal(jumpSample(250).offsetY, 16);
+    assert.ok(jumpSample(499).offsetY > 0);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 500), avatar.walk[facing][1]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 599), avatar.walk[facing][1]);
+    assert.equal(jumpSample(500).offsetY, 0);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 600), avatar.walk[facing][2]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 850), avatar.walk[facing][2]);
+    assert.equal(jumpSample(850).offsetY, 16);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 1100), avatar.walk[facing][1]);
+    assert.equal(characterFrame('mint', facing, 'idle', 'jump', true, 1200), avatar.walk[facing][0]);
   }
 });

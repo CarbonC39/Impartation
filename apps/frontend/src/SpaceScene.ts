@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
 import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
-import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
+import { avatarDefinition, characterAppearance, characterFacing, characterFrame, jumpSample, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
 import { cameraZoom } from './cameraZoom';
@@ -202,8 +202,7 @@ export class SpaceScene extends Phaser.Scene {
       const animation = `${player.avatar}:${facing}:${motion}:${action}:${player.actionAnimated}`;
       sprite.elapsed = animation === sprite.animation ? sprite.elapsed + delta : 0;
       sprite.animation = animation;
-      const jumpPhase = player.action === 'jump' ? (sprite.elapsed % 500) / 500 : 0;
-      const visualOffsetY = player.action === 'jump' ? 4 * 16 * jumpPhase * (1 - jumpPhase) : 0;
+      const visualOffsetY = player.action === 'jump' ? jumpSample(sprite.elapsed).offsetY : 0;
       const visualY = sprite.groundY - visualOffsetY;
       sprite.cameraAnchor.setPosition(sprite.groundX, sprite.groundY);
       sprite.sprite.setPosition(sprite.groundX, visualY);
