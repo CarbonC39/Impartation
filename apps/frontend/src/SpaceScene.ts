@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Room } from '@colyseus/sdk';
-import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, CHARACTER_ACTIONS, TICK_MS, attachmentSource, attachmentSourceKey, isCharacterAction, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
+import { APPEARANCE_ASSETS, APPEARANCE_LAYERS, ATTACHMENTS, TICK_MS, attachmentSource, attachmentSourceKey, type AttachmentId, type SpaceProtocol, type RegisteredMap, type MovementInput } from '@impartation/shared';
 import { avatarDefinition, characterAppearance, characterFacing, characterFrame, layerAssetIds, layerAssets, tintNumber } from './characters';
 import { WorldObjectVisuals } from './worldObjectVisuals';
 import { CharacterStatus, preloadStatusTextures, prepareStatusTextures } from './characterStatus';
@@ -191,10 +191,10 @@ export class SpaceScene extends Phaser.Scene {
         this.sprites.set(id, sprite);
       }
       const blend = Math.min(1, delta / TICK_MS);
-      const anchoredAction = isCharacterAction(player.action) && CHARACTER_ACTIONS[player.action].anchored;
-      // Authored actions snap to their ground anchor; free actions keep interpolating patch positions.
-      sprite.groundX = anchoredAction ? player.x : Phaser.Math.Linear(sprite.groundX, player.x, blend);
-      sprite.groundY = anchoredAction ? player.y : Phaser.Math.Linear(sprite.groundY, player.y, blend);
+      // Actions start at their authoritative ground position, so movement interpolation cannot drift into a jump.
+      const acting = player.action !== 'none';
+      sprite.groundX = acting ? player.x : Phaser.Math.Linear(sprite.groundX, player.x, blend);
+      sprite.groundY = acting ? player.y : Phaser.Math.Linear(sprite.groundY, player.y, blend);
       const avatar = avatarDefinition(player.avatar);
       const facing = characterFacing(player.facing);
       const motion = player.motion === 'walk' ? 'walk' : 'idle';

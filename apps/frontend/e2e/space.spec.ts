@@ -815,6 +815,90 @@ test('in-place static and animated sit use distinct action columns and movement 
   } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
+test('in-place walk and jump actions preserve ground position, animate locally, and movement cancels them', async ({ page }) => {
+  test.setTimeout(30000);
+  await enter(page, 'E2EInPlaceActions', 'mint', () => captureRenderedScene(page));
+  const sessionId = await sessionOf(page);
+  const observer = await observe();
+  const player = () => observer.state.players.get(sessionId)!;
+  const renderedState = () => page.evaluate(id => {
+    const scene = (window as RenderingWindow).sceneUnderTest;
+    const sprite = scene?.children.getByName(id) as Phaser.GameObjects.Sprite | undefined;
+    const camera = scene?.cameras.main;
+    return sprite && camera ? { spriteX: sprite.x, spriteY: sprite.y, frame: Number(sprite.frame.name), scrollX: camera.scrollX, scrollY: camera.scrollY } : undefined;
+  }, sessionId);
+  try {
+    await expect.poll(() => player()?.name).toBe('E2EInPlaceActions');
+    const groundPosition = { x: player().x, y: player().y };
+
+    await page.locator('#action-list button[data-action="walk"]').click();
+    await expect.poll(() => player().action).toBe('walk');
+    const walkFrames = new Set<number>();
+    const walkCameraPositions = new Set<string>();
+    for (let sample = 0; sample < 9; sample++) {
+      const state = await renderedState();
+      if (state) {
+        walkFrames.add(state.frame);
+        walkCameraPositions.add(`${state.scrollX},${state.scrollY}`);
+      }
+      await page.waitForTimeout(70);
+    }
+    expect(walkFrames.size).toBeGreaterThan(1);
+    expect(walkCameraPositions.size).toBe(1);
+    expect({ x: player().x, y: player().y }).toEqual(groundPosition);
+
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(() => player().action).toBe('none');
+      await expect.poll(() => player().x).toBeGreaterThan(groundPosition.x);
+      await expect.poll(() => player().motion).toBe('walk');
+    } finally { await page.keyboard.up('d'); }
+    await expect.poll(() => player().motion).toBe('idle');
+
+    let priorCamera: { scrollX: number; scrollY: number } | undefined;
+    let settledSamples = 0;
+    await expect.poll(async () => {
+      const state = await renderedState();
+      const aligned = state && Math.abs(state.spriteX - player().x) < 0.05 && Math.abs(state.spriteY - player().y) < 0.05;
+      const cameraSettled = state && priorCamera && Math.abs(state.scrollX - priorCamera.scrollX) < 0.1 && Math.abs(state.scrollY - priorCamera.scrollY) < 0.1;
+      settledSamples = aligned && cameraSettled ? settledSamples + 1 : 0;
+      if (state) priorCamera = { scrollX: state.scrollX, scrollY: state.scrollY };
+      return settledSamples >= 2;
+    }, { intervals: [50], timeout: 5000 }).toBe(true);
+
+    const jumpGroundPosition = { x: player().x, y: player().y };
+    await page.locator('#action-list button[data-action="jump"]').click();
+    await expect.poll(() => player().action).toBe('jump');
+    const jumpYPositions = new Set<number>();
+    const jumpCameraPositions = new Set<string>();
+    let initialRender: NonNullable<Awaited<ReturnType<typeof renderedState>>> | undefined;
+    for (let sample = 0; sample < 9; sample++) {
+      const state = await renderedState();
+      if (state) {
+        initialRender ??= state;
+        jumpYPositions.add(state.spriteY);
+        jumpCameraPositions.add(`${state.scrollX},${state.scrollY}`);
+      }
+      await page.waitForTimeout(70);
+    }
+    expect(Math.max(...jumpYPositions) - Math.min(...jumpYPositions)).toBeGreaterThan(10);
+    expect(jumpCameraPositions.size).toBe(1);
+    expect({ x: player().x, y: player().y }).toEqual(jumpGroundPosition);
+    expect((await renderedState())?.scrollX).toBe(initialRender?.scrollX);
+    expect((await renderedState())?.scrollY).toBe(initialRender?.scrollY);
+
+    await page.locator('#game canvas').focus();
+    await page.keyboard.down('d');
+    try {
+      await expect.poll(() => player().action).toBe('none');
+      await expect.poll(() => player().x).toBeGreaterThan(jumpGroundPosition.x);
+      await expect.poll(() => player().motion).toBe('walk');
+    } finally { await page.keyboard.up('d'); }
+    await expect.poll(() => player().motion).toBe('idle');
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
+});
+
 async function openAvatarScreen(page: Page) {
   if (await page.locator('#login-screen').isVisible()) {
     await page.locator('#world-list [data-world="main"]').click();
@@ -1002,6 +1086,60 @@ test('map board panel publishes safe text, synchronizes browsers and keeps notes
     await page.locator('#board-notes li').filter({ hasText: note }).getByRole('button').click();
     await expect(bob.locator('#board-notes')).not.toContainText(note);
   } finally { if (observer.connection.isOpen) await observer.leave(); await bob.close(); }
+});
+
+test('board entry icon loads transparently and cleans up through a quick zone re-entry', async ({ page }, testInfo) => {
+  test.setTimeout(30000);
+  await enter(page, 'E2EIconCycle');
+  const observer = await observe();
+  const sessionId = await sessionOf(page);
+  const player = () => observer.state.players.get(sessionId)!;
+  const entry = zoneEntry(page, '留言板');
+  try {
+    await walkTo(page, observer, 'E2EIconCycle', 'board');
+    const initialEntry = await entry.elementHandle();
+    if (!initialEntry) throw new Error('Board entry was not rendered');
+    const icon = await entry.locator('img').evaluate(async image => {
+      const element = image as HTMLImageElement;
+      await element.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 32;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(element, 0, 0);
+      const pixels = context.getImageData(0, 0, 32, 32).data;
+      return {
+        width: element.naturalWidth,
+        height: element.naturalHeight,
+        cornerAlphas: [pixels[3]!, pixels[(31 * 32 + 31) * 4 + 3]!, pixels[(31 * 32) * 4 + 3]!, pixels[31 * 4 + 3]!],
+      };
+    });
+    expect(icon.width).toBeGreaterThan(0);
+    expect(icon.height).toBeGreaterThan(0);
+    expect(icon.cornerAlphas).toEqual([0, 0, 0, 0]);
+    await page.screenshot({ path: testInfo.outputPath('interaction-entry.png') });
+
+    // Reverse at the boundary before the exit animation finishes; the same entry should return.
+    await page.keyboard.down('a');
+    try { await expect.poll(() => player().zoneId, { intervals: [10] }).toBe(''); }
+    finally { await page.keyboard.up('a'); }
+    await page.keyboard.down('d');
+    try { await expect.poll(() => player().zoneId, { intervals: [10] }).toBe('message-wall'); }
+    finally { await page.keyboard.up('d'); }
+    await expect(page.locator('#zone-entries [data-zone-entry]')).toHaveCount(1);
+    expect(await initialEntry.evaluate(element => element.isConnected)).toBe(true);
+    await expect(entry).not.toHaveAttribute('aria-hidden', 'true');
+
+    await page.keyboard.down('a');
+    try { await expect.poll(() => player().zoneId, { intervals: [10] }).toBe(''); }
+    finally { await page.keyboard.up('a'); }
+    await expect(page.locator('#board-panel')).toBeHidden();
+    await expect(page.locator('#zone-entries [data-zone-entry]')).toHaveCount(0, { timeout: 3000 });
+    expect(await initialEntry.evaluate(element => element.isConnected)).toBe(false);
+
+    await page.locator('#leave').click();
+    await expect(page.locator('#game canvas')).toHaveCount(0);
+    await expect(page.locator('#zone-entries [data-zone-entry]')).toHaveCount(0);
+  } finally { if (observer.connection.isOpen) await observer.leave(); }
 });
 
 test('shared pomodoro starts, pauses, resumes and resets from its map panel', async ({ page, browser }, testInfo) => {
